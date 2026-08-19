@@ -60,11 +60,13 @@ TASK GROUP: BYU CIROH: FIMsim-BE – Backend API
 
 🎯 Goal: A secure, tested REST API and job-execution layer covering the full LISFLOOD-FP lifecycle — project/AOI setup, per-step data-prep jobs, server-side simulation, and result retrieval — so the React frontend has a complete backend to work against and the desktop app gains a shared engine package.
 
-🛠️ What will be done: The desktop repo's `core/` will be extracted into an installable `fimcore` package with its server-unsafe globals fixed. A Tethys 4 app will be scaffolded with Project/AOI/StepRun models, django-storages file handling, and a pluggable job type registry on DaskJob. REST endpoints will cover AOI ingest (upload → validate → lookups), each wizard step as a submittable job with structured progress, LISFLOOD-FP execution, and output listing/download. Resource guards (AOI area cap, quotas, retention) gate every submission.
+🔧 Done so far: Tethys 4 app scaffolded and pushed to github.com/Aquaveo/tethysapp-fimsim-gui (private) — catch-all home controller, MinIO/S3 custom settings, dask_primary scheduler setting, django-storages baseline dependencies, fimeval-gui house conventions.
+
+🛠️ What will be done: The desktop repo's `core/` will be extracted into an installable `fimcore` package with its server-unsafe globals fixed. The scaffolded Tethys 4 app gains Project/AOI/StepRun models, django-storages file handling, and a pluggable job type registry on DaskJob. REST endpoints will cover AOI ingest (upload → validate → lookups), each wizard step as a submittable job with structured progress, LISFLOOD-FP execution, and output listing/download. Resource guards (AOI area cap, quotas, retention) gate every submission.
 
 📋 Subtasks:
 * FIMsim GUI – fimcore Package Extraction + Server-Safety Fixes (FIMSIM-BE1)
-* FIMsim GUI – Tethys 4 + React/Vite Scaffold (FIMSIM-BE2)
+* FIMsim GUI – Tethys 4 App Scaffold + Repo Setup (FIMSIM-BE2) ✅
 * FIMsim GUI – Project/AOI/StepRun Data Model + PostGIS Lookups (FIMSIM-BE3)
 * FIMsim GUI – django-storages Wrapper + Per-User Key Isolation (FIMSIM-BE4)
 * FIMsim GUI – Job Type Registry + DaskJob Wiring + Structured Progress (FIMSIM-BE5)
@@ -74,7 +76,7 @@ TASK GROUP: BYU CIROH: FIMsim-BE – Backend API
 * FIMsim GUI – Outputs, Download + Result Post-Processing Endpoints (FIMSIM-BE9)
 * FIMsim GUI – Resource Guards: AOI Cap, Quotas, Retention (FIMSIM-BE10)
 
-🚦 Status: 🔜 To Do
+🚦 Status: 🔄 Work in Progress
 
 ---
 
