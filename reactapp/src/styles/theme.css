@@ -1,44 +1,44 @@
-/* FIMsim GUI theme tokens — FIM-family chrome (shared navy banner) with
-   FIMsim's own accent: deep flood-blue, vs. FIMeval/FIMbench cyan. */
+/* FIMsim GUI theme tokens — identical to FIMbench/FIMeval (theme.ts is the
+   TSX-side source of truth; these are the CSS-variable equivalents). */
 :root {
   /* ===== Brand ===== */
-  --color-primary: #1266a3;
-  --color-primary-hover: #0f578c;
-  --color-primary-active: #0c4a77;
+  --color-primary: #25C2DF;
+  --color-primary-hover: #27AFC8;
+  --color-primary-active: #289CB2;
 
-  --color-link: #0f578c;
+  --color-link: #289CB2;
 
   /* ===== Layout ===== */
-  --color-bg: #f2f7fb;
-  --color-surface: #ffffff;
-  --color-surface-alt: #e3eef7;
-  --color-border: #cfe2ef;
+  --color-bg: #F0FAFC;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #E1F4F9;
+  --color-border: #D1EFF6;
 
   /* ===== Text ===== */
-  --color-text: #14232e;
-  --color-text-secondary: #3e6076;
-  --color-text-muted: #5c7b90;
+  --color-text: #152428;
+  --color-text-secondary: #267788;
+  --color-text-muted: #28899D;
 
   /* ===== Status ===== */
-  --color-success: #1e7a4f;
-  --color-warning: #b97a08;
-  --color-error: #c22f2f;
+  --color-success: #265F4E;
+  --color-warning: #FFC107;
+  --color-error: #CC0000;
 
   /* ===== UI Tokens ===== */
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
 
-  --shadow-sm: 0 0.25rem 0.75rem rgba(20, 35, 46, 0.05);
-  --shadow-md: 0 0.5rem 1.25rem rgba(20, 35, 46, 0.08);
+  --shadow-sm: 0 0.25rem 0.75rem rgba(21, 36, 40, 0.05);
+  --shadow-md: 0 0.5rem 1.25rem rgba(21, 36, 40, 0.08);
 
   /* ===== Branded chrome (FIM-family header/footer banner) ===== */
   --chrome-1: #0a1b34;
   --chrome-2: #123458;
-  --chrome-text: #d5e7f4;
-  --chrome-text-dim: #8fa9c4;
+  --chrome-text: #d1eff6;
+  --chrome-text-dim: #8fb2c4;
 }
 
-/* Shared buttons (family pattern: FIMeval's theme.css). */
+/* Shared buttons (family pattern: FIMbench/FIMeval theme.css). */
 .button-primary {
   background: var(--color-primary);
   color: white;
@@ -56,7 +56,7 @@
 }
 .button-secondary {
   background: transparent;
-  color: var(--color-primary);
+  color: var(--color-primary-active);
   border: 1.5px solid var(--color-border);
   padding: 0.6rem 1.2rem;
   border-radius: var(--radius-md);
