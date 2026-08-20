@@ -23,12 +23,9 @@ export default function AppShell() {
           >
             Documentation
           </NavLink>
+          <SimulationsList />
           <div className="wk-nav-foot">Signed in</div>
         </nav>
-
-        <aside className="wk-runlist-col" aria-label="Simulations">
-          <SimulationsList />
-        </aside>
 
         <main className="wk-detail">
           <Outlet />

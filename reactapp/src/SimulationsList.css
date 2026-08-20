@@ -1,32 +1,35 @@
-/* reactapp/src/SimulationsList.css — the persistent runs column. */
+/* reactapp/src/SimulationsList.css — the Simulations list, living inside the
+   dark nav sidebar (light text over the FilterSidebar banner). */
 
 .sl-wrap {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  height: 100%;
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
 }
 .sl-head {
-  padding: 0.9rem 1rem 0.7rem;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  padding: 0 0.7rem 0.4rem;
 }
 .sl-title {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chrome-text);
 }
 .sl-empty {
-  padding: 1.5rem 1rem;
-  color: var(--color-text-muted);
-  font-size: 0.88rem;
-  line-height: 1.5;
+  padding: 0.2rem 0.7rem;
+  color: var(--chrome-text-dim);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 .sl-empty-lead {
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.3rem;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--chrome-text);
 }
 .sl-empty-hint {
   margin: 0;

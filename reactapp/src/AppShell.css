@@ -42,7 +42,7 @@
   border-radius: 999px;
   border: 2px solid var(--color-primary);
   background: transparent;
-  color: var(--color-text);
+  color: var(--color-primary);
   font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -68,7 +68,7 @@
 .wk-body { display: flex; min-height: 0; }
 
 .wk-nav {
-  flex: 0 0 190px;
+  flex: 0 0 218px;
   /* FIM sidebar banner (blue) over a navy fallback; light text on top. */
   background:
     url('/static/fimsim_gui/images/FilterSidebar.png') center / cover no-repeat,
@@ -110,14 +110,6 @@
 /* Sits at the sidebar's bottom, over the FilterSidebar white swoosh → dark text. */
 .wk-nav-foot { margin-top: auto; font-size: 0.72rem; color: var(--color-text); font-weight: 600; padding: 0.5rem; }
 
-.wk-runlist-col {
-  flex: 0 0 300px;
-  border-right: 1px solid var(--color-border);
-  background: var(--color-bg);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
 
 .wk-detail {
   flex: 1 1 auto;
@@ -161,17 +153,14 @@
 
 /* Columns shrink before the detail pane gets cramped; the pane has min-width:0
    and its own scroll, so the page body never scrolls sideways. */
-@media (max-width: 1024px) { .wk-runlist-col { flex-basis: 260px; } }
 @media (max-width: 900px) {
   .wk-footer { flex-direction: column; gap: 0.4rem; text-align: center; }
   .wk-footer-attr, .wk-footer-copy { text-align: center; }
-  .wk-runlist-col { flex-basis: 230px; }
   .wk-nav { flex-basis: 150px; }
   .wk-header { padding: 0.5rem 0.9rem; }
   .wk-tagline { display: none; }
 }
 @media (max-width: 680px) {
-  .wk-runlist-col { flex-basis: 180px; }
   .wk-nav { flex-basis: 128px; }
   .wk-detail { padding: 1rem; }
 }
