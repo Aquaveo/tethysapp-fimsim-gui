@@ -6,7 +6,7 @@
   display: flex;
   align-items: flex-start;
   gap: clamp(1.25rem, 3vw, 2.5rem);
-  max-width: 62rem;
+  max-width: 68rem;
 }
 
 /* ── Stepper (the river, flowing downstream) ── */
@@ -64,7 +64,7 @@
 /* Vertical reach between nodes, aligned to the dot centers. */
 .ns-line {
   width: 2px;
-  height: 1.9rem;
+  height: 1.4rem;
   background: var(--color-border);
   margin: 2px 0 2px calc(0.5rem + 15px);
   transition: background 0.2s ease;
