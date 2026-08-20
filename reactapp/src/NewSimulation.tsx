@@ -4,10 +4,14 @@
 // active step's panel. Panels are placeholders until FIMSIM-FE2+.
 import { useState } from 'react';
 import { STEPS, type StepId } from './steps';
+import AoiStep from './AoiStep';
+import type { Aoi } from './geo';
 import './NewSimulation.css';
 
 export default function NewSimulation() {
   const [step, setStep] = useState<StepId>('project');
+  // AOIs live at wizard level — later steps run once per AOI (FIMSIM-BE7 fan-out).
+  const [aois, setAois] = useState<Aoi[]>([]);
 
   const idx = STEPS.findIndex((s) => s.id === step);
   const def = STEPS[idx];
@@ -46,7 +50,11 @@ export default function NewSimulation() {
           {def.title}
         </h2>
         <p className="ns-blurb">{def.blurb}</p>
-        <div className="ns-placeholder">Coming soon — this panel is being built.</div>
+        {step === 'aoi' ? (
+          <AoiStep aois={aois} setAois={setAois} />
+        ) : (
+          <div className="ns-placeholder">Coming soon — this panel is being built.</div>
+        )}
         <div className="ns-nav">
           <button
             type="button"
