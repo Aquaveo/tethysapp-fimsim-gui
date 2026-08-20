@@ -54,7 +54,7 @@ export default function NewSimulation() {
             disabled={idx === 0}
             onClick={() => setStep(STEPS[idx - 1].id)}
           >
-            Back
+            ← Back
           </button>
           <button
             type="button"
@@ -62,7 +62,7 @@ export default function NewSimulation() {
             disabled={idx === STEPS.length - 1}
             onClick={() => setStep(STEPS[idx + 1].id)}
           >
-            {idx < STEPS.length - 1 ? `Next: ${STEPS[idx + 1].label}` : 'Done'}
+            Next →
           </button>
         </div>
       </section>
