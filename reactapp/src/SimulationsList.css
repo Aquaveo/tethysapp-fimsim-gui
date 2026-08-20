@@ -1,0 +1,33 @@
+/* reactapp/src/SimulationsList.css — the persistent runs column. */
+
+.sl-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+.sl-head {
+  padding: 0.9rem 1rem 0.7rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.sl-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.sl-empty {
+  padding: 1.5rem 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.sl-empty-lead {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.sl-empty-hint {
+  margin: 0;
+}

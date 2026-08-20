@@ -36,10 +36,37 @@
   --chrome-2: #123458;
   --chrome-text: #d5e7f4;
   --chrome-text-dim: #8fa9c4;
+}
 
-  /* ===== The river rail (wizard step indicator) ===== */
-  --river-dry: #cfe2ef;      /* not-yet-reached connector */
-  --river-wet: #1266a3;      /* filled (completed) connector */
-  --node-done: #1266a3;
-  --node-active-ring: #7db8dd;
+/* Shared buttons (family pattern: FIMeval's theme.css). */
+.button-primary {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+.button-primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+.button-primary:active:not(:disabled) {
+  background: var(--color-primary-active);
+  transform: translateY(0.0625rem);
+}
+.button-secondary {
+  background: transparent;
+  color: var(--color-primary);
+  border: 1.5px solid var(--color-border);
+  padding: 0.6rem 1.2rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s ease;
+}
+.button-secondary:hover:not(:disabled) { background: var(--color-surface-alt); }
+.button-primary:disabled,
+.button-secondary:disabled {
+  opacity: 0.45;
+  cursor: default;
 }

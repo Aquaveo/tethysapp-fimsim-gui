@@ -1,17 +1,33 @@
-// FIM-family branded header (same chrome as FIMeval/FIMbench): title + tagline
-// over the navy banner, with the model badge on the right.
+// reactapp/src/Header.tsx
+// FIM-family branded header (matches FIMeval/FIMbench chrome): logo + title +
+// tagline over the Header-HQ banner, and a Documentation link. Rendered by AppShell.
+import { Link, NavLink } from 'react-router-dom';
+
 export default function Header() {
   return (
-    <header className="fs-header">
-      <div className="fs-brand">
-        <h1 className="fs-title">FIMsim</h1>
-        <p className="fs-tagline">Set up and run 2D flood simulations from your browser</p>
-      </div>
-      <div className="fs-header-actions">
-        <span className="fs-model-badge" title="TRITON, OWP HAND-FIM, and ARC-Curve2Flood arrive after the MVP">
+    <header className="wk-header">
+      <Link className="wk-brand" to="/new">
+        <img
+          className="wk-brand-logo"
+          src="/static/fimsim_gui/images/fimsim_logo.png"
+          alt="FIMsim logo"
+        />
+        <span>
+          <h1 className="wk-title">FIMsim</h1>
+          <p className="wk-tagline">Set up and run 2D flood simulations from your browser</p>
+        </span>
+      </Link>
+      <nav className="wk-header-actions">
+        <span className="wk-model-badge" title="TRITON, OWP HAND-FIM, and ARC-Curve2Flood arrive after the MVP">
           LISFLOOD-FP
         </span>
-      </div>
+        <NavLink
+          to="/docs"
+          className={({ isActive }) => 'wk-doc-pill' + (isActive ? ' is-active' : '')}
+        >
+          Documentation
+        </NavLink>
+      </nav>
     </header>
   );
 }

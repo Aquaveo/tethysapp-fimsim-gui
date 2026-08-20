@@ -1,0 +1,123 @@
+/* reactapp/src/NewSimulation.css — wizard stepper + step card
+   (stepper structure matches FIMeval's ne-stepper; nine steps instead of three,
+   so labels collapse to the active step on narrow panes). */
+
+.ns-wrap {
+  max-width: 56rem;
+  margin: 0 auto;
+}
+
+/* ── Stepper (the river) ── */
+.ns-stepper {
+  list-style: none;
+  margin: 0 0 1.3rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+.ns-step-wrap { display: contents; }
+.ns-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0.1rem 0.15rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.ns-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--color-border);
+  font-size: 0.8rem;
+  background: var(--color-surface);
+  flex: 0 0 auto;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.ns-step.active { color: var(--color-primary); }
+.ns-step.active .ns-dot {
+  border-color: var(--color-primary);
+  background: var(--color-surface-alt);
+  color: var(--color-primary);
+}
+.ns-step.done { color: var(--color-text); }
+.ns-step.done .ns-dot {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.ns-line {
+  flex: 1;
+  height: 2px;
+  background: var(--color-border);
+  margin: 0 0.35rem;
+  min-width: 8px;
+  transition: background 0.2s ease;
+}
+.ns-line.done { background: var(--color-primary); }
+
+/* Nine steps don't all fit with labels — below 1280px panes, only the active
+   step keeps its label; dots + the filled line still tell the story. */
+@media (max-width: 1500px) {
+  .ns-step:not(.active) .ns-step-label { display: none; }
+}
+
+/* ── Step card ── */
+.ns-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem 1.75rem 1.25rem;
+}
+.ns-eyebrow {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  display: flex;
+  gap: 0.8rem;
+  align-items: baseline;
+}
+.ns-produces {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-primary);
+}
+.ns-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+.ns-blurb {
+  margin: 0 0 1.4rem;
+  color: var(--color-text-secondary);
+  line-height: 1.55;
+  max-width: 60ch;
+}
+.ns-placeholder {
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  padding: 3rem 1rem;
+  text-align: center;
+  font-size: 0.95rem;
+  margin-bottom: 1.4rem;
+}
+.ns-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}

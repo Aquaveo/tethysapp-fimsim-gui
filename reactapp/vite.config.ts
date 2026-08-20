@@ -37,6 +37,12 @@ export default defineConfig(({ mode }) => ({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
       },
+      // Family chrome images live in Tethys statics; proxy them so the banner
+      // and logos render in `npm run dev` too (404s harmlessly if Tethys is down).
+      '/static': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
     },
   },
 }));

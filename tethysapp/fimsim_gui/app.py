@@ -11,7 +11,7 @@ class App(TethysAppBase):
     index = 'home'
     catch_all = 'home'
 
-    icon = f'{package}/images/icon.gif'
+    icon = f'{package}/images/fimsim_logo.png'
     description = (
         'Webapp GUI for FIMsim — browser-based setup and execution of 2D flood '
         'inundation simulations (LISFLOOD-FP MVP; TRITON, OWP HAND-FIM, and '
