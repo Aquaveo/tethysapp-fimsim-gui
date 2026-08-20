@@ -1,8 +1,7 @@
 // reactapp/src/NewSimulation.tsx
-// The guided LISFLOOD-FP wizard in the detail pane (family pattern: FIMeval's
-// NewEvaluation). A horizontal stepper — the river, filling downstream as steps
-// complete — over a card that holds the active step's panel. Panels are
-// placeholders until FIMSIM-FE2+.
+// The guided LISFLOOD-FP wizard in the detail pane. A vertical stepper — the
+// river, filling downstream as steps complete — beside the card that holds the
+// active step's panel. Panels are placeholders until FIMSIM-FE2+.
 import { useState } from 'react';
 import { STEPS, type StepId } from './steps';
 import './NewSimulation.css';
