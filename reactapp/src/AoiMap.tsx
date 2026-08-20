@@ -84,14 +84,25 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
             paint: { 'line-color': '#25C2DF', 'line-width': 2.5 },
           },
           {
+            id: 'draft-fill', type: 'fill', source: 'draft',
+            filter: ['==', '$type', 'Polygon'],
+            paint: { 'fill-color': '#FFC107', 'fill-opacity': 0.12 },
+          },
+          {
             id: 'draft-line', type: 'line', source: 'draft',
             filter: ['==', '$type', 'LineString'],
             paint: { 'line-color': '#FFC107', 'line-width': 2, 'line-dasharray': [2, 1.5] },
           },
           {
+            // First vertex grows into a snap target once the ring can close.
             id: 'draft-pts', type: 'circle', source: 'draft',
             filter: ['==', '$type', 'Point'],
-            paint: { 'circle-radius': 4.5, 'circle-color': '#FFC107', 'circle-stroke-color': '#152428', 'circle-stroke-width': 1 },
+            paint: {
+              'circle-radius': ['case', ['boolean', ['get', 'closable'], false], 7.5, 4.5],
+              'circle-color': ['case', ['boolean', ['get', 'closable'], false], '#ffffff', '#FFC107'],
+              'circle-stroke-color': ['case', ['boolean', ['get', 'closable'], false], '#FFC107', '#152428'],
+              'circle-stroke-width': ['case', ['boolean', ['get', 'closable'], false], 2.5, 1],
+            },
           },
         ],
       },
@@ -102,21 +113,63 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
     map.on('load', () => setReady(true));
 
+    const cursor = { current: null as Position | null };
     const draftFC = (): FeatureCollection => {
-      const pts: Feature[] = verts.current.map((p) => ({
-        type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p },
+      const v = verts.current;
+      const canClose = v.length >= 3;
+      const pts: Feature[] = v.map((p, i) => ({
+        type: 'Feature',
+        properties: { closable: canClose && i === 0 },
+        geometry: { type: 'Point', coordinates: p },
       }));
-      const line: Feature[] = verts.current.length >= 2
-        ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: verts.current } }]
+      const lines: Feature[] = [];
+      if (v.length >= 2) {
+        lines.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: v } });
+      }
+      // Ghost: last vertex → cursor (→ back to first once closable), showing the shape you'd get.
+      if (v.length >= 1 && cursor.current) {
+        const ghost: Position[] = canClose
+          ? [v[v.length - 1], cursor.current, v[0]]
+          : [v[v.length - 1], cursor.current];
+        lines.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ghost } });
+      }
+      const fill: Feature[] = canClose
+        ? [{
+            type: 'Feature', properties: {},
+            geometry: { type: 'Polygon', coordinates: [[...v, ...(cursor.current ? [cursor.current] : []), v[0]]] },
+          }]
         : [];
-      return { type: 'FeatureCollection', features: [...pts, ...line] };
+      return { type: 'FeatureCollection', features: [...pts, ...lines, ...fill] };
     };
     const refreshDraft = () =>
       (map.getSource('draft') as maplibregl.GeoJSONSource | undefined)?.setData(draftFC());
 
+    const finishRing = () => {
+      const ring = verts.current;
+      verts.current = [];
+      cursor.current = null;
+      refreshDraft();
+      completeRef.current([...ring, ring[0]]);
+    };
+
     map.on('click', (e) => {
       if (!drawingRef.current) return;
+      // Clicking the first vertex (within 12px) closes the ring.
+      if (verts.current.length >= 3) {
+        const first = map.project([verts.current[0][0], verts.current[0][1]]);
+        const dx = first.x - e.point.x;
+        const dy = first.y - e.point.y;
+        if (Math.hypot(dx, dy) <= 12) {
+          finishRing();
+          return;
+        }
+      }
       verts.current = [...verts.current, [e.lngLat.lng, e.lngLat.lat]];
+      refreshDraft();
+    });
+    map.on('mousemove', (e) => {
+      if (!drawingRef.current || verts.current.length === 0) return;
+      cursor.current = [e.lngLat.lng, e.lngLat.lat];
       refreshDraft();
     });
     map.on('dblclick', (e) => {
@@ -124,17 +177,20 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
       e.preventDefault();
       // The double-click already delivered two click events at the same spot — drop one.
       const ring = verts.current.slice(0, -1);
-      verts.current = [];
-      refreshDraft();
       if (ring.length >= 3) {
-        completeRef.current([...ring, ring[0]]);
+        verts.current = ring;
+        finishRing();
       } else {
+        verts.current = [];
+        cursor.current = null;
+        refreshDraft();
         cancelRef.current();
       }
     });
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape' && drawingRef.current) {
         verts.current = [];
+        cursor.current = null;
         refreshDraft();
         cancelRef.current();
       }
@@ -206,7 +262,7 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
       </div>
       {drawing && (
         <div className="am-draw-hint" role="status">
-          Click to add vertices · double-click to finish · Esc to cancel
+          Click to add vertices · click the first point (or double-click) to finish · Esc to cancel
         </div>
       )}
     </div>
