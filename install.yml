@@ -23,4 +23,4 @@ requirements:
   npm:
 
 post:
-  # - scripts/build_frontend.sh   # enable once the React SPA lands (FIMSIM-FE1/FE10)
+  - scripts/build_frontend.sh

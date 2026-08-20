@@ -53,8 +53,8 @@ pnpm-debug.log*
 # =====================================================
 # Tethys Runtime / Generated Assets
 # =====================================================
-tethysapp/fimeval_gui/public/frontend/*
-!tethysapp/fimeval_gui/public/frontend/.gitkeep
+tethysapp/fimsim_gui/public/frontend/*
+!tethysapp/fimsim_gui/public/frontend/.gitkeep
 tethysapp/fimeval_gui/public/workspaces/user_workspaces/*
 
 # =====================================================

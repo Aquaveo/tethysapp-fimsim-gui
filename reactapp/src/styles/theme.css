@@ -1,0 +1,45 @@
+/* FIMsim GUI theme tokens — FIM-family chrome (shared navy banner) with
+   FIMsim's own accent: deep flood-blue, vs. FIMeval/FIMbench cyan. */
+:root {
+  /* ===== Brand ===== */
+  --color-primary: #1266a3;
+  --color-primary-hover: #0f578c;
+  --color-primary-active: #0c4a77;
+
+  --color-link: #0f578c;
+
+  /* ===== Layout ===== */
+  --color-bg: #f2f7fb;
+  --color-surface: #ffffff;
+  --color-surface-alt: #e3eef7;
+  --color-border: #cfe2ef;
+
+  /* ===== Text ===== */
+  --color-text: #14232e;
+  --color-text-secondary: #3e6076;
+  --color-text-muted: #5c7b90;
+
+  /* ===== Status ===== */
+  --color-success: #1e7a4f;
+  --color-warning: #b97a08;
+  --color-error: #c22f2f;
+
+  /* ===== UI Tokens ===== */
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+
+  --shadow-sm: 0 0.25rem 0.75rem rgba(20, 35, 46, 0.05);
+  --shadow-md: 0 0.5rem 1.25rem rgba(20, 35, 46, 0.08);
+
+  /* ===== Branded chrome (FIM-family header/footer banner) ===== */
+  --chrome-1: #0a1b34;
+  --chrome-2: #123458;
+  --chrome-text: #d5e7f4;
+  --chrome-text-dim: #8fa9c4;
+
+  /* ===== The river rail (wizard step indicator) ===== */
+  --river-dry: #cfe2ef;      /* not-yet-reached connector */
+  --river-wet: #1266a3;      /* filled (completed) connector */
+  --node-done: #1266a3;
+  --node-active-ring: #7db8dd;
+}
