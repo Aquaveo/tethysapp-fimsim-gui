@@ -97,5 +97,8 @@ TASK GROUP: BYU CIROH: FIMsim-FE – Frontend React SPA
 * FIMsim GUI – Results Step: Flood-Map Overlay + Downloads (FIMSIM-FE8)
 * FIMsim GUI – Project/Job History List (FIMSIM-FE9)
 * FIMsim GUI – Production Build + Tethys Integration (FIMSIM-FE10)
+* FIMsim GUI – Rectangle Draw for AOIs (FIMSIM-FE11)
+* FIMsim GUI – Drawn-Polygon Shape Guidance (FIMSIM-FE12)
+* FIMsim GUI – In-App Documentation from GitHub + manual_site (FIMSIM-FE13)
 
 🚦 Status: 🔜 To Do
