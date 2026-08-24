@@ -9,7 +9,7 @@ export default function Header() {
       <Link className="wk-brand" to="/new">
         <img
           className="wk-brand-logo"
-          src="/static/fimsim_gui/images/fimsim_logo.png"
+          src="/static/fimsim_gui/images/android-chrome-512x512.png"
           alt="FIMsim logo"
         />
         <span>
