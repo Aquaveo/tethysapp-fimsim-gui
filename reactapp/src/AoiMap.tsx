@@ -1,7 +1,9 @@
 // reactapp/src/AoiMap.tsx
 // The AOI map: Esri basemap toggle (family pattern: FIMeval's ContingencyMap),
-// the confirmed AOI layer, and a lightweight click-to-vertex polygon draw mode
-// (click to add vertices, double-click to finish, Esc to cancel).
+// the confirmed AOI layer, and a draw mode. LISFLOOD-FP/TRITON require
+// rectangular AOIs (Aug 2026 meeting decision), so the default draw is a
+// two-click rectangle; the free-polygon mode stays available via `drawMode`
+// for post-MVP models (HAND-FIM, ARC) that accept arbitrary shapes.
 import { useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -33,16 +35,33 @@ const BASEMAPS = [
 const CONUS_BOUNDS: [[number, number], [number, number]] = [[-125.5, 24], [-66, 50]];
 const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
+export type DrawMode = 'rectangle' | 'polygon';
+
+/** Closed axis-aligned ring from two opposite corners. */
+function rectRing(a: Position, b: Position): Position[] {
+  const [minX, maxX] = a[0] < b[0] ? [a[0], b[0]] : [b[0], a[0]];
+  const [minY, maxY] = a[1] < b[1] ? [a[1], b[1]] : [b[1], a[1]];
+  return [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY], [minX, minY]];
+}
+
 interface Props {
   aois: Aoi[];
   drawing: boolean;
+  drawMode?: DrawMode;
   onDrawComplete: (ring: Position[]) => void;
   onDrawCancel: () => void;
   /** Bumps when the user asks to zoom to an AOI. */
   zoomTo?: Aoi | null;
 }
 
-export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zoomTo }: Props) {
+export default function AoiMap({
+  aois,
+  drawing,
+  drawMode = 'rectangle',
+  onDrawComplete,
+  onDrawCancel,
+  zoomTo,
+}: Props) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [ready, setReady] = useState(false);
@@ -50,9 +69,12 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
   // Draw state lives in refs — map handlers must see current values without rebinding.
   const verts = useRef<Position[]>([]);
   const drawingRef = useRef(drawing);
+  const modeRef = useRef<DrawMode>(drawMode);
   const completeRef = useRef(onDrawComplete);
   const cancelRef = useRef(onDrawCancel);
+  const resetDraftRef = useRef<() => void>(() => {});
   drawingRef.current = drawing;
+  modeRef.current = drawMode;
   completeRef.current = onDrawComplete;
   cancelRef.current = onDrawCancel;
 
@@ -94,7 +116,7 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
             paint: { 'line-color': '#FFC107', 'line-width': 2, 'line-dasharray': [2, 1.5] },
           },
           {
-            // First vertex grows into a snap target once the ring can close.
+            // Polygon mode: first vertex grows into a snap target once the ring can close.
             id: 'draft-pts', type: 'circle', source: 'draft',
             filter: ['==', '$type', 'Point'],
             paint: {
@@ -114,88 +136,123 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
     map.on('load', () => setReady(true));
 
     const cursor = { current: null as Position | null };
+
     const draftFC = (): FeatureCollection => {
       const v = verts.current;
-      const canClose = v.length >= 3;
-      const pts: Feature[] = v.map((p, i) => ({
-        type: 'Feature',
-        properties: { closable: canClose && i === 0 },
-        geometry: { type: 'Point', coordinates: p },
-      }));
-      const lines: Feature[] = [];
-      if (v.length >= 2) {
-        lines.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: v } });
+      const features: Feature[] = [];
+
+      if (modeRef.current === 'rectangle') {
+        // Anchor corner + ghost rectangle to the cursor.
+        if (v.length >= 1) {
+          features.push({
+            type: 'Feature', properties: {},
+            geometry: { type: 'Point', coordinates: v[0] },
+          });
+          if (cursor.current) {
+            const ring = rectRing(v[0], cursor.current);
+            features.push(
+              { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ring } },
+              { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } },
+            );
+          }
+        }
+        return { type: 'FeatureCollection', features };
       }
-      // Ghost: last vertex → cursor (→ back to first once closable), showing the shape you'd get.
+
+      // Polygon mode.
+      const canClose = v.length >= 3;
+      for (let i = 0; i < v.length; i++) {
+        features.push({
+          type: 'Feature',
+          properties: { closable: canClose && i === 0 },
+          geometry: { type: 'Point', coordinates: v[i] },
+        });
+      }
+      if (v.length >= 2) {
+        features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: v } });
+      }
       if (v.length >= 1 && cursor.current) {
         const ghost: Position[] = canClose
           ? [v[v.length - 1], cursor.current, v[0]]
           : [v[v.length - 1], cursor.current];
-        lines.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ghost } });
+        features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ghost } });
       }
-      const fill: Feature[] = canClose
-        ? [{
-            type: 'Feature', properties: {},
-            geometry: { type: 'Polygon', coordinates: [[...v, ...(cursor.current ? [cursor.current] : []), v[0]]] },
-          }]
-        : [];
-      return { type: 'FeatureCollection', features: [...pts, ...lines, ...fill] };
+      if (canClose) {
+        features.push({
+          type: 'Feature', properties: {},
+          geometry: { type: 'Polygon', coordinates: [[...v, ...(cursor.current ? [cursor.current] : []), v[0]]] },
+        });
+      }
+      return { type: 'FeatureCollection', features };
     };
     const refreshDraft = () =>
       (map.getSource('draft') as maplibregl.GeoJSONSource | undefined)?.setData(draftFC());
 
-    const finishRing = () => {
-      const ring = verts.current;
+    const finish = (ring: Position[]) => {
       verts.current = [];
       cursor.current = null;
       refreshDraft();
-      completeRef.current([...ring, ring[0]]);
+      completeRef.current(ring);
+    };
+    const reset = (cancel: boolean) => {
+      verts.current = [];
+      cursor.current = null;
+      refreshDraft();
+      if (cancel) cancelRef.current();
     };
 
     map.on('click', (e) => {
       if (!drawingRef.current) return;
-      // Clicking the first vertex (within 12px) closes the ring.
+      const p: Position = [e.lngLat.lng, e.lngLat.lat];
+
+      if (modeRef.current === 'rectangle') {
+        if (verts.current.length === 0) {
+          verts.current = [p];
+          refreshDraft();
+        } else {
+          finish(rectRing(verts.current[0], p));
+        }
+        return;
+      }
+
+      // Polygon mode: clicking the first vertex (within 12px) closes the ring.
       if (verts.current.length >= 3) {
         const first = map.project([verts.current[0][0], verts.current[0][1]]);
-        const dx = first.x - e.point.x;
-        const dy = first.y - e.point.y;
-        if (Math.hypot(dx, dy) <= 12) {
-          finishRing();
+        if (Math.hypot(first.x - e.point.x, first.y - e.point.y) <= 12) {
+          const ring = verts.current;
+          finish([...ring, ring[0]]);
           return;
         }
       }
-      verts.current = [...verts.current, [e.lngLat.lng, e.lngLat.lat]];
+      verts.current = [...verts.current, p];
       refreshDraft();
     });
+
     map.on('mousemove', (e) => {
       if (!drawingRef.current || verts.current.length === 0) return;
       cursor.current = [e.lngLat.lng, e.lngLat.lat];
       refreshDraft();
     });
+
     map.on('dblclick', (e) => {
-      if (!drawingRef.current) return;
+      if (!drawingRef.current || modeRef.current !== 'polygon') return;
       e.preventDefault();
       // The double-click already delivered two click events at the same spot — drop one.
       const ring = verts.current.slice(0, -1);
       if (ring.length >= 3) {
-        verts.current = ring;
-        finishRing();
+        finish([...ring, ring[0]]);
       } else {
-        verts.current = [];
-        cursor.current = null;
-        refreshDraft();
-        cancelRef.current();
+        reset(true);
       }
     });
+
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape' && drawingRef.current) {
-        verts.current = [];
-        cursor.current = null;
-        refreshDraft();
-        cancelRef.current();
-      }
+      if (ev.key === 'Escape' && drawingRef.current) reset(true);
     };
     window.addEventListener('keydown', onKey);
+
+    // Drawing-mode reset needs access to reset(); expose via ref-free closure.
+    resetDraftRef.current = () => reset(false);
 
     mapRef.current = map;
     return () => {
@@ -212,10 +269,7 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
     map.getCanvas().style.cursor = drawing ? 'crosshair' : '';
     if (drawing) map.doubleClickZoom.disable();
     else map.doubleClickZoom.enable();
-    if (!drawing) {
-      verts.current = [];
-      (map.getSource('draft') as maplibregl.GeoJSONSource | undefined)?.setData(EMPTY_FC);
-    }
+    if (!drawing) resetDraftRef.current();
   }, [drawing, ready]);
 
   // ── Keep the AOI layer in sync; fit view when the set changes ──
@@ -262,7 +316,9 @@ export default function AoiMap({ aois, drawing, onDrawComplete, onDrawCancel, zo
       </div>
       {drawing && (
         <div className="am-draw-hint" role="status">
-          Click to add vertices · click the first point (or double-click) to finish · Esc to cancel
+          {drawMode === 'rectangle'
+            ? 'Click to set the first corner · click again to finish the rectangle · Esc to cancel'
+            : 'Click to add vertices · click the first point (or double-click) to finish · Esc to cancel'}
         </div>
       )}
     </div>

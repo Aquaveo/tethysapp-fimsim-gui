@@ -70,6 +70,22 @@
   color: var(--color-error);
   font-weight: 600;
 }
+.as-card-fix {
+  align-self: center;
+  flex: 0 0 auto;
+  margin-right: 0.4rem;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface-alt);
+  color: var(--color-primary-active);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.as-card-fix:hover { border-color: var(--color-primary); }
 .as-card-x {
   border: none;
   background: none;

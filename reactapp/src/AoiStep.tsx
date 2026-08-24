@@ -8,7 +8,10 @@ import type { Position } from 'geojson';
 import shp from 'shpjs';
 import AoiMap from './AoiMap';
 import { NEUSE_AOI } from './exampleAois';
-import { areaKm2, isInConus, polygonFeatures, type Aoi, type AoiFeature } from './geo';
+import {
+  areaKm2, bboxFeature, isInConus, isRectangular, polygonFeatures,
+  type Aoi, type AoiFeature,
+} from './geo';
 import './AoiStep.css';
 
 interface Props {
@@ -24,6 +27,7 @@ const makeAoi = (feature: AoiFeature, name: string, source: Aoi['source']): Aoi 
   feature,
   areaKm2: areaKm2(feature.geometry),
   inConus: isInConus(feature.geometry),
+  isRect: isRectangular(feature.geometry),
 });
 
 export default function AoiStep({ aois, setAois }: Props) {
@@ -85,6 +89,16 @@ export default function AoiStep({ aois, setAois }: Props) {
 
   const remove = (id: string) => setAois(aois.filter((a) => a.id !== id));
 
+  /** Replace a non-rectangular AOI with its bounding box (LISFLOOD-FP/TRITON requirement). */
+  const useBbox = (id: string) =>
+    setAois(
+      aois.map((a) =>
+        a.id === id
+          ? { ...makeAoi(bboxFeature(a.feature), a.name, a.source), id: a.id }
+          : a,
+      ),
+    );
+
   return (
     <div className="as-wrap">
       <div className="as-actions">
@@ -119,6 +133,8 @@ export default function AoiStep({ aois, setAois }: Props) {
       </div>
       <p className="as-hint">
         Zipped shapefile (.zip) or GeoJSON — every polygon feature becomes its own study area.
+        LISFLOOD-FP and TRITON require <strong>rectangular</strong> study areas; drawing produces
+        a rectangle, and non-rectangular uploads can be converted to their bounding box.
       </p>
 
       {error && <div className="as-error" role="alert">{error}</div>}
@@ -147,7 +163,22 @@ export default function AoiStep({ aois, setAois }: Props) {
                     Outside the continental US — data sources are US-only
                   </span>
                 )}
+                {!a.isRect && (
+                  <span className="as-card-warn">
+                    Not rectangular — LISFLOOD-FP/TRITON require rectangular areas
+                  </span>
+                )}
               </button>
+              {!a.isRect && (
+                <button
+                  type="button"
+                  className="as-card-fix"
+                  onClick={() => useBbox(a.id)}
+                  title="Replace this area with its bounding box"
+                >
+                  Use bounding box
+                </button>
+              )}
               <button type="button" className="as-card-x" aria-label={`Remove ${a.name}`} onClick={() => remove(a.id)}>
                 ✕
               </button>
