@@ -1,5 +1,7 @@
 from tethys_sdk.base import TethysAppBase
-from tethys_sdk.app_settings import CustomSetting, SchedulerSetting
+from tethys_sdk.app_settings import (
+    CustomSetting, PersistentStoreDatabaseSetting, SchedulerSetting,
+)
 
 
 class App(TethysAppBase):
@@ -58,6 +60,17 @@ class App(TethysAppBase):
                 type=CustomSetting.TYPE_STRING,
                 description='S3/MinIO bucket name (e.g. fimsim)',
                 required=True,
+            ),
+        )
+
+    def persistent_store_settings(self):
+        return (
+            PersistentStoreDatabaseSetting(
+                name='primary_db',
+                description='Projects, AOIs, StepRuns + HUC/state reference layers',
+                initializer='fimsim_gui.models.init_primary_db',
+                required=True,
+                spatial=True,
             ),
         )
 
