@@ -61,6 +61,15 @@ class App(TethysAppBase):
                 description='S3/MinIO bucket name (e.g. fimsim)',
                 required=True,
             ),
+            CustomSetting(
+                name='local_storage_path',
+                type=CustomSetting.TYPE_STRING,
+                description=(
+                    'Dev toggle: store files in this local directory instead of '
+                    'MinIO/S3. Leave blank in production.'
+                ),
+                required=False,
+            ),
         )
 
     def persistent_store_settings(self):
