@@ -1,0 +1,57 @@
+/* reactapp/src/ProjectStep.css */
+
+.ps-wrap { display: flex; flex-direction: column; gap: 0.9rem; margin-bottom: 1.4rem; }
+.ps-label { font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 0.35rem; }
+.ps-create-row { display: flex; gap: 0.6rem; }
+.ps-input {
+  flex: 1;
+  padding: 0.55rem 0.8rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.ps-input:focus { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.ps-hint { margin: 0.4rem 0 0; font-size: 0.82rem; color: var(--color-text-muted); }
+.ps-error {
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  background: #fff5f5;
+  color: var(--color-error);
+  font-size: 0.88rem;
+  padding: 0.6rem 0.9rem;
+}
+.ps-existing-title { margin: 0.4rem 0 0; font-size: 0.95rem; }
+.ps-muted { color: var(--color-text-muted); font-size: 0.88rem; margin: 0; }
+.ps-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.ps-item {
+  display: flex;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.ps-item-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ps-item-main:hover { background: var(--color-surface-alt); }
+.ps-item-name { font-weight: 600; font-size: 0.95rem; color: var(--color-text); }
+.ps-item-meta { font-size: 0.8rem; color: var(--color-text-muted); }
+.ps-item-x {
+  border: none; background: none; padding: 0 0.9rem;
+  color: var(--color-text-muted); cursor: pointer; font-family: inherit;
+}
+.ps-item-x:hover { color: var(--color-error); background: var(--color-surface-alt); }

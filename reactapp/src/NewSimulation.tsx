@@ -1,20 +1,55 @@
 // reactapp/src/NewSimulation.tsx
-// The guided LISFLOOD-FP wizard in the detail pane. A vertical stepper — the
-// river, filling downstream as steps complete — beside the card that holds the
-// active step's panel. Panels are placeholders until FIMSIM-FE2+.
-import { useState } from 'react';
-import { STEPS, type StepId } from './steps';
+// The guided LISFLOOD-FP wizard. The wizard is keyed to a real project:
+// /new shows the Project step (create/open); /new/<id> loads that project's
+// AOIs from the server and unlocks the rest of the steps. Refresh/resume
+// works because everything reloads from the API (FIMSIM-FE2 server cutover).
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { getProject, type ServerAoi, type ServerProject } from './api';
 import AoiStep from './AoiStep';
-import type { Aoi } from './geo';
+import ProjectStep from './ProjectStep';
+import { STEPS, type StepId } from './steps';
 import './NewSimulation.css';
 
 export default function NewSimulation() {
-  const [step, setStep] = useState<StepId>('project');
-  // AOIs live at wizard level — later steps run once per AOI (FIMSIM-BE7 fan-out).
-  const [aois, setAois] = useState<Aoi[]>([]);
+  const navigate = useNavigate();
+  const params = useParams<{ projectId?: string }>();
+  const projectId = params.projectId ? Number(params.projectId) : null;
+
+  const [step, setStep] = useState<StepId>(projectId ? 'aoi' : 'project');
+  const [project, setProject] = useState<ServerProject | null>(null);
+  const [aois, setAoisState] = useState<ServerAoi[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const setAois = (updater: (prev: ServerAoi[]) => ServerAoi[]) =>
+    setAoisState(updater);
+
+  useEffect(() => {
+    setProject(null);
+    setAoisState([]);
+    setLoadError(null);
+    setStep(projectId ? 'aoi' : 'project');
+    if (projectId) {
+      getProject(projectId)
+        .then((p) => {
+          setProject(p);
+          setAoisState(p.aois ?? []);
+        })
+        .catch((e) => setLoadError(String(e.message)));
+    }
+  }, [projectId]);
 
   const idx = STEPS.findIndex((s) => s.id === step);
   const def = STEPS[idx];
+
+  const goTo = (id: StepId) => {
+    if (id === 'project') {
+      navigate('/new');
+      return;
+    }
+    if (!projectId) return; // later steps need a project first
+    setStep(id);
+  };
 
   return (
     <div className="ns-wrap">
@@ -29,7 +64,7 @@ export default function NewSimulation() {
                 type="button"
                 className={`ns-step ${state}`}
                 aria-current={state === 'active' ? 'step' : undefined}
-                onClick={() => setStep(s.id)}
+                onClick={() => goTo(s.id)}
               >
                 <span className="ns-dot" aria-hidden="true">
                   {state === 'done' ? '✓' : i + 1}
@@ -44,31 +79,38 @@ export default function NewSimulation() {
       <section className="ns-card" aria-labelledby="ns-title">
         <p className="ns-eyebrow">
           Step {idx + 1} of {STEPS.length}
+          {project && <span className="ns-project-tag">{project.name}</span>}
           {def.produces && <span className="ns-produces">→ {def.produces}</span>}
         </p>
         <h2 id="ns-title" className="ns-title">
           {def.title}
         </h2>
         <p className="ns-blurb">{def.blurb}</p>
-        {step === 'aoi' ? (
-          <AoiStep aois={aois} setAois={setAois} />
+
+        {loadError && <div className="as-error" role="alert">{loadError}</div>}
+
+        {step === 'project' ? (
+          <ProjectStep />
+        ) : step === 'aoi' && projectId ? (
+          <AoiStep projectId={projectId} aois={aois} setAois={setAois} />
         ) : (
           <div className="ns-placeholder">Coming soon — this panel is being built.</div>
         )}
+
         <div className="ns-nav">
           <button
             type="button"
             className="button-secondary"
             disabled={idx === 0}
-            onClick={() => setStep(STEPS[idx - 1].id)}
+            onClick={() => goTo(STEPS[idx - 1].id)}
           >
             ← Back
           </button>
           <button
             type="button"
             className="button-primary"
-            disabled={idx === STEPS.length - 1}
-            onClick={() => setStep(STEPS[idx + 1].id)}
+            disabled={idx === STEPS.length - 1 || (step === 'project' && !projectId)}
+            onClick={() => goTo(STEPS[idx + 1].id)}
           >
             Next →
           </button>

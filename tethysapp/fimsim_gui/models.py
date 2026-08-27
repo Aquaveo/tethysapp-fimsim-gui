@@ -153,11 +153,17 @@ class Aoi(Base):
     step_runs = relationship("StepRun", back_populates="aoi",
                              cascade="all, delete-orphan", order_by="StepRun.id")
 
+    def geometry_geojson(self):
+        from geoalchemy2.shape import to_shape
+        from shapely.geometry import mapping
+        return mapping(to_shape(self.geometry))
+
     def to_dict(self):
         return {
             "id": self.id,
             "project_id": self.project_id,
             "name": self.name,
+            "geometry": self.geometry_geojson(),
             "source": self.source,
             "feature_index": self.feature_index,
             "area_km2": self.area_km2,

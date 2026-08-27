@@ -11,9 +11,15 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 // can't see in the minified build — import it explicitly so production works.
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import type { Feature, FeatureCollection, Position } from 'geojson';
-import type { Aoi } from './geo';
-import { boundsOf } from './geo';
+import type { ServerAoi } from './api';
+import { boundsOf, type AoiFeature } from './geo';
 import './AoiMap.css';
+
+const aoiFeature = (a: ServerAoi): AoiFeature => ({
+  type: 'Feature',
+  properties: { name: a.name },
+  geometry: a.geometry,
+});
 
 maplibregl.setWorkerUrl(maplibreWorkerUrl);
 
@@ -45,13 +51,13 @@ function rectRing(a: Position, b: Position): Position[] {
 }
 
 interface Props {
-  aois: Aoi[];
+  aois: ServerAoi[];
   drawing: boolean;
   drawMode?: DrawMode;
   onDrawComplete: (ring: Position[]) => void;
   onDrawCancel: () => void;
   /** Bumps when the user asks to zoom to an AOI. */
-  zoomTo?: Aoi | null;
+  zoomTo?: ServerAoi | null;
 }
 
 export default function AoiMap({
@@ -73,6 +79,7 @@ export default function AoiMap({
   const completeRef = useRef(onDrawComplete);
   const cancelRef = useRef(onDrawCancel);
   const resetDraftRef = useRef<() => void>(() => {});
+  const fitCount = useRef(-1);
   drawingRef.current = drawing;
   modeRef.current = drawMode;
   completeRef.current = onDrawComplete;
@@ -93,6 +100,9 @@ export default function AoiMap({
             attribution: BASEMAPS[0].attribution,
           },
           aois: { type: 'geojson', data: EMPTY_FC },
+          flowlines: { type: 'geojson', data: EMPTY_FC },
+          mainriver: { type: 'geojson', data: EMPTY_FC },
+          gages: { type: 'geojson', data: EMPTY_FC },
           draft: { type: 'geojson', data: EMPTY_FC },
         },
         layers: [
@@ -104,6 +114,24 @@ export default function AoiMap({
           {
             id: 'aoi-line', type: 'line', source: 'aois',
             paint: { 'line-color': '#25C2DF', 'line-width': 2.5 },
+          },
+          {
+            // NHD flowlines clipped to the AOIs (FE3)
+            id: 'flowlines', type: 'line', source: 'flowlines',
+            paint: { 'line-color': '#289CB2', 'line-width': 1, 'line-opacity': 0.7 },
+          },
+          {
+            // the detected main river, emphasized
+            id: 'mainriver', type: 'line', source: 'mainriver',
+            paint: { 'line-color': '#123458', 'line-width': 3 },
+          },
+          {
+            // USGS gages — click for details
+            id: 'gages', type: 'circle', source: 'gages',
+            paint: {
+              'circle-radius': 6, 'circle-color': '#FFC107',
+              'circle-stroke-color': '#123458', 'circle-stroke-width': 2,
+            },
           },
           {
             id: 'draft-fill', type: 'fill', source: 'draft',
@@ -134,6 +162,26 @@ export default function AoiMap({
     });
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
     map.on('load', () => setReady(true));
+
+    map.on('click', 'gages', (e) => {
+      if (drawingRef.current) return;
+      const f = e.features?.[0];
+      if (!f) return;
+      const p = f.properties as { site_no: string; station_nm: string };
+      new maplibregl.Popup({ closeButton: true })
+        .setLngLat(e.lngLat)
+        .setHTML(
+          `<strong>${p.station_nm}</strong><br/>USGS ${p.site_no}<br/>` +
+          `<a href="https://waterdata.usgs.gov/monitoring-location/${p.site_no}/" ` +
+          `target="_blank" rel="noreferrer">View on NWIS</a>`)
+        .addTo(map);
+    });
+    map.on('mouseenter', 'gages', () => {
+      if (!drawingRef.current) map.getCanvas().style.cursor = 'pointer';
+    });
+    map.on('mouseleave', 'gages', () => {
+      if (!drawingRef.current) map.getCanvas().style.cursor = '';
+    });
 
     const cursor = { current: null as Position | null };
 
@@ -272,21 +320,42 @@ export default function AoiMap({
     if (!drawing) resetDraftRef.current();
   }, [drawing, ready]);
 
-  // ── Keep the AOI layer in sync; fit view when the set changes ──
+  // ── Keep the AOI + lookup layers in sync; fit view when the set changes ──
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const fc: FeatureCollection = { type: 'FeatureCollection', features: aois.map((a) => a.feature) };
+    const features = aois.map(aoiFeature);
+    const fc: FeatureCollection = { type: 'FeatureCollection', features };
     (map.getSource('aois') as maplibregl.GeoJSONSource | undefined)?.setData(fc);
-    const b = boundsOf(aois.map((a) => a.feature));
-    if (b) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, maxZoom: 12, duration: 600 });
+
+    const collect = (key: 'flowlines' | 'main_river'): FeatureCollection => ({
+      type: 'FeatureCollection',
+      features: aois.flatMap((a) => a.lookup?.[key]?.features ?? []),
+    });
+    (map.getSource('flowlines') as maplibregl.GeoJSONSource | undefined)?.setData(collect('flowlines'));
+    (map.getSource('mainriver') as maplibregl.GeoJSONSource | undefined)?.setData(collect('main_river'));
+    const gagesFc: FeatureCollection = {
+      type: 'FeatureCollection',
+      features: aois.flatMap((a) => (a.lookup?.gages ?? []).map((g): Feature => ({
+        type: 'Feature',
+        properties: { site_no: g.site_no, station_nm: g.station_nm },
+        geometry: { type: 'Point', coordinates: [g.lon, g.lat] },
+      }))),
+    };
+    (map.getSource('gages') as maplibregl.GeoJSONSource | undefined)?.setData(gagesFc);
+
+    if (aois.length !== fitCount.current) {
+      fitCount.current = aois.length;
+      const b = boundsOf(features);
+      if (b) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, maxZoom: 12, duration: 600 });
+    }
   }, [aois, ready]);
 
   // ── Zoom-to request from an AOI card ──
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !zoomTo) return;
-    const b = boundsOf([zoomTo.feature]);
+    const b = boundsOf([aoiFeature(zoomTo)]);
     if (b) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, maxZoom: 13, duration: 600 });
   }, [zoomTo, ready]);
 

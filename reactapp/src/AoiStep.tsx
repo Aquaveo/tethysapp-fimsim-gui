@@ -1,128 +1,170 @@
 // reactapp/src/AoiStep.tsx
-// The Area of Interest step: upload a zipped shapefile or GeoJSON (parsed
-// client-side for now — the server-side upload endpoint is FIMSIM-BE6), draw a
-// polygon on the map, or load the bundled Neuse example. Every polygonal
-// feature becomes its own AOI (desktop parity with multi_aoi.inspect_features).
-import { useRef, useState } from 'react';
+// The Area of Interest step, server-backed (FIMSIM-BE6 cutover): uploads go
+// to the ingest endpoint (zipped shapefile / GeoPackage / GeoJSON — every
+// polygon feature becomes its own AOI, validated server-side), drawn
+// rectangles POST as GeoJSON, and each AOI's context lookup (river, gages,
+// flowlines) runs as a background job whose status the cards poll.
+import { useEffect, useRef, useState } from 'react';
 import type { Position } from 'geojson';
-import shp from 'shpjs';
 import AoiMap from './AoiMap';
-import { NEUSE_AOI } from './exampleAois';
 import {
-  areaKm2, bboxFeature, isInConus, isRectangular, polygonFeatures,
-  type Aoi, type AoiFeature,
-} from './geo';
+  ApiError, createDrawnAoi, deleteAoi, getAoi, uploadAoiFile,
+  retryLookup, type ServerAoi,
+} from './api';
+import { NEUSE_AOI } from './exampleAois';
 import './AoiStep.css';
 
 interface Props {
-  aois: Aoi[];
-  setAois: (next: Aoi[]) => void;
+  projectId: number;
+  aois: ServerAoi[];
+  setAois: (updater: (prev: ServerAoi[]) => ServerAoi[]) => void;
 }
 
-let nextId = 1;
-const makeAoi = (feature: AoiFeature, name: string, source: Aoi['source']): Aoi => ({
-  id: `aoi-${nextId++}`,
-  name,
-  source,
-  feature,
-  areaKm2: areaKm2(feature.geometry),
-  inConus: isInConus(feature.geometry),
-  isRect: isRectangular(feature.geometry),
-});
+const LOOKUP_POLL_MS = 4000;
 
-export default function AoiStep({ aois, setAois }: Props) {
+export default function AoiStep({ projectId, aois, setAois }: Props) {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [drawing, setDrawing] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [zoomTo, setZoomTo] = useState<Aoi | null>(null);
+  const [zoomTo, setZoomTo] = useState<ServerAoi | null>(null);
 
-  const addFeatures = (features: AoiFeature[], baseName: string, source: Aoi['source']) => {
-    if (!features.length) {
-      setError(`No polygon features found in ${baseName}.`);
-      return;
-    }
-    const named = features.map((f, i) => {
-      const propName =
-        (typeof f.properties?.name === 'string' && f.properties.name) ||
-        (typeof f.properties?.Name === 'string' && f.properties.Name);
-      const name = propName || (features.length > 1 ? `${baseName} — feature ${i + 1}` : baseName);
-      return makeAoi(f, name, source);
-    });
-    setAois([...aois, ...named]);
-    setError(null);
-  };
+  // ── lookup polling: refresh any AOI whose lookup is still in flight ──
+  useEffect(() => {
+    const pending = aois.filter((a) => ['pending', 'running'].includes(a.lookup_status));
+    if (!pending.length) return;
+    const t = setInterval(async () => {
+      for (const a of pending) {
+        try {
+          const fresh = await getAoi(a.id);
+          setAois((prev) => prev.map((x) => (x.id === fresh.id ? fresh : x)));
+        } catch {
+          /* transient — next tick retries */
+        }
+      }
+    }, LOOKUP_POLL_MS);
+    return () => clearInterval(t);
+  }, [aois, setAois]);
+
+  const fail = (e: unknown) =>
+    setError(e instanceof ApiError ? e.message : String((e as Error).message ?? e));
+
+  const addAois = (created: ServerAoi[]) =>
+    setAois((prev) => [...prev, ...created]);
 
   const handleFile = async (file: File) => {
     setError(null);
-    const lower = file.name.toLowerCase();
+    setBusy(`Uploading ${file.name}…`);
     try {
-      if (lower.endsWith('.geojson') || lower.endsWith('.json')) {
-        const fc = JSON.parse(await file.text());
-        addFeatures(polygonFeatures(fc), file.name, 'upload');
-      } else if (lower.endsWith('.zip')) {
-        const parsed = await shp(await file.arrayBuffer());
-        const collections = Array.isArray(parsed) ? parsed : [parsed];
-        addFeatures(collections.flatMap(polygonFeatures), file.name, 'upload');
-      } else if (lower.endsWith('.gpkg')) {
-        setError(
-          'GeoPackage parsing arrives with the server-side upload (FIMSIM-BE6). ' +
-          'For now, use a zipped shapefile (.zip) or GeoJSON.',
-        );
-      } else {
-        setError('Unsupported file type. Upload a zipped shapefile (.zip), .geojson, or .json.');
+      const res = await uploadAoiFile(projectId, file);
+      addAois(res.aois);
+      if (res.skipped_non_polygon) {
+        setError(`${res.skipped_non_polygon} non-polygon feature(s) were skipped.`);
       }
-    } catch (err) {
-      setError(`Could not read ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
     }
   };
 
-  const onDrawComplete = (ring: Position[]) => {
+  const onDrawComplete = async (ring: Position[]) => {
     setDrawing(false);
-    const feature: AoiFeature = {
-      type: 'Feature',
-      properties: {},
-      geometry: { type: 'Polygon', coordinates: [ring] },
-    };
-    const drawnCount = aois.filter((a) => a.source === 'drawn').length + 1;
-    addFeatures([feature], `Drawn AOI ${drawnCount}`, 'drawn');
+    setBusy('Saving drawn area…');
+    setError(null);
+    try {
+      const n = aois.filter((a) => a.source === 'drawn').length + 1;
+      const res = await createDrawnAoi(
+        projectId, { type: 'Polygon', coordinates: [ring] }, `Drawn AOI ${n}`);
+      addAois(res.aois);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const remove = (id: string) => setAois(aois.filter((a) => a.id !== id));
+  const loadExample = async () => {
+    setBusy('Adding example…');
+    setError(null);
+    try {
+      const res = await createDrawnAoi(
+        projectId, NEUSE_AOI.geometry as GeoJSON.Polygon,
+        'Neuse River, NC (example)', 'example');
+      addAois(res.aois);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
+    }
+  };
 
-  /** Replace a non-rectangular AOI with its bounding box (LISFLOOD-FP/TRITON requirement). */
-  const useBbox = (id: string) =>
-    setAois(
-      aois.map((a) =>
-        a.id === id
-          ? { ...makeAoi(bboxFeature(a.feature), a.name, a.source), id: a.id }
-          : a,
-      ),
-    );
+  const remove = async (a: ServerAoi) => {
+    try {
+      await deleteAoi(a.id);
+      setAois((prev) => prev.filter((x) => x.id !== a.id));
+    } catch (e) {
+      fail(e);
+    }
+  };
+
+  const useBbox = async (a: ServerAoi) => {
+    // LISFLOOD-FP/TRITON require rectangles: replace with the bounding box.
+    const coords = a.geometry.coordinates.flat();
+    const xs = coords.map((p) => p[0]);
+    const ys = coords.map((p) => p[1]);
+    const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
+    const [minY, maxY] = [Math.min(...ys), Math.max(...ys)];
+    const ring: Position[] = [
+      [minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY], [minX, minY],
+    ];
+    setBusy('Replacing with bounding box…');
+    try {
+      const res = await createDrawnAoi(
+        projectId, { type: 'Polygon', coordinates: [ring] }, a.name, 'drawn');
+      await deleteAoi(a.id);
+      setAois((prev) => [...prev.filter((x) => x.id !== a.id), ...res.aois]);
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const retry = async (a: ServerAoi) => {
+    try {
+      const fresh = await retryLookup(a.id);
+      setAois((prev) => prev.map((x) => (x.id === fresh.id ? fresh : x)));
+    } catch (e) {
+      fail(e);
+    }
+  };
 
   return (
     <div className="as-wrap">
       <div className="as-actions">
-        <button type="button" className="button-primary" onClick={() => fileInput.current?.click()}>
+        <button
+          type="button" className="button-primary"
+          disabled={!!busy}
+          onClick={() => fileInput.current?.click()}
+        >
           Upload area file
         </button>
         <button
           type="button"
           className={drawing ? 'button-primary' : 'button-secondary'}
+          disabled={!!busy}
           onClick={() => setDrawing(!drawing)}
         >
           {drawing ? 'Cancel drawing' : 'Draw on map'}
         </button>
-        <button
-          type="button"
-          className="button-secondary"
-          onClick={() => addFeatures([NEUSE_AOI], 'Neuse River, NC (example)', 'example')}
-        >
+        <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void loadExample()}>
           Load example: Neuse River, NC
         </button>
         <input
           ref={fileInput}
           type="file"
-          accept=".zip,.geojson,.json,.gpkg"
+          accept=".zip,.gpkg,.geojson,.json"
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -132,17 +174,20 @@ export default function AoiStep({ aois, setAois }: Props) {
         />
       </div>
       <p className="as-hint">
-        Zipped shapefile (.zip) or GeoJSON — every polygon feature becomes its own study area.
-        LISFLOOD-FP and TRITON require <strong>rectangular</strong> study areas; drawing produces
-        a rectangle, and non-rectangular uploads can be converted to their bounding box.
+        Zipped shapefile (.zip), GeoPackage (.gpkg), or GeoJSON — every polygon
+        feature becomes its own study area, validated on the server.
+        LISFLOOD-FP and TRITON require <strong>rectangular</strong> areas;
+        drawing produces a rectangle, and non-rectangular uploads can be
+        converted to their bounding box.
       </p>
 
+      {busy && <div className="as-busy" role="status">{busy}</div>}
       {error && <div className="as-error" role="alert">{error}</div>}
 
       <AoiMap
         aois={aois}
         drawing={drawing}
-        onDrawComplete={onDrawComplete}
+        onDrawComplete={(ring) => void onDrawComplete(ring)}
         onDrawCancel={() => setDrawing(false)}
         zoomTo={zoomTo}
       />
@@ -154,32 +199,44 @@ export default function AoiStep({ aois, setAois }: Props) {
               <button type="button" className="as-card-main" onClick={() => setZoomTo(a)} title="Zoom to this area">
                 <span className="as-card-name">{a.name}</span>
                 <span className="as-card-meta">
-                  {a.areaKm2 >= 1 ? a.areaKm2.toFixed(1) : a.areaKm2.toFixed(3)} km²
-                  {' · '}
-                  {a.source}
+                  {a.area_km2 >= 1 ? a.area_km2.toFixed(1) : a.area_km2.toFixed(3)} km²
+                  {' · '}{a.source}
+                  {a.states?.length ? ` · ${a.states.map((s) => s.abbr ?? s.name).join(', ')}` : ''}
+                  {a.huc8_codes?.length ? ` · HUC8 ${a.huc8_codes.join(', ')}` : ''}
                 </span>
-                {!a.inConus && (
-                  <span className="as-card-warn">
-                    Outside the continental US — data sources are US-only
-                  </span>
-                )}
-                {!a.isRect && (
+                <span className="as-card-lookup">
+                  {a.lookup_status === 'done' ? (
+                    <>
+                      River: <strong>{a.river_name ?? 'none detected'}</strong>
+                      {' · '}{a.lookup?.gages?.length ?? 0} gage{(a.lookup?.gages?.length ?? 0) === 1 ? '' : 's'}
+                    </>
+                  ) : a.lookup_status === 'failed' ? (
+                    <span className="as-card-warn">River/gage lookup failed</span>
+                  ) : (
+                    <span className="as-card-resolving">Resolving river &amp; gages…</span>
+                  )}
+                </span>
+                {!a.is_rectangular && (
                   <span className="as-card-warn">
                     Not rectangular — LISFLOOD-FP/TRITON require rectangular areas
                   </span>
                 )}
               </button>
-              {!a.isRect && (
+              {a.lookup_status === 'failed' && (
+                <button type="button" className="as-card-fix" onClick={() => void retry(a)}>
+                  Retry lookup
+                </button>
+              )}
+              {!a.is_rectangular && (
                 <button
-                  type="button"
-                  className="as-card-fix"
-                  onClick={() => useBbox(a.id)}
+                  type="button" className="as-card-fix"
+                  onClick={() => void useBbox(a)}
                   title="Replace this area with its bounding box"
                 >
                   Use bounding box
                 </button>
               )}
-              <button type="button" className="as-card-x" aria-label={`Remove ${a.name}`} onClick={() => remove(a.id)}>
+              <button type="button" className="as-card-x" aria-label={`Remove ${a.name}`} onClick={() => void remove(a)}>
                 ✕
               </button>
             </li>
