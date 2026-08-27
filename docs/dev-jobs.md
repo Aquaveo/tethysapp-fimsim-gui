@@ -69,3 +69,8 @@ notice the cancel until they next log.
   machine reboot), its StepRun stays `running` with no new progress events.
   FE7 surfaces this as "no update for X min"; BE10 should add a reaper that
   fails runs whose last event is older than a threshold.
+
+- **Restart dask after code changes**: the scheduler AND workers hold imported
+  app modules in memory; a task referencing a function added since they
+  started dies at deserialization ("Can't get attribute …") and the DB row
+  never advances. Any edit to jobs.py / job_types → restart both.

@@ -140,17 +140,17 @@ def _sanity_check_proj():
         )
 
 
-def _write_aoi_geojson(step_run, dest: Path) -> Path:
+def _write_aoi_geojson(aoi, dest: Path) -> Path:
     from geoalchemy2.shape import to_shape
     from shapely.geometry import mapping
 
-    geom = to_shape(step_run.aoi.geometry)
+    geom = to_shape(aoi.geometry)
     fc = {
         "type": "FeatureCollection",
         "crs": {"type": "name", "properties": {"name": "urn:ogc:def:crs:OGC:1.3:CRS84"}},
         "features": [{
             "type": "Feature",
-            "properties": {"name": step_run.aoi.name},
+            "properties": {"name": aoi.name},
             "geometry": mapping(geom),
         }],
     }
@@ -190,7 +190,7 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         adapter = LogAdapter(session, run,
                              deadline=time.monotonic() + timeout_s)
         scratch = Path(tempfile.mkdtemp(prefix=f"fimsim-job-{steprun_id}-"))
-        aoi_file = _write_aoi_geojson(run, scratch / "aoi.geojson")
+        aoi_file = _write_aoi_geojson(run.aoi, scratch / "aoi.geojson")
 
         job_type = REGISTRY[run.step_key]
         outputs_dir = job_type.run(scratch, aoi_file, run.config or {}, adapter)
@@ -275,4 +275,103 @@ def submit_step(step_run, user, *, timeout_s: int = DEFAULT_TIMEOUT_S):
     job.execute(delayed(run_step_job)(db_url, storage_config, step_run.id, timeout_s))
     step_run.status = "queued"
     step_run.job_id = str(job.id)
+    return job
+
+
+# ── AOI context lookup (BE6): river + gages, network-bound → background job ──
+
+def run_aoi_lookup(db_url: str, aoi_id: int) -> dict:
+    """Executed on the Dask worker: NHD main-river + flowlines + USGS gages
+    for one AOI. States/HUCs were resolved synchronously at ingest (PostGIS);
+    this job carries only the network-bound lookups."""
+    import shutil as _shutil
+    import tempfile as _tempfile
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from tethysapp.fimsim_gui.models import Aoi
+
+    _ensure_django()
+    _sanity_check_proj()
+
+    engine = create_engine(db_url)
+    session = sessionmaker(bind=engine)()
+    scratch = None
+    try:
+        aoi = session.query(Aoi).get(aoi_id)
+        if aoi is None:
+            return {"status": "missing", "aoi_id": aoi_id}
+        aoi.lookup_status = "running"
+        session.commit()
+
+        scratch = Path(_tempfile.mkdtemp(prefix=f"fimsim-lookup-{aoi_id}-"))
+        aoi_file = str(_write_aoi_geojson(aoi, scratch / "aoi.geojson"))
+
+        from fimcore.aoi_info import (
+            lookup_nhd_flowlines_clipped, lookup_usgs_gages,
+        )
+        from fimcore.river_lookup import lookup_main_river
+
+        log = lambda *_: None  # noqa: E731 — lookups are chatty, results matter
+        river_name = lookup_main_river(aoi_file, 0, log_fn=log)
+        gages = lookup_usgs_gages(aoi_file, 0, log_fn=log)
+        flowlines_gdf, main_river_gdf = lookup_nhd_flowlines_clipped(
+            aoi_file, 0, log_fn=log)
+
+        def _as_geojson(gdf, tolerance=0.0002):
+            if gdf is None or len(gdf) == 0:
+                return None
+            g = gdf.to_crs(4326) if gdf.crs and gdf.crs.to_epsg() != 4326 else gdf
+            g = g.assign(geometry=g.geometry.simplify(tolerance))
+            return json.loads(g[["geometry"]].to_json())
+
+        aoi.river_name = river_name
+        aoi.lookup = {
+            "gages": gages or [],
+            "flowlines": _as_geojson(flowlines_gdf),
+            "main_river": _as_geojson(main_river_gdf, tolerance=0.0001),
+        }
+        aoi.lookup_status = "done"
+        aoi.lookup_error = None
+        session.commit()
+        return {"status": "done", "aoi_id": aoi_id,
+                "river": river_name, "gages": len(gages or [])}
+    except Exception as exc:
+        session.rollback()
+        aoi = session.query(Aoi).get(aoi_id)
+        if aoi is not None:
+            aoi.lookup_status = "failed"
+            aoi.lookup_error = f"{type(exc).__name__}: {exc}"
+            session.commit()
+        return {"status": "failed", "aoi_id": aoi_id, "error": str(exc)}
+    finally:
+        if scratch is not None:
+            _shutil.rmtree(scratch, ignore_errors=True)
+        session.close()
+        engine.dispose()
+
+
+def submit_aoi_lookup(aoi, user):
+    """Create + execute a Tethys DaskJob for one AOI's context lookup."""
+    from dask import delayed
+    from tethys_sdk.jobs import DaskJob
+
+    from tethysapp.fimsim_gui.app import App
+
+    scheduler = App.get_scheduler("dask_primary")
+    db_url = App.get_persistent_store_database(
+        "primary_db").url.render_as_string(hide_password=False)
+
+    job_manager = App.get_job_manager()
+    job = job_manager.create_job(
+        name=f"fimsim_lookup_{aoi.id}",
+        user=user,
+        job_type=DaskJob,
+        scheduler=scheduler,
+    )
+    job.extended_properties = {"aoi_id": aoi.id, "kind": "aoi_lookup"}
+    job.save()
+    job.execute(delayed(run_aoi_lookup)(db_url, aoi.id))
+    aoi.lookup_status = "pending"
     return job
