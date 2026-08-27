@@ -235,6 +235,34 @@ def make_s3_service(*, access_key, secret_key, bucket, endpoint_url=None,
                           public_s3_client=public_client)
 
 
+def storage_config_from_settings() -> dict:
+    """The app's storage settings as a plain serializable dict — what the
+    submit side hands to Dask workers (which must not touch App/django)."""
+    from tethysapp.fimsim_gui.app import App
+    local = App.get_custom_setting("local_storage_path")
+    if local:
+        return {"kind": "local", "root": str(local)}
+    return {
+        "kind": "s3",
+        "access_key": App.get_custom_setting("minio_access_key"),
+        "secret_key": App.get_custom_setting("minio_secret_key"),
+        "bucket": App.get_custom_setting("s3_bucket"),
+        "endpoint_url": App.get_custom_setting("minio_endpoint_url") or None,
+        "public_endpoint_url": App.get_custom_setting("s3_public_endpoint_url") or None,
+    }
+
+
+def service_from_config(cfg: dict) -> StorageService:
+    """Rebuild a StorageService from :func:`storage_config_from_settings`."""
+    if cfg["kind"] == "local":
+        return make_local_service(cfg["root"])
+    return make_s3_service(
+        access_key=cfg["access_key"], secret_key=cfg["secret_key"],
+        bucket=cfg["bucket"], endpoint_url=cfg.get("endpoint_url"),
+        public_endpoint_url=cfg.get("public_endpoint_url"), ensure_bucket=True,
+    )
+
+
 def get_storage() -> StorageService:
     """The app's configured storage: local dir if local_storage_path is set,
     else MinIO/S3 from the custom settings (blank endpoint = real AWS)."""
