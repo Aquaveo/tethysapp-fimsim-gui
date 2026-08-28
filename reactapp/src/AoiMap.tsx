@@ -43,10 +43,14 @@ const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 export type DrawMode = 'rectangle' | 'polygon';
 
-/** Closed axis-aligned ring from two opposite corners. */
-function rectRing(a: Position, b: Position): Position[] {
-  const [minX, maxX] = a[0] < b[0] ? [a[0], b[0]] : [b[0], a[0]];
-  const [minY, maxY] = a[1] < b[1] ? [a[1], b[1]] : [b[1], a[1]];
+/** Closed ring of the axis-aligned bounding box of any clicked points —
+ *  irregular click patterns commit as their smallest enclosing rectangle
+ *  (LISFLOOD-FP/TRITON need rectangular meshes). */
+function bboxRing(pts: Position[]): Position[] {
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
+  const [minY, maxY] = [Math.min(...ys), Math.max(...ys)];
   return [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY], [minX, minY]];
 }
 
@@ -190,19 +194,34 @@ export default function AoiMap({
       const features: Feature[] = [];
 
       if (modeRef.current === 'rectangle') {
-        // Anchor corner + ghost rectangle to the cursor.
-        if (v.length >= 1) {
+        // Corner-click mode: every clicked vertex shows, the first one becomes
+        // the snap-close target, and the bounding rectangle of everything
+        // clicked so far (plus the cursor) previews live — that rectangle is
+        // what commits.
+        const canClose = v.length >= 3;
+        for (let i = 0; i < v.length; i++) {
+          features.push({
+            type: 'Feature',
+            properties: { closable: canClose && i === 0 },
+            geometry: { type: 'Point', coordinates: v[i] },
+          });
+        }
+        if (v.length >= 2) {
+          features.push({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: v } });
+        }
+        if (v.length >= 1 && cursor.current) {
           features.push({
             type: 'Feature', properties: {},
-            geometry: { type: 'Point', coordinates: v[0] },
+            geometry: { type: 'LineString', coordinates: [v[v.length - 1], cursor.current] },
           });
-          if (cursor.current) {
-            const ring = rectRing(v[0], cursor.current);
-            features.push(
-              { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ring } },
-              { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } },
-            );
-          }
+        }
+        const boxPts = cursor.current ? [...v, cursor.current] : v;
+        if (boxPts.length >= 2) {
+          const ring = bboxRing(boxPts);
+          features.push(
+            { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: ring } },
+            { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } },
+          );
         }
         return { type: 'FeatureCollection', features };
       }
@@ -254,12 +273,15 @@ export default function AoiMap({
       const p: Position = [e.lngLat.lng, e.lngLat.lat];
 
       if (modeRef.current === 'rectangle') {
-        if (verts.current.length === 0) {
-          verts.current = [p];
-          refreshDraft();
-        } else {
-          finish(rectRing(verts.current[0], p));
+        if (verts.current.length >= 3) {
+          const first = map.project([verts.current[0][0], verts.current[0][1]]);
+          if (Math.hypot(first.x - e.point.x, first.y - e.point.y) <= 12) {
+            finish(bboxRing(verts.current));
+            return;
+          }
         }
+        verts.current = [...verts.current, p];
+        refreshDraft();
         return;
       }
 
@@ -283,10 +305,15 @@ export default function AoiMap({
     });
 
     map.on('dblclick', (e) => {
-      if (!drawingRef.current || modeRef.current !== 'polygon') return;
+      if (!drawingRef.current) return;
       e.preventDefault();
       // The double-click already delivered two click events at the same spot — drop one.
       const ring = verts.current.slice(0, -1);
+      if (modeRef.current === 'rectangle') {
+        if (ring.length >= 2) finish(bboxRing(ring));
+        else reset(true);
+        return;
+      }
       if (ring.length >= 3) {
         finish([...ring, ring[0]]);
       } else {
@@ -386,7 +413,7 @@ export default function AoiMap({
       {drawing && (
         <div className="am-draw-hint" role="status">
           {drawMode === 'rectangle'
-            ? 'Click to set the first corner · click again to finish the rectangle · Esc to cancel'
+            ? 'Click the corners · click the first point (or double-click) to finish — the area becomes its enclosing rectangle · Esc to cancel'
             : 'Click to add vertices · click the first point (or double-click) to finish · Esc to cancel'}
         </div>
       )}

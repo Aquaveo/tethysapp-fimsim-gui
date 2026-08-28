@@ -176,9 +176,10 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
       <p className="as-hint">
         Zipped shapefile (.zip), GeoPackage (.gpkg), or GeoJSON — every polygon
         feature becomes its own study area, validated on the server.
-        LISFLOOD-FP and TRITON require <strong>rectangular</strong> areas;
-        drawing produces a rectangle, and non-rectangular uploads can be
-        converted to their bounding box.
+        LISFLOOD-FP and TRITON require <strong>rectangular</strong> areas: click
+        the corners on the map and the drawn shape closes into its smallest
+        enclosing rectangle; non-rectangular uploads can be converted to their
+        bounding box.
       </p>
 
       {busy && <div className="as-busy" role="status">{busy}</div>}
