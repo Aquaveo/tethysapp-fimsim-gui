@@ -158,6 +158,49 @@ def _write_aoi_geojson(aoi, dest: Path) -> Path:
     return dest
 
 
+WORKSPACE_SKIP_DIRS = {"dem_tiles"}  # remote-tile cache: cheap to refetch
+
+
+def _restore_workspace(storage, ws_prefix: str, ctx: dict, log_fn):
+    """Download the AOI's persisted fimcore folder into this job's scratch and
+    remap the per-AOI ctx's absolute paths (they were written by a previous
+    job in a different scratch dir)."""
+    folder = Path(ctx["aoi_features"][0]["folder_path"])
+    entries = storage.list_prefix_with_sizes(ws_prefix)
+    for key, _size in entries:
+        rel = key[len(ws_prefix) + 1:]
+        storage.download_to_path(key, folder / rel)
+    if not entries:
+        return
+    feat_ctx_path = folder / "workflow_context.json"
+    if feat_ctx_path.exists():
+        raw = feat_ctx_path.read_text()
+        try:
+            old_root = json.loads(raw).get("project_dir")
+        except json.JSONDecodeError:
+            old_root = None
+        if old_root and old_root != str(folder):
+            raw = raw.replace(old_root, str(folder))
+            old_parent = str(Path(old_root).parent)
+            raw = raw.replace(old_parent, str(folder.parent))
+            feat_ctx_path.write_text(raw)
+    log_fn(f"workspace restored: {len(entries)} file(s)")
+
+
+def _persist_workspace(storage, ws_prefix: str, ctx: dict):
+    """Upload the AOI folder (minus caches) so later steps can restore it."""
+    folder = Path(ctx["aoi_features"][0]["folder_path"])
+    for p in sorted(folder.rglob("*")):
+        if not p.is_file():
+            continue
+        rel = p.relative_to(folder)
+        if rel.parts and rel.parts[0] in WORKSPACE_SKIP_DIRS:
+            continue
+        key = f"{ws_prefix}/{rel.as_posix()}"
+        with open(p, "rb") as fh:
+            storage.save(key, fh)
+
+
 def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
                  timeout_s: int = DEFAULT_TIMEOUT_S) -> dict:
     """Executed on the Dask worker. Owns the StepRun lifecycle end to end."""
@@ -166,7 +209,7 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
 
     from tethysapp.fimsim_gui.job_types import REGISTRY
     from tethysapp.fimsim_gui.models import StepRun
-    from tethysapp.fimsim_gui.storage import service_from_config
+    from tethysapp.fimsim_gui.storage import build_key, service_from_config
 
     _ensure_django()
     _sanity_check_proj()
@@ -175,8 +218,9 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
     session = sessionmaker(bind=engine)()
     scratch = None
     try:
+        from tethysapp.fimsim_gui.models import Aoi
         run = (session.query(StepRun)
-               .options(joinedload(StepRun.aoi))
+               .options(joinedload(StepRun.aoi).joinedload(Aoi.project))
                .get(steprun_id))
         if run is None:
             return {"status": "missing", "steprun_id": steprun_id}
@@ -191,13 +235,23 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
                              deadline=time.monotonic() + timeout_s)
         scratch = Path(tempfile.mkdtemp(prefix=f"fimsim-job-{steprun_id}-"))
         aoi_file = _write_aoi_geojson(run.aoi, scratch / "aoi.geojson")
+        storage = service_from_config(storage_config)
 
         job_type = REGISTRY[run.step_key]
-        outputs_dir = job_type.run(scratch, aoi_file, run.config or {}, adapter)
+        ctx_path, ctx = job_type.prepare(scratch, aoi_file, adapter)
+
+        # Restore this AOI's persisted workspace (earlier steps' artifacts +
+        # per-AOI ctx) and remap its absolute paths into this job's scratch.
+        project = run.aoi.project
+        ws_prefix = build_key(project.username, project.id, run.aoi.id, "workspace")
+        _restore_workspace(storage, ws_prefix, ctx, adapter)
+
+        job_type.execute(ctx_path, ctx, run.config or {}, adapter)
 
         run.status = "uploading"
         adapter.flush()
-        storage = service_from_config(storage_config)
+        _persist_workspace(storage, ws_prefix, ctx)
+        outputs_dir = job_type.collect(ctx, scratch)
         manifest = storage.store_outputs(run, outputs_dir)
 
         run.status = "succeeded"
@@ -375,3 +429,31 @@ def submit_aoi_lookup(aoi, user):
     job.execute(delayed(run_aoi_lookup)(db_url, aoi.id))
     aoi.lookup_status = "pending"
     return job
+
+
+# ── BE7 submit-side helpers (pure, unit-testable) ────────────────────────────
+
+def prerequisites_missing(aoi, step_key) -> list:
+    """Prerequisite steps whose latest run has NOT succeeded."""
+    from tethysapp.fimsim_gui.job_types import REGISTRY
+
+    missing = []
+    for req in REGISTRY[step_key].requires:
+        current = aoi.current_step_run(req)
+        if current is None or current.status != "succeeded":
+            missing.append(req)
+    return missing
+
+
+def supersede_step_and_downstream(aoi, step_key) -> int:
+    """Re-run semantics: a resubmit supersedes this step's runs AND every
+    downstream step's (their inputs just changed). Returns count superseded."""
+    from tethysapp.fimsim_gui.models import STEP_KEYS
+
+    invalidated = STEP_KEYS[STEP_KEYS.index(step_key):]
+    n = 0
+    for run in aoi.step_runs:
+        if run.step_key in invalidated and not run.superseded:
+            run.superseded = True
+            n += 1
+    return n

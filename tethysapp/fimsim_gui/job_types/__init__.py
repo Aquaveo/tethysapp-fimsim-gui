@@ -1,5 +1,12 @@
-from tethysapp.fimsim_gui.job_types.dem import DEMStepJobType
+from tethysapp.fimsim_gui.job_types.steps import (
+    BCIStepJobType, BDYStepJobType, DEMStepJobType,
+    ManningStepJobType, PARStepJobType,
+)
 
 REGISTRY = {
-    "dem": DEMStepJobType(),
+    jt.step_key: jt
+    for jt in (
+        DEMStepJobType(), ManningStepJobType(), BCIStepJobType(),
+        BDYStepJobType(), PARStepJobType(),
+    )
 }

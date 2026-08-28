@@ -1,33 +1,34 @@
-"""FIMSIM-BE5: job type registry (family pattern: FIMeval's job_types).
+"""FIMSIM-BE7: job type registry — one class per wizard step.
 
-A StepJobType binds a wizard step key to the fimcore callable that does the
-work. Registering a new step is data (a subclass with a run()), not plumbing —
-BE7 adds manning/bci/bdy/par by cloning the DEM registration.
+Every step follows the same lifecycle on the worker:
+  prepare()  — scratch fimcore project for the job's single AOI
+  (wrapper restores the AOI's persisted workspace + remaps ctx paths)
+  execute()  — the fimcore orchestrator call, per_aoi_configs=[config]
+  collect()  — which files are this step's user-facing outputs
+  (wrapper persists the workspace back + uploads outputs)
+
+`requires` drives the BE7 dependency guard: a step submits only when the
+latest run of each prerequisite step succeeded.
 """
+import shutil
+from pathlib import Path
 
 
 class StepJobType:
     #: wizard step key (models.STEP_KEYS)
     step_key: str = ""
+    #: step keys whose latest run must be 'succeeded' before this submits
+    requires: tuple = ()
 
-    def default_config(self) -> dict:
-        """Defaults merged under the request config (BE7 formalizes schemas)."""
+    def defaults(self) -> dict:
         return {}
 
-    def run(self, workdir, aoi_geojson_path, config, log_fn) -> str:
-        """Execute the step in *workdir* for the AOI materialized at
-        *aoi_geojson_path*. Blocking; called on the Dask worker. Returns the
-        directory whose files are this step's outputs (uploaded to storage
-        by the wrapper)."""
-        raise NotImplementedError
+    def merged(self, config: dict) -> dict:
+        return {**self.defaults(), **(config or {})}
 
-    # -- shared fimcore scaffolding (the proven smoke-test sequence) --
-    def build_fimcore_project(self, workdir, aoi_geojson_path, log_fn):
-        """create_project → inspect_features → subfolders → ctx, for ONE AOI.
-
-        Each job owns one AOI (per-AOI fan-out), so the fimcore 'project' here
-        is scratch scaffolding, not the user's Project row.
-        """
+    # -- worker lifecycle --
+    def prepare(self, workdir, aoi_geojson_path, log_fn):
+        """create_project → inspect_features → subfolders → ctx, for ONE AOI."""
         from dataclasses import asdict
 
         from fimcore.context import save_context
@@ -42,3 +43,38 @@ class StepJobType:
         ctx["aoi_features"] = [asdict(f) for f in feats]
         save_context(ctx_path, ctx)
         return ctx_path, ctx
+
+    def execute(self, ctx_path, ctx, config, log_fn):
+        raise NotImplementedError
+
+    def collect(self, ctx, workdir) -> str:
+        """Default outputs: the AOI folder's rasters + the LISFLOOD deck."""
+        feat_dir = Path(ctx["aoi_features"][0]["folder_path"])
+        outputs = Path(workdir) / "outputs"
+        outputs.mkdir(exist_ok=True)
+        for p in feat_dir.glob("*.tif"):
+            shutil.copy2(p, outputs / p.name)
+        lf = feat_dir / "lisflood-files"
+        if lf.is_dir():
+            for p in lf.iterdir():
+                if p.is_file():
+                    shutil.copy2(p, outputs / p.name)
+        return str(outputs)
+
+
+class UniformStepJobType(StepJobType):
+    """Steps whose orchestrator takes (ctx_path, ctx, per_aoi_configs, log_fn)."""
+
+    #: attribute name on fimcore.orchestrate
+    orchestrator: str = ""
+
+    def transform_config(self, cfg: dict, ctx) -> dict:
+        """Hook: JSON config → fimcore kwargs (e.g. ISO strings → datetime)."""
+        return cfg
+
+    def execute(self, ctx_path, ctx, config, log_fn):
+        import fimcore.orchestrate as orch
+
+        fn = getattr(orch, self.orchestrator)
+        cfg = self.transform_config(self.merged(config), ctx)
+        fn(ctx_path, ctx, per_aoi_configs=[cfg], log_fn=log_fn)

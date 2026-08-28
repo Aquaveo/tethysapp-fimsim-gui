@@ -233,3 +233,133 @@ def api_aoi_lookup(request, session, aoi_id):
     except Exception as exc:
         return JsonResponse({'error': f'lookup submission failed: {exc}'}, status=503)
     return JsonResponse(aoi.to_dict(), status=202)
+
+
+# ── FIMSIM-BE7: step submission, status, cancel ───────────────────────────────
+
+def _owned_steprun(session, request, steprun_id):
+    from tethysapp.fimsim_gui.models import StepRun
+    run = session.query(StepRun).get(int(steprun_id))
+    if run is None:
+        return None, JsonResponse({'error': 'step run not found'}, status=404)
+    if run.aoi.project.username != request.user.username:
+        return None, JsonResponse({'error': 'access denied'}, status=403)
+    return run, None
+
+
+@controller(url='api/steps', name='api_steps')
+def api_steps(request):
+    """Every step's defaults + prerequisites — the FE panels' schema source."""
+    from tethysapp.fimsim_gui.job_types import REGISTRY
+    return JsonResponse({
+        key: {'defaults': jt.defaults(), 'requires': list(jt.requires)}
+        for key, jt in REGISTRY.items()
+    })
+
+
+@controller(url='api/projects/{project_id}/steps/{step_key}/submit',
+            name='api_step_submit')
+@with_session
+def api_step_submit(request, session, project_id, step_key):
+    """Submit one wizard step for the project's AOIs — one DaskJob per AOI.
+
+    Body: {"config": {...}, "aoi_ids": [..]?, "aoi_configs": {"<id>": {...}}?}
+    AOIs failing the dependency guard are reported, never silently skipped.
+    """
+    from tethysapp.fimsim_gui.job_types import REGISTRY
+    from tethysapp.fimsim_gui.jobs import (
+        prerequisites_missing, submit_step, supersede_step_and_downstream,
+    )
+    from tethysapp.fimsim_gui.models import StepRun
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    if step_key not in REGISTRY:
+        return JsonResponse({'error': f'unknown step "{step_key}"'}, status=404)
+    project, err = _owned_project(session, request, project_id)
+    if err:
+        return err
+    try:
+        body = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'invalid JSON'}, status=400)
+
+    base_config = body.get('config') or {}
+    aoi_configs = body.get('aoi_configs') or {}
+    if not isinstance(base_config, dict) or not isinstance(aoi_configs, dict):
+        return JsonResponse({'error': 'config and aoi_configs must be objects'},
+                            status=400)
+    wanted = body.get('aoi_ids')
+    aois = [a for a in project.aois if wanted is None or a.id in wanted]
+    if not aois:
+        return JsonResponse({'error': 'no AOIs to submit'}, status=400)
+
+    results = []
+    for aoi in aois:
+        missing = prerequisites_missing(aoi, step_key)
+        if missing:
+            results.append({
+                'aoi_id': aoi.id, 'submitted': False,
+                'reason': (f'requires the {", ".join(missing)} step(s) to have '
+                           f'succeeded first'),
+            })
+            continue
+        current = aoi.current_step_run(step_key)
+        if current is not None and current.status in ('queued', 'running', 'uploading'):
+            results.append({
+                'aoi_id': aoi.id, 'submitted': False,
+                'reason': 'this step is already running for this AOI',
+            })
+            continue
+        supersede_step_and_downstream(aoi, step_key)
+        run = StepRun(aoi_id=aoi.id, step_key=step_key,
+                      config={**base_config, **(aoi_configs.get(str(aoi.id)) or {})})
+        session.add(run)
+        session.flush()
+        try:
+            submit_step(run, request.user)
+            results.append({'aoi_id': aoi.id, 'submitted': True, 'steprun_id': run.id})
+        except Exception as exc:
+            logger.error('submit failed for AOI %s step %s: %s', aoi.id, step_key, exc)
+            run.status = 'failed'
+            run.error = f'submission failed: {exc}'
+            results.append({'aoi_id': aoi.id, 'submitted': False,
+                            'reason': f'submission failed: {exc}',
+                            'steprun_id': run.id})
+    session.commit()
+    status = 202 if any(r['submitted'] for r in results) else 503
+    return JsonResponse({'results': results}, status=status)
+
+
+@controller(url='api/projects/{project_id}/status', name='api_project_status')
+@with_session
+def api_project_status(request, session, project_id):
+    """The polling payload: every AOI with lookup + current step summaries."""
+    project, err = _owned_project(session, request, project_id)
+    if err:
+        return err
+    return JsonResponse({'aois': [a.to_dict() for a in project.aois]})
+
+
+@controller(url='api/stepruns/{steprun_id}', name='api_steprun')
+@with_session
+def api_steprun(request, session, steprun_id):
+    run, err = _owned_steprun(session, request, steprun_id)
+    if err:
+        return err
+    return JsonResponse(run.to_dict())
+
+
+@controller(url='api/stepruns/{steprun_id}/cancel', name='api_steprun_cancel')
+@with_session
+def api_steprun_cancel(request, session, steprun_id):
+    run, err = _owned_steprun(session, request, steprun_id)
+    if err:
+        return err
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    if run.status not in ('pending', 'queued', 'running', 'uploading'):
+        return JsonResponse({'error': f'cannot cancel a {run.status} run'}, status=409)
+    run.status = 'cancelled'
+    session.commit()
+    return JsonResponse(run.to_dict(), status=202)
