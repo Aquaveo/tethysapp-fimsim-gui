@@ -80,10 +80,16 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     /* non-JSON error page (e.g. auth redirect) */
   }
   if (!res.ok) {
+    // A submit that rejected every AOI returns its per-AOI reasons with a
+    // non-2xx status — pass those through so panels can display them
+    // instead of a generic failure.
+    if (body && typeof body === 'object' && 'results' in (body as object)) {
+      return body as T;
+    }
     const msg =
       (body as { error?: string } | null)?.error ??
       (res.status === 403 ? 'You are not signed in, or this is not yours.'
-        : `Request failed (${res.status})`);
+        : `Request failed (${res.status}) — try again; if it persists, the job system may be restarting.`);
     throw new ApiError(res.status, msg);
   }
   return body as T;
