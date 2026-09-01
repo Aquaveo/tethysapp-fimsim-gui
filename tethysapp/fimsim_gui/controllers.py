@@ -74,12 +74,16 @@ def _owned_aoi(session, request, aoi_id):
 DEFAULT_MAX_AOI_AREA_KM2 = 1000.0  # Parvaneh's proposal; group decision pending
 
 
-def max_aoi_area_km2() -> float:
+def _setting(name, default):
     try:
-        v = App.get_custom_setting('max_aoi_area_km2')
-        return float(v) if v else DEFAULT_MAX_AOI_AREA_KM2
+        v = App.get_custom_setting(name)
+        return type(default)(v) if v else default
     except Exception:
-        return DEFAULT_MAX_AOI_AREA_KM2
+        return default
+
+
+def max_aoi_area_km2() -> float:
+    return _setting('max_aoi_area_km2', DEFAULT_MAX_AOI_AREA_KM2)
 
 
 def _create_aois(session, request, project, ingest_result, source, source_key=None):
@@ -275,9 +279,16 @@ def _owned_steprun(session, request, steprun_id):
 @controller(url='api/limits', name='api_limits')
 def api_limits(request):
     """Usage limits, stated once server-side so UI copy can't drift."""
+    from tethysapp.fimsim_gui import guards
     return JsonResponse({
         'max_aoi_area_km2': max_aoi_area_km2(),
         'dem_baseline_res_m': 10,
+        'max_dem_cells': _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS),
+        'max_concurrent_jobs': _setting('max_concurrent_jobs',
+                                        guards.DEFAULT_MAX_CONCURRENT_JOBS),
+        'storage_quota_gb': _setting('storage_quota_gb',
+                                     guards.DEFAULT_STORAGE_QUOTA_GB),
+        'retention_days': _setting('retention_days', guards.DEFAULT_RETENTION_DAYS),
     })
 
 
@@ -328,6 +339,24 @@ def api_step_submit(request, session, project_id, step_key):
     if not aois:
         return JsonResponse({'error': 'no AOIs to submit'}, status=400)
 
+    from tethysapp.fimsim_gui import guards
+    from tethysapp.fimsim_gui.storage import get_storage
+
+    # project-wide guards: one clear rejection instead of per-AOI spam
+    reason = guards.check_concurrency(
+        session, request.user.username, len(aois),
+        _setting('max_concurrent_jobs', guards.DEFAULT_MAX_CONCURRENT_JOBS))
+    if reason is None:
+        try:
+            reason = guards.check_storage_quota(
+                get_storage(), request.user.username,
+                _setting('storage_quota_gb', guards.DEFAULT_STORAGE_QUOTA_GB))
+        except Exception as exc:
+            logger.warning('quota check skipped: %s', exc)
+    if reason:
+        return JsonResponse({'error': reason}, status=429)
+
+    jt = REGISTRY[step_key]
     results = []
     for aoi in aois:
         missing = prerequisites_missing(aoi, step_key)
@@ -345,8 +374,21 @@ def api_step_submit(request, session, project_id, step_key):
                 'reason': 'this step is already running for this AOI',
             })
             continue
-        supersede_step_and_downstream(aoi, step_key)
         merged_config = {**base_config, **(aoi_configs.get(str(aoi.id)) or {})}
+        # per-AOI resource prechecks BEFORE anything is superseded or created
+        guard_reason = None
+        if step_key == 'dem':
+            guard_reason = guards.check_dem_submit(
+                aoi, jt.merged(merged_config),
+                _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS))
+        elif step_key == 'run':
+            timeout = float(jt.merged(merged_config).get('solver_timeout_s') or 3600)
+            guard_reason = guards.check_run_submit(aoi, merged_config, timeout)
+        if guard_reason:
+            results.append({'aoi_id': aoi.id, 'submitted': False,
+                            'reason': guard_reason})
+            continue
+        supersede_step_and_downstream(aoi, step_key)
         if step_key == 'run' and not merged_config.get('solver_path'):
             merged_config['solver_path'] = App.get_custom_setting('lisflood_binary_path')
         run = StepRun(aoi_id=aoi.id, step_key=step_key, config=merged_config)

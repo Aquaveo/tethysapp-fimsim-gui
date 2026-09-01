@@ -62,6 +62,30 @@ class App(TethysAppBase):
                 required=True,
             ),
             CustomSetting(
+                name='max_dem_cells',
+                type=CustomSetting.TYPE_INTEGER,
+                description='Max predicted DEM grid cells per AOI (default 150,000,000).',
+                required=False,
+            ),
+            CustomSetting(
+                name='max_concurrent_jobs',
+                type=CustomSetting.TYPE_INTEGER,
+                description='Max active jobs per user (default 4).',
+                required=False,
+            ),
+            CustomSetting(
+                name='storage_quota_gb',
+                type=CustomSetting.TYPE_FLOAT,
+                description='Per-user storage quota in GB (default 5).',
+                required=False,
+            ),
+            CustomSetting(
+                name='retention_days',
+                type=CustomSetting.TYPE_INTEGER,
+                description='Days to keep run artifacts before cleanup (default 30).',
+                required=False,
+            ),
+            CustomSetting(
                 name='max_aoi_area_km2',
                 type=CustomSetting.TYPE_FLOAT,
                 description='Maximum AOI area in km² (default 1000 — group decision pending).',
