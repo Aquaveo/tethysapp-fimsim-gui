@@ -5,6 +5,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { getStepRunOutputs, type ServerStepRun } from './api';
 import { parseBdy, parseDischargeCsv, type Series } from './bdy';
+import { fileProxyUrl } from './outputsMeta';
 
 const ReactECharts = lazy(() => import('echarts-for-react'));
 
@@ -27,17 +28,19 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
         // Prefer the raw NWM/gage CSV: true discharge in m³/s. The .bdy holds
         // LISFLOOD's per-metre-width inflow (Q ÷ cell width) — correct for
         // the solver, misleading as "discharge".
+        // same-origin proxy: presigned MinIO URLs are CORS-hostile to fetch()
         const csv = outputs.find((o) => /discharge.*\.csv$/i.test(o.name));
-        if (csv?.url) {
-          const parsed = parseDischargeCsv(await (await fetch(csv.url)).text());
+        if (csv) {
+          const parsed = parseDischargeCsv(
+            await (await fetch(fileProxyUrl(run.id, csv.name))).text());
           if (parsed.length) {
             if (alive) { setSeries(parsed); setUnit('m³/s'); }
             return;
           }
         }
         const bdy = outputs.find((o) => o.name.toLowerCase().endsWith('.bdy'));
-        if (!bdy?.url) throw new Error('no .bdy in outputs');
-        const text = await (await fetch(bdy.url)).text();
+        if (!bdy) throw new Error('no .bdy in outputs');
+        const text = await (await fetch(fileProxyUrl(run.id, bdy.name))).text();
         const parsed = parseBdy(text, startMs);
         if (!parsed.length) throw new Error('no readable series in the .bdy');
         if (alive) { setSeries(parsed); setUnit('m²/s'); }

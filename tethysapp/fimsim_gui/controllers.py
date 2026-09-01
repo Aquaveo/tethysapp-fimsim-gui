@@ -479,3 +479,70 @@ def api_manning_table(request):
         'nlcd': rows(NLCD_MANNING),
         'fallback_default': 0.045,
     })
+
+
+@controller(url='api/stepruns/{steprun_id}/file/{name}', name='api_steprun_file')
+@with_session
+def api_steprun_file(request, session, steprun_id, name):
+    """Stream one manifest file through Django (same-origin).
+
+    Exists because browser fetch()/MapLibre can't read MinIO presigned URLs
+    cross-origin without CORS config on the bucket — the Results overlay
+    (PNG + bounds JSON) loads through here. ?dl=1 forces attachment.
+    """
+    from django.http import FileResponse
+
+    run, err = _owned_steprun(session, request, steprun_id)
+    if err:
+        return err
+    manifest = run.manifest if isinstance(run.manifest, list) else []
+    entry = next((m for m in manifest if m['name'] == name), None)
+    if entry is None:
+        return JsonResponse({'error': 'no such output'}, status=404)
+    from tethysapp.fimsim_gui.storage import get_storage
+    storage = get_storage()
+    if not storage.exists(entry['key']):
+        return JsonResponse({'error': 'file no longer stored'}, status=410)
+    return FileResponse(
+        storage.open(entry['key']),
+        content_type=entry.get('content_type') or 'application/octet-stream',
+        as_attachment=bool(request.GET.get('dl')),
+        filename=entry['name'],
+    )
+
+
+@controller(url='api/aois/{aoi_id}/zip', name='api_aoi_zip')
+@with_session
+def api_aoi_zip(request, session, aoi_id):
+    """Everything the AOI's current runs produced, one zip, foldered by step."""
+    import io
+    import zipfile
+
+    from django.http import FileResponse
+
+    aoi, err = _owned_aoi(session, request, aoi_id)
+    if err:
+        return err
+    from tethysapp.fimsim_gui.models import STEP_KEYS
+    from tethysapp.fimsim_gui.storage import get_storage
+    storage = get_storage()
+
+    buf = io.BytesIO()
+    n = 0
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for step in STEP_KEYS:
+            run = aoi.current_step_run(step)
+            if not run or not isinstance(run.manifest, list):
+                continue
+            for m in run.manifest:
+                if not storage.exists(m['key']):
+                    continue
+                with storage.open(m['key']) as fh:
+                    zf.writestr(f"{step}/{m['name']}", fh.read())
+                    n += 1
+    if not n:
+        return JsonResponse({'error': 'no stored outputs for this area yet'}, status=404)
+    buf.seek(0)
+    fname = sanitize_name(f"{aoi.project.name}_{aoi.name}") + '.zip'
+    return FileResponse(buf, as_attachment=True, filename=fname,
+                        content_type='application/zip')

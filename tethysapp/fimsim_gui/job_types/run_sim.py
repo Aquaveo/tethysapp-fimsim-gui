@@ -52,7 +52,8 @@ class RunSimJobType(StepJobType):
     requires = ("par",)
 
     def defaults(self) -> dict:
-        return {"solver_path": None, "solver_timeout_s": 3600}
+        return {"solver_path": None, "solver_timeout_s": 3600,
+                "keep_snapshots": False}
 
     def execute(self, ctx_path, ctx, config, log_fn):
         from tethysapp.fimsim_gui.geo_env import ensure_proj_data
@@ -121,6 +122,7 @@ class RunSimJobType(StepJobType):
                 "solver finished but produced no .max output:\n" + "\n".join(tail))
         log_fn(f"✓ Simulation [1/1] finished: {max_file.name}")
         ctx["_run_results_dir"] = str(results_dir)
+        ctx["_run_keep_snapshots"] = bool(cfg.get("keep_snapshots"))
 
     def collect(self, ctx, workdir) -> str:
         import numpy as np
@@ -137,6 +139,18 @@ class RunSimJobType(StepJobType):
         for extra in ("*.mass",):
             for p in results_dir.glob(extra):
                 shutil.copy2(p, outputs / p.name)
+
+        # Optional: every saveint water-depth slice, bundled (desktop parity —
+        # it keeps all res-NNNN.wd files; ~100s of grids, so zipped and off
+        # by default)
+        if ctx.get("_run_keep_snapshots"):
+            import zipfile
+            wds = sorted(results_dir.glob("*.wd"))
+            if wds:
+                with zipfile.ZipFile(outputs / "depth_snapshots.zip", "w",
+                                     zipfile.ZIP_DEFLATED) as zf:
+                    for p in wds:
+                        zf.write(p, p.name)
 
         wkt = _read_prj_wkt(folder / "lisflood-files")
         with rasterio.open(max_file) as src:

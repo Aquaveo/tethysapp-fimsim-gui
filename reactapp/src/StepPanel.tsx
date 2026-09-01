@@ -11,6 +11,7 @@ import {
 } from './api';
 import HydrographChart from './HydrographChart';
 import ManningTable, { type ManningMapping } from './ManningTable';
+import { fileProxyUrl } from './outputsMeta';
 import { STEP_FIELDS, type FieldSpec } from './stepFields';
 import './StepPanel.css';
 
@@ -47,7 +48,7 @@ function Outputs({ runId }: { runId: number }) {
     <ul className="sp-outputs">
       {outputs.map((o) => (
         <li key={o.key}>
-          {o.url ? <a href={o.url} download={o.name}>{o.name}</a> : o.name}
+          <a href={fileProxyUrl(runId, o.name, true)}>{o.name}</a>
           <span className="sp-muted"> ({(o.bytes / 1024).toFixed(0)} kB)</span>
         </li>
       ))}

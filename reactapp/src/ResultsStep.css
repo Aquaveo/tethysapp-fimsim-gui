@@ -1,0 +1,38 @@
+/* reactapp/src/ResultsStep.css — the outputs table. */
+
+.rs-aoi {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.8rem 1rem;
+}
+.rs-head {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem;
+}
+.rs-stats { display: block; font-size: 0.82rem; color: var(--color-text-secondary); }
+.rs-zip { text-decoration: none; font-size: 0.88rem; }
+.rs-tablewrap { overflow-x: auto; margin-top: 0.6rem; }
+.rs-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+.rs-table th {
+  text-align: left; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--color-text-muted);
+  padding: 0.3rem 0.7rem 0.3rem 0; border-bottom: 2px solid var(--color-border);
+}
+.rs-table td {
+  padding: 0.4rem 0.7rem 0.4rem 0; border-bottom: 1px solid var(--color-surface-alt);
+  vertical-align: top;
+}
+.rs-step { white-space: nowrap; color: var(--color-text-secondary); font-weight: 600; }
+.rs-name { font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem;
+  overflow-wrap: anywhere; max-width: 14rem; }
+.rs-desc { min-width: 16rem; }
+.rs-desc strong { color: var(--color-text); }
+.rs-size { white-space: nowrap; font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted); }
+.rs-dl {
+  display: inline-block; padding: 0.2rem 0.8rem; border-radius: 999px;
+  border: 1.5px solid var(--color-primary); color: var(--color-primary-active);
+  text-decoration: none; font-size: 0.78rem; font-weight: 600; white-space: nowrap;
+}
+.rs-dl:hover { background: var(--color-surface-alt); }
