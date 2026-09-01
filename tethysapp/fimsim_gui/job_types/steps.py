@@ -40,6 +40,7 @@ class ManningStepJobType(UniformStepJobType):
         return {
             "fric_mode": "varying",            # "fixed" | "varying"
             "lulc_download_source": "esri",    # "esri" | "nlcd"
+            "lulc_year": 2023,                 # Esri Sentinel-2 vintage
             "nlcd_year": "2021",
         }
 

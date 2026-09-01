@@ -312,8 +312,10 @@ def api_step_submit(request, session, project_id, step_key):
             })
             continue
         supersede_step_and_downstream(aoi, step_key)
-        run = StepRun(aoi_id=aoi.id, step_key=step_key,
-                      config={**base_config, **(aoi_configs.get(str(aoi.id)) or {})})
+        merged_config = {**base_config, **(aoi_configs.get(str(aoi.id)) or {})}
+        if step_key == 'run' and not merged_config.get('solver_path'):
+            merged_config['solver_path'] = App.get_custom_setting('lisflood_binary_path')
+        run = StepRun(aoi_id=aoi.id, step_key=step_key, config=merged_config)
         session.add(run)
         session.flush()
         try:

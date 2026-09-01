@@ -62,6 +62,12 @@ class App(TethysAppBase):
                 required=True,
             ),
             CustomSetting(
+                name='lisflood_binary_path',
+                type=CustomSetting.TYPE_STRING,
+                description='Path to the LISFLOOD-FP executable on the workers.',
+                required=False,
+            ),
+            CustomSetting(
                 name='local_storage_path',
                 type=CustomSetting.TYPE_STRING,
                 description=(

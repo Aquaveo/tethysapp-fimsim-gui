@@ -9,12 +9,13 @@ from tethysapp.fimsim_gui.models import STEP_KEYS
 
 
 def test_registry_covers_the_wizard_steps():
-    assert set(REGISTRY) == {"dem", "manning", "bci", "bdy", "par"}
+    assert set(REGISTRY) == {"dem", "manning", "bci", "bdy", "par", "run"}
     assert REGISTRY["dem"].requires == ()
     assert REGISTRY["manning"].requires == ("dem",)
     assert REGISTRY["bci"].requires == ("dem",)
     assert REGISTRY["bdy"].requires == ("bci",)
     assert REGISTRY["par"].requires == ("bdy",)
+    assert REGISTRY["run"].requires == ("par",)
     for key, jt in REGISTRY.items():
         assert jt.step_key == key
         assert isinstance(jt.defaults(), dict)
