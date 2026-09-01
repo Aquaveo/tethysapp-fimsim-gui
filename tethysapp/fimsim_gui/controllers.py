@@ -71,10 +71,31 @@ def _owned_aoi(session, request, aoi_id):
     return aoi, None
 
 
+DEFAULT_MAX_AOI_AREA_KM2 = 1000.0  # Parvaneh's proposal; group decision pending
+
+
+def max_aoi_area_km2() -> float:
+    try:
+        v = App.get_custom_setting('max_aoi_area_km2')
+        return float(v) if v else DEFAULT_MAX_AOI_AREA_KM2
+    except Exception:
+        return DEFAULT_MAX_AOI_AREA_KM2
+
+
 def _create_aois(session, request, project, ingest_result, source, source_key=None):
     """Persist ingested features as AOI rows + resolve states/HUCs (PostGIS,
     sync) + submit the network lookup job per AOI."""
     from tethysapp.fimsim_gui.jobs import submit_aoi_lookup
+
+    cap = max_aoi_area_km2()
+    too_big = [f for f in ingest_result.features if f.area_km2 > cap]
+    if too_big:
+        worst = max(f.area_km2 for f in too_big)
+        raise IngestError(
+            f"Area too large: {worst:,.0f} km² exceeds the {cap:,.0f} km² limit "
+            f"({len(too_big)} feature(s)). Large-scale case studies are better "
+            f"served by the desktop FIMsim — or split the area into smaller pieces."
+        )
 
     created = []
     for feat in ingest_result.features:
@@ -196,10 +217,14 @@ def api_project_aois(request, session, project_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'invalid JSON'}, status=400)
 
-    created = _create_aois(session, request, project, result, source, source_key)
+    try:
+        created = _create_aois(session, request, project, result, source, source_key)
+    except IngestError as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
     return JsonResponse({
         'aois': [a.to_dict() for a in created],
         'skipped_non_polygon': result.skipped_non_polygon,
+        'warnings': result.warnings,
     }, status=201)
 
 
@@ -245,6 +270,15 @@ def _owned_steprun(session, request, steprun_id):
     if run.aoi.project.username != request.user.username:
         return None, JsonResponse({'error': 'access denied'}, status=403)
     return run, None
+
+
+@controller(url='api/limits', name='api_limits')
+def api_limits(request):
+    """Usage limits, stated once server-side so UI copy can't drift."""
+    return JsonResponse({
+        'max_aoi_area_km2': max_aoi_area_km2(),
+        'dem_baseline_res_m': 10,
+    })
 
 
 @controller(url='api/steps', name='api_steps')

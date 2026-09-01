@@ -2,13 +2,27 @@
 // The workspace shell — same chrome as FIMeval/FIMbench: branded header +
 // footer, a slim left nav, a persistent Simulations list, and a detail pane
 // (<Outlet/>) that renders the active route (New Simulation wizard / docs).
+import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import SimulationsList from './SimulationsList';
+import WelcomeModal from './WelcomeModal';
 import './AppShell.css';
 
 export default function AppShell() {
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try { return !localStorage.getItem('fimsim.welcomeSeen'); }
+    catch { return true; }
+  });
+  const closeWelcome = (dontShowAgain: boolean) => {
+    try {
+      if (dontShowAgain) localStorage.setItem('fimsim.welcomeSeen', '1');
+      else localStorage.removeItem('fimsim.welcomeSeen');
+    } catch { /* storage unavailable → modal reappears next visit */ }
+    setShowWelcome(false);
+  };
+
   return (
     <div className="wk-app">
       <Header />
@@ -32,6 +46,7 @@ export default function AppShell() {
         </main>
       </div>
       <Footer />
+      {showWelcome && <WelcomeModal onClose={closeWelcome} />}
     </div>
   );
 }

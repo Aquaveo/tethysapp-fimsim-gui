@@ -62,6 +62,12 @@ class App(TethysAppBase):
                 required=True,
             ),
             CustomSetting(
+                name='max_aoi_area_km2',
+                type=CustomSetting.TYPE_FLOAT,
+                description='Maximum AOI area in km² (default 1000 — group decision pending).',
+                required=False,
+            ),
+            CustomSetting(
                 name='lisflood_binary_path',
                 type=CustomSetting.TYPE_STRING,
                 description='Path to the LISFLOOD-FP executable on the workers.',

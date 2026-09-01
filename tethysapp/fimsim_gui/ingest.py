@@ -35,6 +35,7 @@ class IngestedFeature:
 class IngestResult:
     features: list = field(default_factory=list)
     skipped_non_polygon: int = 0
+    warnings: list = field(default_factory=list)
 
 
 def _safe_extract_zip(zpath: Path, dest: Path) -> Path:
@@ -128,12 +129,28 @@ def ingest_aoi_file(upload_path, original_name: str, size_bytes: int) -> IngestR
             f"not datasets; simplify the polygon if needed."
         )
     gdf = _read_gdf(Path(upload_path), original_name)
+    crs_warning = None
     if gdf.crs is None:
-        raise IngestError(
-            f"{original_name} has no coordinate reference system defined — "
-            f"assign one in GIS and re-upload."
-        )
-    return ingest_gdf(gdf, default_name=Path(original_name).stem)
+        # Parvaneh's ask: assign a CRS rather than reject — but only when the
+        # coordinates actually look like degrees; silently guessing a
+        # projected CRS would put the AOI on the wrong continent.
+        minx, miny, maxx, maxy = gdf.total_bounds
+        if -180 <= minx <= 180 and -180 <= maxx <= 180 and -90 <= miny <= 90 and -90 <= maxy <= 90:
+            gdf = gdf.set_crs(4326)
+            crs_warning = (
+                f"{original_name} has no CRS defined — assumed WGS84 (EPSG:4326) "
+                f"because its coordinates look like degrees. Verify the area on the map."
+            )
+        else:
+            raise IngestError(
+                f"{original_name} has no coordinate reference system defined and its "
+                f"coordinates don't look like degrees — assign the correct CRS in GIS "
+                f"and re-upload."
+            )
+    result = ingest_gdf(gdf, default_name=Path(original_name).stem)
+    if crs_warning:
+        result.warnings.append(crs_warning)
+    return result
 
 
 def ingest_geojson_geometry(geometry: dict, name: str) -> IngestResult:

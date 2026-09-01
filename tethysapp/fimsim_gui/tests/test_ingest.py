@@ -151,3 +151,22 @@ def test_non_rectangular_flagged_not_rejected():
         [-78, 35], [-77.9, 35], [-77.95, 35.1], [-78.02, 35.05], [-78, 35]]]}
     res = ingest_geojson_geometry(tri_ish, "quad")
     assert res.features[0].is_rectangular is False   # flagged; BE7 gates on it
+
+
+def test_no_crs_but_degree_coords_gets_assigned_4326(tmp_path):
+    import warnings
+
+    import geopandas as gpd
+    from shapely.geometry import Polygon
+    shp_dir = tmp_path / "deg_nocrs"
+    shp_dir.mkdir()
+    poly = Polygon([(-78.1, 35.4), (-77.95, 35.4), (-77.95, 35.3), (-78.1, 35.3)])
+    gdf = gpd.GeoDataFrame({"name": ["x"]}, geometry=[poly])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        gdf.to_file(shp_dir / "deg.shp")
+    (shp_dir / "deg.prj").unlink(missing_ok=True)
+    z = _zip_of(shp_dir, tmp_path)
+    res = ingest_aoi_file(z, z.name, z.stat().st_size)
+    assert res.features[0].in_conus
+    assert res.warnings and "assumed WGS84" in res.warnings[0]
