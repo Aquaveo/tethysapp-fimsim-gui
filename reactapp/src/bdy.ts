@@ -35,3 +35,24 @@ export function parseBdy(text: string, startMs: number | null): Series[] {
   }
   return series;
 }
+
+
+export interface ParsedSeries {
+  series: Series[];
+  /** true discharge (m³/s) vs LISFLOOD's per-metre-width inflow (m²/s) */
+  unit: 'm³/s' | 'm²/s';
+  note?: string;
+}
+
+/** "time_hours,discharge_cms" CSV → true discharge series. */
+export function parseDischargeCsv(text: string): Series[] {
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  const points: [number, number][] = [];
+  for (const line of lines.slice(1)) {
+    const [ts, q] = line.split(',');
+    const t = Date.parse(ts);
+    const v = Number(q);
+    if (Number.isFinite(t) && Number.isFinite(v)) points.push([t, v]);
+  }
+  return points.length ? [{ boundary: 'discharge', points }] : [];
+}

@@ -4,12 +4,13 @@
 // echarts bundle is heavy, so the chart lazy-loads; parsing happens here.
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { getStepRunOutputs, type ServerStepRun } from './api';
-import { parseBdy, type Series } from './bdy';
+import { parseBdy, parseDischargeCsv, type Series } from './bdy';
 
 const ReactECharts = lazy(() => import('echarts-for-react'));
 
 export default function HydrographChart({ run }: { run: ServerStepRun }) {
   const [series, setSeries] = useState<Series[] | null>(null);
+  const [unit, setUnit] = useState<'m³/s' | 'm²/s'>('m³/s');
   const [error, setError] = useState<string | null>(null);
 
   const startMs = useMemo(() => {
@@ -23,12 +24,23 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
     (async () => {
       try {
         const { outputs } = await getStepRunOutputs(run.id);
+        // Prefer the raw NWM/gage CSV: true discharge in m³/s. The .bdy holds
+        // LISFLOOD's per-metre-width inflow (Q ÷ cell width) — correct for
+        // the solver, misleading as "discharge".
+        const csv = outputs.find((o) => /discharge.*\.csv$/i.test(o.name));
+        if (csv?.url) {
+          const parsed = parseDischargeCsv(await (await fetch(csv.url)).text());
+          if (parsed.length) {
+            if (alive) { setSeries(parsed); setUnit('m³/s'); }
+            return;
+          }
+        }
         const bdy = outputs.find((o) => o.name.toLowerCase().endsWith('.bdy'));
         if (!bdy?.url) throw new Error('no .bdy in outputs');
         const text = await (await fetch(bdy.url)).text();
         const parsed = parseBdy(text, startMs);
         if (!parsed.length) throw new Error('no readable series in the .bdy');
-        if (alive) setSeries(parsed);
+        if (alive) { setSeries(parsed); setUnit('m²/s'); }
       } catch (e) {
         if (alive) setError(String((e as Error).message ?? e));
       }
@@ -48,7 +60,7 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
     grid: { left: 60, right: 24, top: 30, bottom: 42 },
     tooltip: {
       trigger: 'axis',
-      valueFormatter: (v: number) => `${Number(v).toFixed(2)} m³/s`,
+      valueFormatter: (v: number) => `${Number(v).toFixed(2)} ${unit}`,
     },
     xAxis: {
       type: startMs !== null ? 'time' : 'value',
@@ -59,7 +71,8 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
     },
     yAxis: {
       type: 'value',
-      name: 'discharge (m³/s)',
+      name: unit === 'm³/s' ? 'discharge (m³/s)'
+        : 'inflow per metre width (m²/s)',
       nameTextStyle: { color: '#28899D' },
     },
     series: series.map((s) => ({
@@ -87,9 +100,11 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
         <ReactECharts option={option} style={{ height: 230 }} notMerge />
       </Suspense>
       <span className="sp-muted">
-        {s0.boundary} · peak {peak[1].toFixed(1)} m³/s · {durationH.toFixed(0)} h event
+        {s0.boundary} · peak {peak[1].toFixed(1)} {unit} · {durationH.toFixed(0)} h event
         {startMs !== null && ` from ${new Date(s0.points[0][0]).toLocaleString()}`}
-        {' '}— the simulation runs this exact series.
+        {unit === 'm³/s'
+          ? ' — the solver receives this series scaled per metre of cell width.'
+          : ' — LISFLOOD per-metre-width values (raw discharge ÷ DEM cell size).'}
       </span>
     </div>
   );

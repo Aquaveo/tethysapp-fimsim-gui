@@ -116,6 +116,17 @@ class BDYStepJobType(UniformStepJobType):
     requires = ("bci",)
     orchestrator = "run_lisflood_bdy_for_all_aois"
 
+    def collect(self, ctx, workdir) -> str:
+        # Also ship the raw discharge CSVs (true m³/s) — the .bdy holds
+        # LISFLOOD's per-metre-width inflow (Q ÷ cell size), which scales
+        # with DEM resolution and confuses charts/users.
+        import shutil
+        outputs = super().collect(ctx, workdir)
+        feat_dir = Path(ctx["aoi_features"][0]["folder_path"])
+        for p in feat_dir.glob("*.csv"):
+            shutil.copy2(p, Path(outputs) / p.name)
+        return outputs
+
     def defaults(self) -> dict:
         return {
             "bdy_source": "nwm_retro",

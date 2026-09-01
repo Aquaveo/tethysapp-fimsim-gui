@@ -163,13 +163,32 @@ def expired_runs(session, retention_days: int):
 
 def clean_expired_artifacts(session, storage, retention_days: int) -> int:
     """Delete expired runs' stored files; mark their manifests expired.
-    Idempotent — a manifest already marked expired is skipped."""
+    Idempotent — a manifest already marked expired is skipped.
+
+    Re-runs of a step reuse the SAME storage keys (same aoi/step/filename),
+    so a superseded manifest can reference files a current run still owns:
+    collect every live (non-expired-candidate) run's keys first and never
+    delete those."""
+    from tethysapp.fimsim_gui.models import StepRun
+
+    expired = expired_runs(session, retention_days)
+    expired_ids = {id(r) for r in expired}
+    live_keys = set()
+    for run in session.query(StepRun).filter(StepRun.manifest.isnot(None)).all():
+        if id(run) in expired_ids:
+            continue
+        manifest = run.manifest or []
+        if isinstance(manifest, list):
+            live_keys.update(m["key"] for m in manifest)
+
     n_bytes = 0
-    for run in expired_runs(session, retention_days):
+    for run in expired:
         manifest = run.manifest or []
         if not manifest or (isinstance(manifest, dict) and manifest.get("expired")):
             continue
         for m in manifest:
+            if m["key"] in live_keys:
+                continue  # a current run still references this exact key
             try:
                 storage.delete(m["key"])
                 n_bytes += int(m.get("bytes") or 0)

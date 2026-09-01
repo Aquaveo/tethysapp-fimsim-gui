@@ -212,3 +212,25 @@ def test_dem_cache_prestage_and_poststage(tmp_path):
     jt.prestage_shared_cache(st, ctx, logs.append)
     assert (tiles / "USGS_13_n36w079.tif").read_bytes() == b"FULLTILE" * 10
     assert any("staged 1" in l for l in logs)
+
+
+def test_retention_never_deletes_keys_live_runs_still_reference():
+    # superseded and current runs share keys (same aoi/step/filename)
+    shared_key = "u/1/1/bdy/Neuse.bdy"
+    superseded = _run(status="succeeded", superseded=True,
+                      finished=datetime.now(timezone.utc),
+                      manifest=[{"key": shared_key, "name": "Neuse.bdy", "bytes": 10},
+                                {"key": "u/1/1/bdy/old_only.csv", "name": "old_only.csv", "bytes": 5}])
+    current = _run(status="succeeded", superseded=False,
+                   finished=datetime.now(timezone.utc),
+                   manifest=[{"key": shared_key, "name": "Neuse.bdy", "bytes": 10}])
+    s = FakeSession([superseded, current])
+
+    class FakeStorage:
+        deleted = []
+        def delete(self, key): self.deleted.append(key)
+
+    st = FakeStorage()
+    guards.clean_expired_artifacts(s, st, retention_days=30)
+    assert st.deleted == ["u/1/1/bdy/old_only.csv"]  # the shared key survives
+    assert current.manifest[0]["key"] == shared_key
