@@ -117,5 +117,13 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   run: [
     { key: 'solver_timeout_s', label: 'Time limit (s)', widget: 'number',
       help: 'The run is stopped if it exceeds this.' },
+    {
+      key: 'keep_snapshots', label: 'Depth time series', widget: 'select',
+      options: [
+        { value: 'false', label: 'Max-depth map only (default)' },
+        { value: 'true', label: 'Also keep every depth snapshot (zip)' },
+      ],
+      help: 'Snapshots are one grid per output interval — for animations; adds a large zip.',
+    },
   ],
 };

@@ -122,7 +122,7 @@ class RunSimJobType(StepJobType):
                 "solver finished but produced no .max output:\n" + "\n".join(tail))
         log_fn(f"✓ Simulation [1/1] finished: {max_file.name}")
         ctx["_run_results_dir"] = str(results_dir)
-        ctx["_run_keep_snapshots"] = bool(cfg.get("keep_snapshots"))
+        ctx["_run_keep_snapshots"] = str(cfg.get("keep_snapshots")).lower() == "true"
 
     def collect(self, ctx, workdir) -> str:
         import numpy as np
