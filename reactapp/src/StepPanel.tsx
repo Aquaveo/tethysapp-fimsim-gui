@@ -9,6 +9,7 @@ import {
   ApiError, cancelStepRun, getStepRun, getStepRunOutputs, submitStep,
   type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
 } from './api';
+import ManningTable, { type ManningMapping } from './ManningTable';
 import { STEP_FIELDS, type FieldSpec } from './stepFields';
 import './StepPanel.css';
 
@@ -184,6 +185,15 @@ export default function StepPanel({ projectId, stepKey, aois, schema, onSubmitte
             {f.help && <span className="sp-field-help">{f.help}</span>}
           </label>
         ))}
+        {stepKey === 'manning' && value('fric_mode') === 'varying' && (
+          <div className="sp-submit-row">
+            <ManningTable
+              source={String(value('lulc_download_source') || 'esri')}
+              value={config.manning_mapping as ManningMapping | undefined}
+              onChange={(m) => setConfig({ ...config, manning_mapping: m })}
+            />
+          </div>
+        )}
         <div className="sp-submit-row">
           <button type="submit" className="button-primary"
                   disabled={busy || anyActive || aois.length === 0}>

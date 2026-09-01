@@ -418,3 +418,22 @@ def api_steprun_outputs(request, session, steprun_id):
     for m in (run.manifest or []):
         outputs.append({**m, 'url': storage.presigned_url(m['key'], 3600)})
     return JsonResponse({'steprun_id': run.id, 'outputs': outputs})
+
+
+@controller(url='api/manning-table', name='api_manning_table')
+def api_manning_table(request):
+    """Per-class Manning's n reference tables (label, min, max, default) —
+    served from fimcore so the UI can't drift from what rasterization uses."""
+    from fimcore.nlcd import NLCD_MANNING, SENTINEL2_MANNING
+
+    def rows(table):
+        return {
+            str(code): {'label': label, 'min': mn, 'max': mx, 'default': avg}
+            for code, (label, mn, mx, avg) in table.items()
+            if mn is not None
+        }
+    return JsonResponse({
+        'esri': rows(SENTINEL2_MANNING),
+        'nlcd': rows(NLCD_MANNING),
+        'fallback_default': 0.045,
+    })

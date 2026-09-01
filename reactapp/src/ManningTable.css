@@ -1,0 +1,37 @@
+/* reactapp/src/ManningTable.css — the editable Manning's n table. */
+
+.mt-wrap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.8rem 1rem;
+}
+.mt-head { display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 0.5rem; }
+.mt-title { font-size: 0.88rem; font-weight: 700; }
+.mt-reset {
+  border: 1.5px solid var(--color-border); background: none; border-radius: 999px;
+  padding: 0.15rem 0.7rem; font-size: 0.78rem; cursor: pointer;
+  color: var(--color-text-secondary); font-family: inherit;
+}
+.mt-reset:hover:not(:disabled) { border-color: var(--color-primary); }
+.mt-reset:disabled { opacity: 0.45; cursor: default; }
+.mt-scroll { overflow-x: auto; }
+.mt-table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+.mt-table th {
+  text-align: left; font-size: 0.72rem; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--color-text-muted);
+  padding: 0.3rem 0.6rem; border-bottom: 2px solid var(--color-border);
+}
+.mt-table td { padding: 0.25rem 0.6rem; border-bottom: 1px solid var(--color-surface-alt); }
+.mt-code { font-family: ui-monospace, Consolas, monospace; color: var(--color-text-muted); }
+.mt-range { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.mt-table input {
+  width: 6rem; padding: 0.25rem 0.45rem;
+  border: 1.5px solid var(--color-border); border-radius: 6px;
+  font-family: inherit; font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-surface); color: var(--color-text);
+}
+tr.is-edited input { border-color: var(--color-primary); background: var(--color-surface-alt); }
+.mt-muted { font-size: 0.78rem; color: var(--color-text-muted); margin: 0.5rem 0 0; }
