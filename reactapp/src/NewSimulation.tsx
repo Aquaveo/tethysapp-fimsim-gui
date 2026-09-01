@@ -5,11 +5,18 @@
 // works because everything reloads from the API (FIMSIM-FE2 server cutover).
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getProject, type ServerAoi, type ServerProject } from './api';
+import {
+  getProject, getProjectStatus, getStepSchemas,
+  type ServerAoi, type ServerProject, type StepSchema,
+} from './api';
 import AoiStep from './AoiStep';
 import ProjectStep from './ProjectStep';
+import ResultsStep from './ResultsStep';
+import StepPanel from './StepPanel';
 import { STEPS, type StepId } from './steps';
 import './NewSimulation.css';
+
+const JOB_STEPS = new Set(['dem', 'manning', 'bci', 'bdy', 'par', 'run']);
 
 export default function NewSimulation() {
   const navigate = useNavigate();
@@ -19,7 +26,24 @@ export default function NewSimulation() {
   const [step, setStep] = useState<StepId>(projectId ? 'aoi' : 'project');
   const [project, setProject] = useState<ServerProject | null>(null);
   const [aois, setAoisState] = useState<ServerAoi[]>([]);
+  const [schemas, setSchemas] = useState<Record<string, StepSchema> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getStepSchemas().then(setSchemas).catch(() => setSchemas({}));
+  }, []);
+
+  // Steady project-status poll while on a job step: keeps every AOI's
+  // step summaries (and therefore panels' run tracking) fresh.
+  useEffect(() => {
+    if (!projectId || !JOB_STEPS.has(step)) return;
+    const t = setInterval(() => {
+      getProjectStatus(projectId)
+        .then((r) => setAoisState(r.aois))
+        .catch(() => undefined);
+    }, 5000);
+    return () => clearInterval(t);
+  }, [projectId, step]);
 
   const setAois = (updater: (prev: ServerAoi[]) => ServerAoi[]) =>
     setAoisState(updater);
@@ -93,6 +117,17 @@ export default function NewSimulation() {
           <ProjectStep />
         ) : step === 'aoi' && projectId ? (
           <AoiStep projectId={projectId} aois={aois} setAois={setAois} />
+        ) : step === 'results' && projectId ? (
+          <ResultsStep aois={aois} />
+        ) : JOB_STEPS.has(step) && projectId ? (
+          <StepPanel
+            projectId={projectId}
+            stepKey={step}
+            aois={aois}
+            schema={schemas?.[step] ?? null}
+            onSubmitted={() =>
+              getProjectStatus(projectId).then((r) => setAoisState(r.aois)).catch(() => undefined)}
+          />
         ) : (
           <div className="ns-placeholder">Coming soon — this panel is being built.</div>
         )}

@@ -43,6 +43,13 @@ const EMPTY_FC: FeatureCollection = { type: 'FeatureCollection', features: [] };
 
 export type DrawMode = 'rectangle' | 'polygon';
 
+export interface MapOverlay {
+  id: string;
+  url: string;
+  /** [tl, tr, br, bl] lon/lat corners for MapLibre's image source */
+  coordinates: [[number, number], [number, number], [number, number], [number, number]];
+}
+
 /** Closed ring of the axis-aligned bounding box of any clicked points —
  *  irregular click patterns commit as their smallest enclosing rectangle
  *  (LISFLOOD-FP/TRITON need rectangular meshes). */
@@ -62,6 +69,9 @@ interface Props {
   onDrawCancel: () => void;
   /** Bumps when the user asks to zoom to an AOI. */
   zoomTo?: ServerAoi | null;
+  /** Raster results draped on the map (FE8). */
+  overlays?: MapOverlay[];
+  overlayOpacity?: number;
 }
 
 export default function AoiMap({
@@ -71,6 +81,8 @@ export default function AoiMap({
   onDrawComplete,
   onDrawCancel,
   zoomTo,
+  overlays = [],
+  overlayOpacity = 0.8,
 }: Props) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -385,6 +397,32 @@ export default function AoiMap({
     const b = boundsOf([aoiFeature(zoomTo)]);
     if (b) map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, maxZoom: 13, duration: 600 });
   }, [zoomTo, ready]);
+
+  // ── Result overlays (image sources) ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    for (const ov of overlays) {
+      const srcId = `overlay-${ov.id}`;
+      if (!map.getSource(srcId)) {
+        map.addSource(srcId, { type: 'image', url: ov.url, coordinates: ov.coordinates });
+        map.addLayer({
+          id: srcId, type: 'raster', source: srcId,
+          paint: { 'raster-opacity': overlayOpacity, 'raster-fade-duration': 0 },
+        });
+      } else {
+        map.setPaintProperty(srcId, 'raster-opacity', overlayOpacity);
+      }
+    }
+    // drop overlays that disappeared
+    const wanted = new Set(overlays.map((o) => `overlay-${o.id}`));
+    for (const layer of map.getStyle().layers ?? []) {
+      if (layer.id.startsWith('overlay-') && !wanted.has(layer.id)) {
+        map.removeLayer(layer.id);
+        map.removeSource(layer.id);
+      }
+    }
+  }, [overlays, overlayOpacity, ready]);
 
   // ── Basemap toggle (swap tiles in place, family pattern) ──
   useEffect(() => {

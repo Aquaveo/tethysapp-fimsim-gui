@@ -132,3 +132,60 @@ export const deleteAoi = (id: number) =>
 
 export const retryLookup = (id: number) =>
   request<ServerAoi>(`/aois/${id}/lookup/`, { method: 'POST' });
+
+// ── BE7/BE9: steps, submission, status, outputs ───────────────────────────────
+
+export interface StepSchema {
+  defaults: Record<string, unknown>;
+  requires: string[];
+}
+
+export interface SubmitResult {
+  aoi_id: number;
+  submitted: boolean;
+  steprun_id?: number;
+  reason?: string;
+}
+
+export interface ServerStepRun {
+  id: number;
+  aoi_id: number;
+  step_key: string;
+  status: string;
+  config: Record<string, unknown> | null;
+  manifest: { key: string; name: string; bytes: number }[] | null;
+  progress: { stage: string; status: string; current: number; total: number;
+              message: string; at: string }[] | null;
+  error: string | null;
+  created: string;
+  started: string | null;
+  finished: string | null;
+}
+
+export interface OutputEntry {
+  key: string;
+  name: string;
+  bytes: number;
+  content_type: string;
+  url: string | null;
+}
+
+export const getStepSchemas = () =>
+  request<Record<string, StepSchema>>('/steps/');
+
+export const submitStep = (projectId: number, stepKey: string,
+                           config: Record<string, unknown>) =>
+  request<{ results: SubmitResult[] }>(
+    `/projects/${projectId}/steps/${stepKey}/submit/`, json({ config }));
+
+export const getProjectStatus = (projectId: number) =>
+  request<{ aois: ServerAoi[] }>(`/projects/${projectId}/status/`);
+
+export const getStepRun = (id: number) =>
+  request<ServerStepRun>(`/stepruns/${id}/`);
+
+export const cancelStepRun = (id: number) =>
+  request<ServerStepRun>(`/stepruns/${id}/cancel/`, { method: 'POST' });
+
+export const getStepRunOutputs = (id: number) =>
+  request<{ outputs: OutputEntry[] }>(`/stepruns/${id}/outputs/`);

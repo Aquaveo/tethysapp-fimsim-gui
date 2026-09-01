@@ -34,3 +34,16 @@
 .sl-empty-hint {
   margin: 0;
 }
+
+.sl-list { list-style: none; margin: 0; padding: 0 0.4rem; display: flex;
+  flex-direction: column; gap: 0.2rem; overflow-y: auto; }
+.sl-item {
+  width: 100%; display: flex; flex-direction: column; align-items: flex-start;
+  gap: 0.05rem; background: none; border: none; border-radius: 8px;
+  padding: 0.4rem 0.55rem; cursor: pointer; text-align: left; font-family: inherit;
+}
+.sl-item:hover { background: rgba(255, 255, 255, 0.1); }
+.sl-item.is-active { background: rgba(255, 255, 255, 0.18); }
+.sl-item-name { color: var(--chrome-text); font-size: 0.85rem; font-weight: 600;
+  overflow-wrap: anywhere; }
+.sl-item-meta { color: var(--chrome-text-dim); font-size: 0.72rem; }

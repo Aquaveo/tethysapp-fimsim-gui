@@ -1,0 +1,67 @@
+/* reactapp/src/StepPanel.css — the generic step panel. */
+
+.sp-wrap { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.4rem; }
+.sp-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.8rem 1.2rem;
+  align-items: start;
+}
+.sp-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.sp-field-label { font-size: 0.82rem; font-weight: 600; }
+.sp-field select, .sp-field input {
+  padding: 0.45rem 0.6rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: 0.9rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.sp-field-help { font-size: 0.75rem; color: var(--color-text-muted); }
+.sp-submit-row { grid-column: 1 / -1; }
+.sp-error {
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  background: #fff5f5; color: var(--color-error);
+  font-size: 0.88rem; padding: 0.6rem 0.9rem;
+}
+.sp-aoi-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.sp-aoi {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: 0.6rem 0.9rem;
+}
+.sp-aoi-head { display: flex; justify-content: space-between; align-items: center; }
+.sp-aoi-name { font-weight: 600; font-size: 0.92rem; }
+.sp-cancel {
+  border: 1.5px solid var(--color-border); background: none; border-radius: 999px;
+  padding: 0.15rem 0.7rem; font-size: 0.78rem; cursor: pointer;
+  color: var(--color-text-secondary); font-family: inherit;
+}
+.sp-cancel:hover { color: var(--color-error); border-color: var(--color-error); }
+.sp-note { font-size: 0.85rem; color: var(--color-warning); }
+.sp-muted { font-size: 0.82rem; color: var(--color-text-muted); }
+.sp-progress { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.4rem; }
+.sp-progress-track {
+  height: 8px; border-radius: 999px; background: var(--color-surface-alt); overflow: hidden;
+}
+.sp-progress-fill {
+  height: 100%; background: var(--color-primary); border-radius: 999px;
+  transition: width 0.6s ease;
+}
+.sp-progress-fill.indeterminate {
+  width: 30%; animation: sp-slide 1.4s ease-in-out infinite;
+}
+@keyframes sp-slide { 0% { margin-left: 0; } 50% { margin-left: 70%; } 100% { margin-left: 0; } }
+.sp-progress-label { font-size: 0.78rem; color: var(--color-text-secondary); }
+.sp-outputs { list-style: none; margin: 0.4rem 0 0; padding: 0; font-size: 0.85rem;
+  display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; }
+.sp-outputs a { color: var(--color-link); }
+.sp-fail summary { cursor: pointer; font-size: 0.85rem; color: var(--color-error); }
+.sp-fail pre {
+  white-space: pre-wrap; font-size: 0.75rem; background: var(--color-surface-alt);
+  border-radius: var(--radius-md); padding: 0.6rem; max-height: 14rem; overflow: auto;
+}
+@media (prefers-reduced-motion: reduce) { .sp-progress-fill.indeterminate { animation: none; } }

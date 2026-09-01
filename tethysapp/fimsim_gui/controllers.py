@@ -365,3 +365,22 @@ def api_steprun_cancel(request, session, steprun_id):
     run.status = 'cancelled'
     session.commit()
     return JsonResponse(run.to_dict(), status=202)
+
+
+# ── FIMSIM-BE9 (minimal): outputs with presigned download URLs ────────────────
+
+@controller(url='api/stepruns/{steprun_id}/outputs', name='api_steprun_outputs')
+@with_session
+def api_steprun_outputs(request, session, steprun_id):
+    """The run's manifest, each entry with a short-lived presigned GET URL
+    (browser pulls straight from MinIO/S3; local backend returns url: null)."""
+    from tethysapp.fimsim_gui.storage import get_storage
+
+    run, err = _owned_steprun(session, request, steprun_id)
+    if err:
+        return err
+    storage = get_storage()
+    outputs = []
+    for m in (run.manifest or []):
+        outputs.append({**m, 'url': storage.presigned_url(m['key'], 3600)})
+    return JsonResponse({'steprun_id': run.id, 'outputs': outputs})
