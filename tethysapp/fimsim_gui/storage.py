@@ -25,6 +25,18 @@ class StorageKeyError(PermissionError):
     """A key fell outside the requesting user's prefix, or was malformed."""
 
 
+#: Cross-user cache namespace (BE11). Deliberately outside every user prefix:
+#: assert_owned() can never bless it, so user-facing endpoints can't presign
+#: or delete cache objects — only job/maintenance code touches it.
+SHARED_CACHE_PREFIX = "_shared_cache"
+
+
+def shared_cache_key(dataset: str, filename: str) -> str:
+    if not re.fullmatch(r"[a-z0-9_\-]{1,32}", dataset):
+        raise StorageKeyError(f"invalid cache dataset: {dataset!r}")
+    return f"{SHARED_CACHE_PREFIX}/{dataset}/{safe_filename(filename)}"
+
+
 # ── Key helpers ───────────────────────────────────────────────────────────────
 
 def safe_filename(name: str) -> str:
@@ -108,6 +120,13 @@ class StorageService:
 
     def size(self, key: str) -> int:
         return self._backend.size(key)
+
+    def modified_time(self, key: str):
+        """Timezone-aware mtime (eviction ordering); None if unavailable."""
+        try:
+            return self._backend.get_modified_time(key)
+        except Exception:
+            return None
 
     def download_to_path(self, key: str, dest_path) -> None:
         dest_path = Path(dest_path)

@@ -18,6 +18,59 @@ class DEMStepJobType(StepJobType):
     def defaults(self) -> dict:
         return {"dem_res_m": 30, "dem_source": "3dep"}
 
+    # -- BE11: share full 3DEP tiles across users (fimcore's full-tile path
+    #    already skips downloads for valid local tiles, so pre-staging them
+    #    is a cache hit with zero engine changes; windowed *_aoi.tif reads
+    #    are AOI-specific and not shared) --
+    @staticmethod
+    def _tiles_dir(ctx) -> Path:
+        feat = ctx["aoi_features"][0]
+        return Path(feat["folder_path"]).parent / f"DEM_raw_{feat['folder_name']}"
+
+    @staticmethod
+    def _needed_tiles(ctx) -> list:
+        from fimcore.dem import DEM_RESOLUTION, _tile_names_for_bounds
+
+        feat = ctx["aoi_features"][0]
+        aoi_file = Path(feat["source_file"])
+        data = json.loads(aoi_file.read_text())
+        coords = [p for f in data["features"]
+                  for ring in f["geometry"]["coordinates"] for p in ring]
+        xs = [c[0] for c in coords]; ys = [c[1] for c in coords]
+        names = _tile_names_for_bounds(min(xs), min(ys), max(xs), max(ys))
+        return [f"USGS_{DEM_RESOLUTION}_{t}.tif" for t in names]
+
+    def prestage_shared_cache(self, storage, ctx, log_fn):
+        from tethysapp.fimsim_gui.storage import shared_cache_key
+
+        tiles_dir = self._tiles_dir(ctx)
+        hits = 0
+        for fname in self._needed_tiles(ctx):
+            key = shared_cache_key("3dep", fname)
+            if storage.exists(key):
+                storage.download_to_path(key, tiles_dir / fname)
+                hits += 1
+        if hits:
+            log_fn(f"cache: staged {hits} 3DEP tile(s) from the shared cache")
+
+    def poststage_shared_cache(self, storage, ctx, log_fn):
+        from tethysapp.fimsim_gui.storage import shared_cache_key
+
+        tiles_dir = self._tiles_dir(ctx)
+        if not tiles_dir.is_dir():
+            return
+        added = 0
+        for p in sorted(tiles_dir.glob("USGS_*.tif")):
+            if p.name.endswith("_aoi.tif"):
+                continue  # windowed reads are AOI-specific
+            key = shared_cache_key("3dep", p.name)
+            if not storage.exists(key):
+                with open(p, "rb") as fh:
+                    storage.save(key, fh)
+                added += 1
+        if added:
+            log_fn(f"cache: contributed {added} 3DEP tile(s) to the shared cache")
+
     def execute(self, ctx_path, ctx, config, log_fn):
         from fimcore.orchestrate import run_lisflood_dem_all
 

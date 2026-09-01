@@ -118,3 +118,97 @@ def test_retention_targets_superseded_and_old():
     st.deleted.clear()
     assert guards.clean_expired_artifacts(s, st, retention_days=30) == 0
     assert st.deleted == []
+
+
+def test_shared_cache_eviction_age_then_size():
+    now = datetime.now(timezone.utc)
+
+    class FakeStorage:
+        def __init__(self):
+            self.objs = {  # key: (size, mtime)
+                "_shared_cache/3dep/old.tif": (100, now - timedelta(days=120)),
+                "_shared_cache/3dep/big1.tif": (int(9e9), now - timedelta(days=10)),
+                "_shared_cache/3dep/big2.tif": (int(9e9), now - timedelta(days=5)),
+                "_shared_cache/3dep/small.tif": (int(1e9), now - timedelta(days=1)),
+            }
+        def list_prefix_with_sizes(self, prefix):
+            return [(k, v[0]) for k, v in self.objs.items() if k.startswith(prefix)]
+        def modified_time(self, key): return self.objs[key][1]
+        def delete(self, key): self.objs.pop(key, None)
+
+    st = FakeStorage()
+    freed = guards.evict_shared_cache(st, max_age_days=90, max_total_gb=10.0)
+    # old.tif dies by age; then big1 (oldest remaining) dies to fit 10GB
+    assert "_shared_cache/3dep/old.tif" not in st.objs
+    assert "_shared_cache/3dep/big1.tif" not in st.objs
+    assert "_shared_cache/3dep/big2.tif" in st.objs
+    assert "_shared_cache/3dep/small.tif" in st.objs
+    assert freed == 100 + int(9e9)
+
+
+def test_shared_cache_key_scheme():
+    from tethysapp.fimsim_gui.storage import StorageKeyError, assert_owned, shared_cache_key
+    key = shared_cache_key("3dep", "USGS_13_n36w078.tif")
+    assert key == "_shared_cache/3dep/USGS_13_n36w078.tif"
+    with pytest.raises(StorageKeyError):
+        shared_cache_key("../evil", "x.tif")
+    with pytest.raises(StorageKeyError):
+        assert_owned(key, "reshma")  # no user can ever own cache keys
+
+
+def test_dem_cache_prestage_and_poststage(tmp_path):
+    """The BE11 staging mechanics, storage-faked: needed tiles come down,
+    new full tiles go up, AOI-window files never enter the shared cache."""
+    import json as _json
+
+    from tethysapp.fimsim_gui.job_types.steps import DEMStepJobType
+
+    # fimcore-shaped ctx for one AOI whose bbox spans two 1° tiles
+    proj = tmp_path / "job"
+    folder = proj / "Neuse"
+    folder.mkdir(parents=True)
+    aoi_file = proj / "aoi.geojson"
+    aoi_file.write_text(_json.dumps({
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "properties": {},
+                      "geometry": {"type": "Polygon", "coordinates": [[
+                          [-78.1, 35.3], [-77.9, 35.3], [-77.9, 35.45],
+                          [-78.1, 35.45], [-78.1, 35.3]]]}}],
+    }))
+    ctx = {"aoi_features": [{
+        "folder_path": str(folder), "folder_name": "Neuse",
+        "source_file": str(aoi_file),
+    }]}
+
+    class FakeStorage:
+        def __init__(self): self.objs = {}
+        def exists(self, k): return k in self.objs
+        def download_to_path(self, k, dest):
+            from pathlib import Path
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(self.objs[k])
+        def save(self, k, fh): self.objs[k] = fh.read()
+
+    st = FakeStorage()
+    jt = DEMStepJobType()
+    logs = []
+
+    # cold: nothing cached → prestage is a no-op
+    jt.prestage_shared_cache(st, ctx, logs.append)
+    assert not list((proj / "DEM_raw_Neuse").glob("*")) if (proj / "DEM_raw_Neuse").exists() else True
+
+    # simulate fimcore's full-tile fallback output + a windowed file
+    tiles = proj / "DEM_raw_Neuse"
+    tiles.mkdir()
+    (tiles / "USGS_13_n36w079.tif").write_bytes(b"FULLTILE" * 10)
+    (tiles / "USGS_13_n36w079_aoi.tif").write_bytes(b"WINDOWED")
+    jt.poststage_shared_cache(st, ctx, logs.append)
+    assert "_shared_cache/3dep/USGS_13_n36w079.tif" in st.objs
+    assert not any("_aoi" in k for k in st.objs)          # windows never cached
+    assert any("contributed 1" in l for l in logs)
+
+    # warm: a fresh job dir gets the tile pre-staged
+    (tiles / "USGS_13_n36w079.tif").unlink()
+    jt.prestage_shared_cache(st, ctx, logs.append)
+    assert (tiles / "USGS_13_n36w079.tif").read_bytes() == b"FULLTILE" * 10
+    assert any("staged 1" in l for l in logs)

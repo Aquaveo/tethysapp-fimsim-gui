@@ -178,3 +178,40 @@ def clean_expired_artifacts(session, storage, retention_days: int) -> int:
         run.manifest = {"expired": True, "was": [m["name"] for m in manifest]}
     session.commit()
     return n_bytes
+
+
+def evict_shared_cache(storage, max_age_days: int = 90,
+                       max_total_gb: float = 20.0) -> int:
+    """Age- then size-based eviction of the cross-user cache. Returns bytes
+    freed. Oldest-modified go first once the size cap is exceeded."""
+    from tethysapp.fimsim_gui.storage import SHARED_CACHE_PREFIX
+
+    entries = []
+    for key, size in storage.list_prefix_with_sizes(SHARED_CACHE_PREFIX):
+        mtime = storage.modified_time(key)
+        entries.append((key, size, mtime))
+
+    now = datetime.now(timezone.utc)
+    freed = 0
+    kept = []
+    for key, size, mtime in entries:
+        age_ok = mtime is None or (
+            (now - (mtime if mtime.tzinfo else mtime.replace(tzinfo=timezone.utc)))
+            .total_seconds() <= max_age_days * 86400)
+        if not age_ok:
+            storage.delete(key)
+            freed += size
+        else:
+            kept.append((key, size, mtime))
+
+    total = sum(s for _, s, _ in kept)
+    cap = max_total_gb * 1e9
+    if total > cap:
+        kept.sort(key=lambda e: e[2] or datetime.min.replace(tzinfo=timezone.utc))
+        for key, size, _ in kept:
+            if total <= cap:
+                break
+            storage.delete(key)
+            freed += size
+            total -= size
+    return freed

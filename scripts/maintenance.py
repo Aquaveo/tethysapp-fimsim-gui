@@ -24,10 +24,13 @@ def _setting(name, default):
 
 session = get_session_maker(App)()
 try:
+    storage = get_storage()
     reaped = guards.reap_stale_runs(session)
     retention = _setting('retention_days', guards.DEFAULT_RETENTION_DAYS)
-    freed = guards.clean_expired_artifacts(session, get_storage(), retention)
+    freed = guards.clean_expired_artifacts(session, storage, retention)
+    cache_freed = guards.evict_shared_cache(storage)
     print(f"maintenance: reaped {reaped} stale run(s), "
-          f"freed {freed / 1e6:.1f} MB (retention {retention}d)")
+          f"freed {freed / 1e6:.1f} MB (retention {retention}d), "
+          f"cache evicted {cache_freed / 1e6:.1f} MB")
 finally:
     session.close()

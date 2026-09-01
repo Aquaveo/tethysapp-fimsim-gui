@@ -47,6 +47,13 @@ class StepJobType:
     def execute(self, ctx_path, ctx, config, log_fn):
         raise NotImplementedError
 
+    # -- shared-cache hooks (BE11): no-ops unless a step caches something --
+    def prestage_shared_cache(self, storage, ctx, log_fn):
+        pass
+
+    def poststage_shared_cache(self, storage, ctx, log_fn):
+        pass
+
     def collect(self, ctx, workdir) -> str:
         """Default outputs: the AOI folder's rasters + the LISFLOOD deck."""
         feat_dir = Path(ctx["aoi_features"][0]["folder_path"])
