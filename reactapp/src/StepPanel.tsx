@@ -9,6 +9,7 @@ import {
   ApiError, cancelStepRun, getStepRun, getStepRunOutputs, submitStep,
   type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
 } from './api';
+import HydrographChart from './HydrographChart';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import { STEP_FIELDS, type FieldSpec } from './stepFields';
 import './StepPanel.css';
@@ -226,6 +227,9 @@ export default function StepPanel({ projectId, stepKey, aois, schema, onSubmitte
               {run ? (
                 <>
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
+                  {run.status === 'succeeded' && stepKey === 'bdy' && (
+                    <HydrographChart run={run} />
+                  )}
                   {run.status === 'succeeded' && <Outputs runId={run.id} />}
                   {run.status === 'failed' && (
                     <details className="sp-fail">

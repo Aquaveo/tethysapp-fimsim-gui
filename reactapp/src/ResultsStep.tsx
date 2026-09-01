@@ -4,9 +4,11 @@
 // map, and list every file for download.
 import { useEffect, useState } from 'react';
 import AoiMap, { type MapOverlay } from './AoiMap';
+import HydrographChart from './HydrographChart';
 import {
   getStepRun, getStepRunOutputs, type OutputEntry, type ServerAoi,
 } from './api';
+import type { ServerStepRun } from './api';
 import './StepPanel.css';
 
 interface AoiResult {
@@ -15,6 +17,7 @@ interface AoiResult {
   outputs: OutputEntry[];
   overlay?: MapOverlay;
   stats?: { max_depth_m: number; wet_area_km2: number; wet_fraction: number };
+  bdyRun?: ServerStepRun;
 }
 
 export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
@@ -38,6 +41,11 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
         }
         const { outputs } = await getStepRunOutputs(run.id).catch(() => ({ outputs: [] }));
         const res: AoiResult = { aoi, status: 'succeeded', outputs };
+        const bdySummary = aoi.steps?.bdy;
+        if (bdySummary) {
+          const bdyRun = await getStepRun(bdySummary.id).catch(() => null);
+          if (bdyRun?.status === 'succeeded') res.bdyRun = bdyRun;
+        }
         const png = outputs.find((o) => o.name === 'max_depth_overlay.png');
         const boundsEntry = outputs.find((o) => o.name === 'overlay_bounds.json');
         if (png?.url && boundsEntry?.url) {
@@ -101,6 +109,7 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
                 </span>
               )}
             </div>
+            {r.bdyRun && <HydrographChart run={r.bdyRun} />}
             {r.status === 'succeeded' ? (
               <ul className="sp-outputs">
                 {r.outputs.map((o) => (
