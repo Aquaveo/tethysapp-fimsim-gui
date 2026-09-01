@@ -109,7 +109,14 @@ export default function StepPanel({ projectId, stepKey, aois, schema, onSubmitte
     setError(null);
     setSubmitNotes({});
     try {
-      const merged: Record<string, unknown> = { ...defaults, ...config };
+      // Only this step's own keys may travel: leaked keys from another
+      // panel crash fimcore's keyword-only step functions.
+      const allowed = new Set([
+        ...Object.keys(defaults), ...fields.map((f) => f.key), 'manning_mapping',
+      ]);
+      const merged: Record<string, unknown> = Object.fromEntries(
+        Object.entries({ ...defaults, ...config })
+          .filter(([k, v]) => allowed.has(k) && v !== null && v !== ''));
       for (const f of fields) {
         if (f.required && !merged[f.key]) {
           throw new Error(`"${f.label}" is required.`);

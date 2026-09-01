@@ -121,6 +121,7 @@ export default function NewSimulation() {
           <ResultsStep aois={aois} />
         ) : JOB_STEPS.has(step) && projectId ? (
           <StepPanel
+            key={step}  /* fresh form state per step — config must never leak across steps */
             projectId={projectId}
             stepKey={step}
             aois={aois}
