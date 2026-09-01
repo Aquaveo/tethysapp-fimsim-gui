@@ -99,15 +99,21 @@ class PARStepJobType(UniformStepJobType):
 
     def transform_config(self, cfg: dict, ctx) -> dict:
         if cfg.get("sim_time") is None:
-            # Inherit the simulation duration the BDY step recorded (desktop parity).
-            feat_ctx_path = (
-                Path(ctx["aoi_features"][0]["folder_path"]) / "workflow_context.json")
+            # Desktop parity: sim_time (seconds) is the last time value in the
+            # BDY step's .bdy file (gui/par_config_panel._read_bdy_sim_time).
+            folder = Path(ctx["aoi_features"][0]["folder_path"])
             sim = None
-            if feat_ctx_path.exists():
-                sim = json.loads(feat_ctx_path.read_text()).get("sim_duration")
+            for bdy in sorted((folder / "lisflood-files").glob("*.bdy")):
+                lines = [l.strip() for l in
+                         bdy.read_text(errors="replace").splitlines() if l.strip()]
+                if len(lines) >= 4 and len(lines[-1].split()) >= 2:
+                    try:
+                        sim = float(lines[-1].split()[1])
+                    except ValueError:
+                        pass
             if sim is None:
                 raise ValueError(
-                    "PAR needs 'sim_time' — none given and the BDY step has not "
-                    "recorded a sim_duration for this AOI.")
+                    "PAR needs 'sim_time' — none given and no readable .bdy "
+                    "from the BDY step to derive it from.")
             cfg["sim_time"] = float(sim)
         return cfg

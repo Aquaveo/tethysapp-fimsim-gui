@@ -77,6 +77,9 @@ class LogAdapter:
         self._log_lines = []
         self._last_flush = 0.0
         self._last_cancel_check = 0.0
+        self._cancel_latched = False
+        self.failure_messages = []  # ✗ markers — fimcore orchestrators swallow
+                                    # per-AOI exceptions, so the wrapper checks this
 
     def __call__(self, line):
         line = str(line)
@@ -85,6 +88,8 @@ class LogAdapter:
             event["at"] = datetime.now(timezone.utc).isoformat()
             self._events.append(event)
             self._events = self._events[-PROGRESS_EVENT_CAP:]
+            if event["status"] == "failed":
+                self.failure_messages.append(event["message"])
         else:
             self._log_lines.append(line)
 
@@ -92,9 +97,14 @@ class LogAdapter:
         if now - self._last_flush >= self._flush_interval or event:
             self.flush()
             self._last_flush = now
+        # Once cancellation is seen, raise on EVERY call — fimcore's per-AOI
+        # try/except catches the first raise and keeps logging.
+        if self._cancel_latched:
+            raise JobCancelled()
         if now - self._last_cancel_check >= self._cancel_interval:
             self._last_cancel_check = now
             if self._cancel_requested():
+                self._cancel_latched = True
                 raise JobCancelled()
         if self._deadline is not None and now >= self._deadline:
             raise JobTimeout()
@@ -126,10 +136,11 @@ def _ensure_django():
 
 
 def _sanity_check_proj():
-    """The env once shipped a PROJ_DATA that made every transform return inf.
-    Fail loudly at job start rather than produce garbage rasters."""
+    """Fail loudly at job start rather than produce garbage rasters."""
     import os
 
+    from tethysapp.fimsim_gui.geo_env import ensure_proj_data
+    ensure_proj_data()
     from pyproj import Transformer
     x, y = Transformer.from_crs(26917, 4326, always_xy=True).transform(762300, 3909100)
     if not (-180 <= x <= 180 and -90 <= y <= 90):
@@ -158,7 +169,10 @@ def _write_aoi_geojson(aoi, dest: Path) -> Path:
     return dest
 
 
-WORKSPACE_SKIP_DIRS = {"dem_tiles"}  # remote-tile cache: cheap to refetch
+def _skip_workspace_dir(name: str) -> bool:
+    """Tile caches are cheap to refetch and huge to store: skip the windowed
+    cache (dem_tiles) AND the full-tile fallback dirs (DEM_raw_<aoi>, ~1GB)."""
+    return name == "dem_tiles" or name.startswith("DEM_raw")
 
 
 def _restore_workspace(storage, ws_prefix: str, ctx: dict, log_fn):
@@ -194,7 +208,7 @@ def _persist_workspace(storage, ws_prefix: str, ctx: dict):
         if not p.is_file():
             continue
         rel = p.relative_to(folder)
-        if rel.parts and rel.parts[0] in WORKSPACE_SKIP_DIRS:
+        if rel.parts and _skip_workspace_dir(rel.parts[0]):
             continue
         key = f"{ws_prefix}/{rel.as_posix()}"
         with open(p, "rb") as fh:
@@ -247,6 +261,17 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         _restore_workspace(storage, ws_prefix, ctx, adapter)
 
         job_type.execute(ctx_path, ctx, run.config or {}, adapter)
+
+        # fimcore orchestrators log ✗ and continue instead of raising; a
+        # "normal" return is NOT success.
+        if adapter._cancel_latched:
+            raise JobCancelled()
+        if adapter.failure_messages:
+            tail = (run.log or "")[-1500:]
+            raise RuntimeError(
+                "step reported failure: "
+                + adapter.failure_messages[-1]
+                + ("\n--- log tail ---\n" + tail if tail else ""))
 
         run.status = "uploading"
         adapter.flush()

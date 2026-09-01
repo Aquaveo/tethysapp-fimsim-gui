@@ -150,6 +150,8 @@ def ingest_geojson_geometry(geometry: dict, name: str) -> IngestResult:
 
 
 def ingest_gdf(gdf, default_name: str) -> IngestResult:
+    from tethysapp.fimsim_gui.geo_env import ensure_proj_data
+    ensure_proj_data()
     from fimcore.crs_utils import pick_working_crs_epsg
     from pyproj import Geod
     from shapely.geometry import mapping

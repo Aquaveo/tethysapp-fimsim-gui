@@ -104,3 +104,24 @@ def test_adapter_bounds_log_size():
     for i in range(300):
         a("x" * 1000)
     assert len(run.log) <= 100_000
+
+
+def test_adapter_records_failure_markers():
+    a, run, _ = _adapter()
+    a("▶ Manning [1/1]: 'Neuse' …")
+    a("✗ Manning [1/1] ERROR for 'Neuse': lulc.ascii not found")
+    assert a.failure_messages and "lulc.ascii" in a.failure_messages[0]
+
+
+def test_adapter_cancel_latches():
+    a, run, _ = _adapter()
+    a("line")
+    run.status = "cancelled"
+    with pytest.raises(JobCancelled):
+        a("first raise")
+    # fimcore's per-AOI except swallows the first raise and keeps logging —
+    # every subsequent call must raise again, no throttle
+    with pytest.raises(JobCancelled):
+        a("orchestrator kept going")
+    with pytest.raises(JobCancelled):
+        a("and going")
