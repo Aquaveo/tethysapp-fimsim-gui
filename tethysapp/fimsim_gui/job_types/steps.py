@@ -12,7 +12,8 @@ from tethysapp.fimsim_gui.job_types.registry import StepJobType, UniformStepJobT
 
 
 class DEMStepJobType(StepJobType):
-    clean_patterns = ("dem.ascii", "dem.prj", "DEM_*.tif")
+    # wildcards also sweep up "dem (1).ascii"-style versioned leftovers
+    clean_patterns = ("dem*.ascii", "dem*.prj", "DEM_*.tif")
     step_key = "dem"
     requires = ()
 
@@ -86,7 +87,7 @@ class DEMStepJobType(StepJobType):
 
 
 class ManningStepJobType(UniformStepJobType):
-    clean_patterns = ("lulc.ascii", "lulc.prj", "LULC_*.tif", "ManningN_*.tif")
+    clean_patterns = ("lulc*.ascii", "lulc*.prj", "LULC_*.tif", "ManningN_*.tif")
     step_key = "manning"
     requires = ("dem",)
     orchestrator = "run_lisflood_manning_for_all_aois"

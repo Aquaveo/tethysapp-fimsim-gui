@@ -39,8 +39,13 @@ function serveTethysStatics(): Plugin {
 }
 
 export default defineConfig(({ mode }) => ({
-  // BASE URL: dev = '/', production = Tethys app URL
-  base: mode === 'production' ? '/apps/fimsim-gui/' : '/',
+  // BASE URL: where the BUILT ASSETS are served from — Tethys statics, NOT
+  // the app's route prefix. In-bundle asset URLs (MapLibre's worker above
+  // all) resolve against this; pointing it at /apps/fimsim-gui/ made the
+  // worker request hit the SPA catch-all, which returned HTML and silently
+  // killed every GeoJSON layer (AOI outlines, flowlines, flood overlay).
+  // The router's basename is hardcoded in router.tsx instead.
+  base: mode === 'production' ? '/static/fimsim_gui/frontend/' : '/',
 
   plugins: [react(), serveTethysStatics()],
 
