@@ -136,19 +136,38 @@ def _ensure_django():
 
 
 def _sanity_check_proj():
-    """Fail loudly at job start rather than produce garbage rasters."""
+    """Fail loudly at job start rather than produce garbage rasters.
+
+    The inf-breakage is intermittent (same process can fail once and work a
+    minute later — observed 09-02 on a worker whose data dir was already
+    correct), so re-point the data dir and retry before condemning the worker.
+    """
     import os
+    import time as _time
 
     from tethysapp.fimsim_gui.geo_env import ensure_proj_data
     ensure_proj_data()
-    from pyproj import Transformer
-    x, y = Transformer.from_crs(26917, 4326, always_xy=True).transform(762300, 3909100)
-    if not (-180 <= x <= 180 and -90 <= y <= 90):
-        raise RuntimeError(
-            f"pyproj transform returned ({x}, {y}) — PROJ data is broken on this "
-            f"worker (PROJ_DATA={os.environ.get('PROJ_DATA')!r}). Align the "
-            f"env's PROJ database with the pyproj build before running jobs."
-        )
+    last = (None, None)
+    for attempt in range(3):
+        if attempt:
+            _time.sleep(2)
+            import pyproj
+            import pyproj.datadir
+            wheel = Path(pyproj.__file__).parent / "proj_dir" / "share" / "proj"
+            if (wheel / "proj.db").exists():
+                pyproj.datadir.set_data_dir(str(wheel))
+        from pyproj import Transformer
+        x, y = Transformer.from_crs(26917, 4326, always_xy=True).transform(
+            762300, 3909100)
+        if -180 <= x <= 180 and -90 <= y <= 90:
+            return
+        last = (x, y)
+    raise RuntimeError(
+        f"pyproj transform returned {last} after 3 attempts — PROJ data is "
+        f"broken on this worker (PROJ_DATA={os.environ.get('PROJ_DATA')!r}). "
+        f"Align the env's PROJ database with the pyproj build before running "
+        f"jobs."
+    )
 
 
 def _write_aoi_geojson(aoi, dest: Path) -> Path:
@@ -226,12 +245,14 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
     from tethysapp.fimsim_gui.storage import build_key, service_from_config
 
     _ensure_django()
-    _sanity_check_proj()
 
     engine = create_engine(db_url)
     session = sessionmaker(bind=engine)()
     scratch = None
     try:
+        # inside the try: a PROJ failure must mark the run failed, not
+        # strand it in "queued"
+        _sanity_check_proj()
         from tethysapp.fimsim_gui.models import Aoi
         run = (session.query(StepRun)
                .options(joinedload(StepRun.aoi).joinedload(Aoi.project))
@@ -381,12 +402,14 @@ def run_aoi_lookup(db_url: str, aoi_id: int) -> dict:
     from tethysapp.fimsim_gui.models import Aoi
 
     _ensure_django()
-    _sanity_check_proj()
 
     engine = create_engine(db_url)
     session = sessionmaker(bind=engine)()
     scratch = None
     try:
+        # inside the try: a PROJ failure must mark the lookup failed, not
+        # strand it in "pending"
+        _sanity_check_proj()
         aoi = session.query(Aoi).get(aoi_id)
         if aoi is None:
             return {"status": "missing", "aoi_id": aoi_id}
