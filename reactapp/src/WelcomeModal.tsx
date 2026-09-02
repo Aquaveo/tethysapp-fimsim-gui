@@ -78,11 +78,17 @@ export default function WelcomeModal({ onClose }: Props) {
             <span className="wm-doc-pill">Documentation</span> link in the
             header bar above.
           </div>
-          <label className="wm-dontshow">
-            <input type="checkbox" checked={dontShow}
-                   onChange={(e) => setDontShow(e.target.checked)} />
-            Don&apos;t show on startup
-          </label>
+          <div className="wm-actions">
+            <label className="wm-dontshow">
+              <input type="checkbox" checked={dontShow}
+                     onChange={(e) => setDontShow(e.target.checked)} />
+              Don&apos;t show on startup
+            </label>
+            <button type="button" className="button-primary"
+                    onClick={() => onClose(dontShow)}>
+              Got it
+            </button>
+          </div>
         </div>
       </div>
     </div>

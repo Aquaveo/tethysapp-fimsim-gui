@@ -11,7 +11,6 @@ import {
 } from './api';
 import HydrographChart from './HydrographChart';
 import ManningTable, { type ManningMapping } from './ManningTable';
-import { fileProxyUrl } from './outputsMeta';
 import { STEP_FIELDS, type FieldSpec } from './stepFields';
 import './StepPanel.css';
 
@@ -44,11 +43,12 @@ function Outputs({ runId }: { runId: number }) {
     getStepRunOutputs(runId).then((r) => setOutputs(r.outputs)).catch(() => setOutputs([]));
   }, [runId]);
   if (!outputs) return <span className="sp-muted">loading outputs…</span>;
+  // Names only — downloads live on the Results step's outputs table.
   return (
     <ul className="sp-outputs">
       {outputs.map((o) => (
         <li key={o.key}>
-          <a href={fileProxyUrl(runId, o.name, true)}>{o.name}</a>
+          {o.name}
           <span className="sp-muted"> ({(o.bytes / 1024).toFixed(0)} kB)</span>
         </li>
       ))}

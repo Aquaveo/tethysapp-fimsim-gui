@@ -134,22 +134,25 @@ export default function NewSimulation() {
         )}
 
         <div className="ns-nav">
-          <button
-            type="button"
-            className="button-secondary"
-            disabled={idx === 0}
-            onClick={() => goTo(STEPS[idx - 1].id)}
-          >
-            ← Back
-          </button>
-          <button
-            type="button"
-            className="button-primary"
-            disabled={idx === STEPS.length - 1 || (step === 'project' && !projectId)}
-            onClick={() => goTo(STEPS[idx + 1].id)}
-          >
-            Next →
-          </button>
+          {idx > 0 ? (
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => goTo(STEPS[idx - 1].id)}
+            >
+              ← Back
+            </button>
+          ) : <span aria-hidden="true" /> /* keeps Next right-aligned */}
+          {idx < STEPS.length - 1 && (
+            <button
+              type="button"
+              className="button-primary"
+              disabled={step === 'project' && !projectId}
+              onClick={() => goTo(STEPS[idx + 1].id)}
+            >
+              Next →
+            </button>
+          )}
         </div>
       </section>
     </div>
