@@ -280,6 +280,7 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         project = run.aoi.project
         ws_prefix = build_key(project.username, project.id, run.aoi.id, "workspace")
         _restore_workspace(storage, ws_prefix, ctx, adapter)
+        job_type.clean_workspace(ctx, adapter)
         try:
             job_type.prestage_shared_cache(storage, ctx, adapter)
         except Exception as exc:  # a cache problem must never fail a job

@@ -25,7 +25,9 @@ def _sanitize_deck(lf_dir: Path, log_fn) -> Path:
     pars = sorted(lf_dir.glob("*.par"))
     if not pars:
         raise RuntimeError("No .par file in the deck — run the Settings step first.")
-    par = pars[-1]
+    # newest wins: 'model (1).par' sorts before 'model.par', so an
+    # alphabetical pick can grab a superseded deck
+    par = max(pars, key=lambda p: p.stat().st_mtime)
     out_lines = []
     for line in par.read_text().splitlines():
         tokens = line.split(None, 1)
@@ -48,6 +50,9 @@ def _read_prj_wkt(lf_dir: Path):
 
 
 class RunSimJobType(StepJobType):
+    # stale results would fake progress (.wd count) and let collect() pick a
+    # superseded .max even if the solver failed
+    clean_patterns = ("results",)
     step_key = "run"
     requires = ("par",)
 

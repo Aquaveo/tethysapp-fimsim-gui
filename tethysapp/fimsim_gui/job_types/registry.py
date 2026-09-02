@@ -19,6 +19,26 @@ class StepJobType:
     step_key: str = ""
     #: step keys whose latest run must be 'succeeded' before this submits
     requires: tuple = ()
+    #: workspace globs this step regenerates. Deleted right after the
+    #: workspace restore: otherwise fimcore's next_free_path sees the stale
+    #: copy and writes "<name> (1).<ext>", which the old file then shadows
+    #: (the .par kept pointing at a superseded .bci → bone-dry reruns).
+    clean_patterns: tuple = ()
+
+    def clean_workspace(self, ctx, log_fn):
+        folder = Path(ctx["aoi_features"][0]["folder_path"])
+        removed = 0
+        for pat in self.clean_patterns:
+            for p in list(folder.rglob(pat)):
+                if p.is_dir():
+                    shutil.rmtree(p, ignore_errors=True)
+                    removed += 1
+                elif p.is_file():
+                    p.unlink(missing_ok=True)
+                    removed += 1
+        if removed:
+            log_fn(f"workspace: removed {removed} superseded item(s) this "
+                   f"step regenerates")
 
     def defaults(self) -> dict:
         return {}
