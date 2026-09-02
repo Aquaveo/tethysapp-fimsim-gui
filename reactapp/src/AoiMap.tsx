@@ -342,6 +342,8 @@ export default function AoiMap({
     resetDraftRef.current = () => reset(false);
 
     mapRef.current = map;
+    // debugging escape hatch (headless tests, console probing)
+    (window as unknown as { __fimsimMap?: maplibregl.Map }).__fimsimMap = map;
     return () => {
       window.removeEventListener('keydown', onKey);
       map.remove();

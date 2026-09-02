@@ -107,6 +107,8 @@ class BCIStepJobType(UniformStepJobType):
         return {
             "upstream_mode": "varying_discharge",  # | "fixed_discharge"
             "downstream_type": "FREE",             # | "HFIX"
+            # desktop default bed slope — without it the .bci says "FREE None"
+            "downstream_slope": 0.0001,
             "use_nhd": True,
         }
 

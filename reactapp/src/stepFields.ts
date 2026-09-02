@@ -78,6 +78,11 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       ],
     },
     {
+      key: 'downstream_slope', label: 'Bed slope at outflow', widget: 'number',
+      showIf: { key: 'downstream_type', value: 'FREE' },
+      help: 'Used for the normal-depth outflow calculation; 0.0001 suits most lowland rivers.',
+    },
+    {
       key: 'downstream_hfix', label: 'Fixed level (m)', widget: 'number',
       showIf: { key: 'downstream_type', value: 'HFIX' },
     },
