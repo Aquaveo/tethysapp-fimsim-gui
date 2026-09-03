@@ -529,14 +529,17 @@ def api_aoi_zip(request, session, aoi_id):
 
     buf = io.BytesIO()
     n = 0
+    seen = set()  # manifests are cumulative — ship each file once, under the
+    #               step that first produced it
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         for step in STEP_KEYS:
             run = aoi.current_step_run(step)
             if not run or not isinstance(run.manifest, list):
                 continue
             for m in run.manifest:
-                if not storage.exists(m['key']):
+                if m['name'] in seen or not storage.exists(m['key']):
                     continue
+                seen.add(m['name'])
                 with storage.open(m['key']) as fh:
                     zf.writestr(f"{step}/{m['name']}", fh.read())
                     n += 1

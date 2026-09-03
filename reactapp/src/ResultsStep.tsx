@@ -51,7 +51,11 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
           if (step === 'run') res.runStatus = 'succeeded';
           if (step === 'bdy') res.bdyRun = run;
           for (const m of (Array.isArray(run.manifest) ? run.manifest : [])) {
-            res.files.push({ step, runId: run.id, name: m.name, bytes: m.bytes });
+            // manifests are cumulative (each step re-ships the whole deck) —
+            // list every file once, under the step that first produced it
+            if (!res.files.some((f) => f.name === m.name)) {
+              res.files.push({ step, runId: run.id, name: m.name, bytes: m.bytes });
+            }
           }
           if (step === 'run') {
             const bounds = (Array.isArray(run.manifest) ? run.manifest : [])

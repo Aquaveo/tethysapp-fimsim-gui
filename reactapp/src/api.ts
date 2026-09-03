@@ -92,6 +92,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
         : `Request failed (${res.status}) — try again; if it persists, the job system may be restarting.`);
     throw new ApiError(res.status, msg);
   }
+  if (body === null) {
+    // 200 but not JSON: the fetch silently followed the auth redirect to the
+    // login page (Tethys expires idle sessions). Surface it instead of
+    // letting callers crash on a null payload.
+    throw new ApiError(401, 'Your session has expired — reload the page and sign in again.');
+  }
   return body as T;
 }
 
