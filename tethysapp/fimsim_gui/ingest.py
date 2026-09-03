@@ -5,7 +5,6 @@ becomes its own AOI (desktop inspect_features parity). Invalid geometry is
 rejected with a specific message, never repaired. All server-side — the
 browser's shpjs parsing was a stopgap and gpkg only works here.
 """
-import json
 import math
 import tempfile
 import zipfile
@@ -120,7 +119,9 @@ def _polygon_checks(geom, name: str):
 
 
 def ingest_aoi_file(upload_path, original_name: str, size_bytes: int) -> IngestResult:
-    from shapely.geometry import mapping
+    """Validate + parse an uploaded AOI (zipped SHP / GPKG / GeoJSON) into
+    features: size cap, zip-slip defense, CRS handling, rectangularity,
+    CONUS bounds. Raises IngestError with a user-facing reason."""
 
     if size_bytes > MAX_UPLOAD_BYTES:
         raise IngestError(
@@ -167,6 +168,9 @@ def ingest_geojson_geometry(geometry: dict, name: str) -> IngestResult:
 
 
 def ingest_gdf(gdf, default_name: str) -> IngestResult:
+    """Shared tail of every ingest path: reproject to WGS84, validate each
+    polygon (area cap is checked later against the app setting), compute
+    area/rectangularity/working CRS per feature."""
     from tethysapp.fimsim_gui.geo_env import ensure_proj_data
     ensure_proj_data()
     from fimcore.crs_utils import pick_working_crs_epsg
@@ -201,7 +205,6 @@ def ingest_gdf(gdf, default_name: str) -> IngestResult:
                 f"FIMsim's data sources (3DEP, NHD, NWM) are US-only."
             )
 
-        single = gdf4326.iloc[[i]]
         # working CRS honors the ORIGINAL file's projected CRS when metric
         working = pick_working_crs_epsg(gdf.iloc[[i]], log_fn=lambda *_: None)
 

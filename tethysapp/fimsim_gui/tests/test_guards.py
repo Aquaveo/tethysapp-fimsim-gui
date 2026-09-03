@@ -69,7 +69,10 @@ class FakeQuery:
 
 
 class FakeSession:
-    def __init__(self, rows): self._rows = rows; self.committed = False
+    def __init__(self, rows):
+        self._rows = rows
+        self.committed = False
+
     def query(self, *a): return FakeQuery(self._rows)
     def commit(self): self.committed = True
 
@@ -131,9 +134,12 @@ def test_shared_cache_eviction_age_then_size():
                 "_shared_cache/3dep/big2.tif": (int(9e9), now - timedelta(days=5)),
                 "_shared_cache/3dep/small.tif": (int(1e9), now - timedelta(days=1)),
             }
+
         def list_prefix_with_sizes(self, prefix):
             return [(k, v[0]) for k, v in self.objs.items() if k.startswith(prefix)]
+
         def modified_time(self, key): return self.objs[key][1]
+
         def delete(self, key): self.objs.pop(key, None)
 
     st = FakeStorage()
@@ -182,11 +188,14 @@ def test_dem_cache_prestage_and_poststage(tmp_path):
 
     class FakeStorage:
         def __init__(self): self.objs = {}
+
         def exists(self, k): return k in self.objs
+
         def download_to_path(self, k, dest):
             from pathlib import Path
             Path(dest).parent.mkdir(parents=True, exist_ok=True)
             Path(dest).write_bytes(self.objs[k])
+
         def save(self, k, fh): self.objs[k] = fh.read()
 
     st = FakeStorage()
@@ -195,7 +204,8 @@ def test_dem_cache_prestage_and_poststage(tmp_path):
 
     # cold: nothing cached → prestage is a no-op
     jt.prestage_shared_cache(st, ctx, logs.append)
-    assert not list((proj / "DEM_raw_Neuse").glob("*")) if (proj / "DEM_raw_Neuse").exists() else True
+    if (proj / "DEM_raw_Neuse").exists():
+        assert not list((proj / "DEM_raw_Neuse").glob("*"))
 
     # simulate fimcore's full-tile fallback output + a windowed file
     tiles = proj / "DEM_raw_Neuse"
@@ -205,13 +215,13 @@ def test_dem_cache_prestage_and_poststage(tmp_path):
     jt.poststage_shared_cache(st, ctx, logs.append)
     assert "_shared_cache/3dep/USGS_13_n36w079.tif" in st.objs
     assert not any("_aoi" in k for k in st.objs)          # windows never cached
-    assert any("contributed 1" in l for l in logs)
+    assert any("contributed 1" in line for line in logs)
 
     # warm: a fresh job dir gets the tile pre-staged
     (tiles / "USGS_13_n36w079.tif").unlink()
     jt.prestage_shared_cache(st, ctx, logs.append)
     assert (tiles / "USGS_13_n36w079.tif").read_bytes() == b"FULLTILE" * 10
-    assert any("staged 1" in l for l in logs)
+    assert any("staged 1" in line for line in logs)
 
 
 def test_retention_never_deletes_keys_live_runs_still_reference():
@@ -219,8 +229,10 @@ def test_retention_never_deletes_keys_live_runs_still_reference():
     shared_key = "u/1/1/bdy/Neuse.bdy"
     superseded = _run(status="succeeded", superseded=True,
                       finished=datetime.now(timezone.utc),
-                      manifest=[{"key": shared_key, "name": "Neuse.bdy", "bytes": 10},
-                                {"key": "u/1/1/bdy/old_only.csv", "name": "old_only.csv", "bytes": 5}])
+                      manifest=[
+                          {"key": shared_key, "name": "Neuse.bdy", "bytes": 10},
+                          {"key": "u/1/1/bdy/old_only.csv",
+                           "name": "old_only.csv", "bytes": 5}])
     current = _run(status="succeeded", superseded=False,
                    finished=datetime.now(timezone.utc),
                    manifest=[{"key": shared_key, "name": "Neuse.bdy", "bytes": 10}])

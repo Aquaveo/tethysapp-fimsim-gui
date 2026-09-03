@@ -5,7 +5,6 @@ The same suite runs against BOTH backends (local filesystem + moto-mocked S3)
 test runs when FIMSIM_TEST_MINIO_* env vars are set (moto alone missed real
 MinIO behaviors on FIMeval — the precedent this test exists for).
 """
-import io
 import os
 from types import SimpleNamespace
 

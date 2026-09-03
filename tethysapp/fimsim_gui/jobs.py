@@ -78,8 +78,9 @@ class LogAdapter:
         self._last_flush = 0.0
         self._last_cancel_check = 0.0
         self._cancel_latched = False
-        self.failure_messages = []  # ✗ markers — fimcore orchestrators swallow
-                                    # per-AOI exceptions, so the wrapper checks this
+        # ✗ markers — fimcore orchestrators swallow per-AOI exceptions,
+        # so the wrapper checks this list after execute()
+        self.failure_messages = []
 
     def __call__(self, line):
         line = str(line)

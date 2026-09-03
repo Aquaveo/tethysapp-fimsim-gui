@@ -36,6 +36,7 @@ def home(request):
 @controller(url='api/csrf', login_required=False, name='api_csrf')
 @ensure_csrf_cookie
 def api_csrf(request):
+    """Bootstrap the CSRF cookie for the SPA (fetch() echoes it as X-CSRFToken)."""
     return JsonResponse({'ok': True})
 
 
@@ -83,6 +84,7 @@ def _setting(name, default):
 
 
 def max_aoi_area_km2() -> float:
+    """The AOI area cap (km²) — app setting with the family default."""
     return _setting('max_aoi_area_km2', DEFAULT_MAX_AOI_AREA_KM2)
 
 
@@ -137,6 +139,8 @@ def _create_aois(session, request, project, ingest_result, source, source_key=No
 @controller(url='api/projects', name='api_projects')
 @with_session
 def api_projects(request, session):
+    """GET: the user's projects, newest first. POST: create one (409 on
+    duplicate name)."""
     if request.method == 'POST':
         try:
             body = json.loads(request.body or '{}')
@@ -166,13 +170,22 @@ def api_projects(request, session):
 @controller(url='api/projects/{project_id}', name='api_project')
 @with_session
 def api_project(request, session, project_id):
+    """GET: project with AOIs. DELETE: remove it, its rows (cascade) AND
+    its stored files."""
     project, err = _owned_project(session, request, project_id)
     if err:
         return err
     if request.method == 'DELETE':
+        from tethysapp.fimsim_gui.storage import build_key, get_storage
+        prefix = build_key(request.user.username, project.id)
         session.delete(project)
         session.commit()
-        return JsonResponse({'deleted': True})
+        try:  # DB row is gone either way; orphaned files are reaped later
+            n = get_storage().delete_prefix(prefix)
+        except Exception as exc:
+            logger.warning('storage cleanup for %s failed: %s', prefix, exc)
+            n = 0
+        return JsonResponse({'deleted': True, 'files_removed': n})
     return JsonResponse(project.to_dict(with_aois=True))
 
 
@@ -181,6 +194,8 @@ def api_project(request, session, project_id):
 @controller(url='api/projects/{project_id}/aois', name='api_project_aois')
 @with_session
 def api_project_aois(request, session, project_id):
+    """GET: the project's AOIs. POST: add AOIs from a file upload
+    (multipart) or a drawn GeoJSON geometry — validated by ingest.py."""
     project, err = _owned_project(session, request, project_id)
     if err:
         return err
@@ -213,7 +228,7 @@ def api_project_aois(request, session, project_id):
                 return JsonResponse(
                     {'error': 'Provide a file upload or a GeoJSON "geometry".'},
                     status=400)
-            name = str(body.get('name') or f'Drawn AOI')
+            name = str(body.get('name') or 'Drawn AOI')
             result = ingest_geojson_geometry(geometry, name)
             source, source_key = str(body.get('source') or 'drawn'), None
     except IngestError as exc:
@@ -235,13 +250,21 @@ def api_project_aois(request, session, project_id):
 @controller(url='api/aois/{aoi_id}', name='api_aoi')
 @with_session
 def api_aoi(request, session, aoi_id):
+    """GET: one AOI. DELETE: remove it (cascade) and its stored files."""
     aoi, err = _owned_aoi(session, request, aoi_id)
     if err:
         return err
     if request.method == 'DELETE':
+        from tethysapp.fimsim_gui.storage import build_key, get_storage
+        prefix = build_key(request.user.username, aoi.project_id, aoi.id)
         session.delete(aoi)
         session.commit()
-        return JsonResponse({'deleted': True})
+        try:  # DB row is gone either way; orphaned files are reaped later
+            n = get_storage().delete_prefix(prefix)
+        except Exception as exc:
+            logger.warning('storage cleanup for %s failed: %s', prefix, exc)
+            n = 0
+        return JsonResponse({'deleted': True, 'files_removed': n})
     return JsonResponse(aoi.to_dict())
 
 
@@ -334,6 +357,21 @@ def api_step_submit(request, session, project_id, step_key):
     if not isinstance(base_config, dict) or not isinstance(aoi_configs, dict):
         return JsonResponse({'error': 'config and aoi_configs must be objects'},
                             status=400)
+
+    jt = REGISTRY[step_key]
+    # server-only keys (e.g. run's solver_path) must never arrive from a
+    # client — accepting them would let a request pick the binary the worker
+    # executes
+    for cfg in (base_config, *aoi_configs.values()):
+        if isinstance(cfg, dict):
+            for key in jt.server_only_keys:
+                cfg.pop(key, None)
+    # validate the shared config up front: one clear 400 with every reason,
+    # instead of a per-AOI failure spray after jobs started
+    problems = jt.validate_config(base_config)
+    if problems:
+        return JsonResponse(
+            {'error': 'config rejected: ' + '; '.join(problems)}, status=400)
     wanted = body.get('aoi_ids')
     aois = [a for a in project.aois if wanted is None or a.id in wanted]
     if not aois:
@@ -356,7 +394,6 @@ def api_step_submit(request, session, project_id, step_key):
     if reason:
         return JsonResponse({'error': reason}, status=429)
 
-    jt = REGISTRY[step_key]
     results = []
     for aoi in aois:
         missing = prerequisites_missing(aoi, step_key)
@@ -375,6 +412,14 @@ def api_step_submit(request, session, project_id, step_key):
             })
             continue
         merged_config = {**base_config, **(aoi_configs.get(str(aoi.id)) or {})}
+        # per-AOI overlays can introduce their own bad values — reject this
+        # AOI with the reasons rather than crashing its worker job
+        if str(aoi.id) in aoi_configs:
+            problems = jt.validate_config(merged_config)
+            if problems:
+                results.append({'aoi_id': aoi.id, 'submitted': False,
+                                'reason': 'config rejected: ' + '; '.join(problems)})
+                continue
         # per-AOI resource prechecks BEFORE anything is superseded or created
         guard_reason = None
         if step_key == 'dem':
@@ -389,7 +434,9 @@ def api_step_submit(request, session, project_id, step_key):
                             'reason': guard_reason})
             continue
         supersede_step_and_downstream(aoi, step_key)
-        if step_key == 'run' and not merged_config.get('solver_path'):
+        if step_key == 'run':
+            # ALWAYS the app setting — never a client value (stripped above,
+            # belt and braces here)
             merged_config['solver_path'] = App.get_custom_setting('lisflood_binary_path')
         run = StepRun(aoi_id=aoi.id, step_key=step_key, config=merged_config)
         session.add(run)
@@ -422,6 +469,8 @@ def api_project_status(request, session, project_id):
 @controller(url='api/stepruns/{steprun_id}', name='api_steprun')
 @with_session
 def api_steprun(request, session, steprun_id):
+    """One StepRun: status, structured progress events, log tail, manifest
+    — the browser's polling endpoint."""
     run, err = _owned_steprun(session, request, steprun_id)
     if err:
         return err
@@ -431,6 +480,8 @@ def api_steprun(request, session, steprun_id):
 @controller(url='api/stepruns/{steprun_id}/cancel', name='api_steprun_cancel')
 @with_session
 def api_steprun_cancel(request, session, steprun_id):
+    """Request cooperative cancellation: flips the row to 'cancelled'; the
+    worker's log adapter sees it within ~2 s and aborts the fimcore step."""
     run, err = _owned_steprun(session, request, steprun_id)
     if err:
         return err
