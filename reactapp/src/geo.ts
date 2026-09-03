@@ -31,6 +31,7 @@ function ringArea(ring: Position[]): number {
   return Math.abs((total * R * R) / 2);
 }
 
+/** Spherical area in km², holes subtracted — drives the AOI size guardrails. */
 export function areaKm2(geom: AoiGeometry): number {
   const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates;
   let m2 = 0;

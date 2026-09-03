@@ -53,7 +53,7 @@ export interface MapOverlay {
 /** Closed ring of the axis-aligned bounding box of any clicked points —
  *  irregular click patterns commit as their smallest enclosing rectangle
  *  (LISFLOOD-FP/TRITON need rectangular meshes). */
-function bboxRing(pts: Position[]): Position[] {
+export function bboxRing(pts: Position[]): Position[] {
   const xs = pts.map((p) => p[0]);
   const ys = pts.map((p) => p[1]);
   const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
@@ -96,10 +96,14 @@ export default function AoiMap({
   const cancelRef = useRef(onDrawCancel);
   const resetDraftRef = useRef<() => void>(() => {});
   const fitCount = useRef(-1);
-  drawingRef.current = drawing;
-  modeRef.current = drawMode;
-  completeRef.current = onDrawComplete;
-  cancelRef.current = onDrawCancel;
+  // Mirror the latest props into refs after each commit (an effect, not render
+  // — react-hooks/refs): map event handlers fire on user input, always later.
+  useEffect(() => {
+    drawingRef.current = drawing;
+    modeRef.current = drawMode;
+    completeRef.current = onDrawComplete;
+    cancelRef.current = onDrawCancel;
+  });
 
   // ── Build the map once ──
   useEffect(() => {

@@ -39,11 +39,17 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const out: AoiResult[] = [];
-      for (const aoi of aois) {
+      // All step-run fetches go out in parallel (per AOI and across AOIs);
+      // the dedupe below still walks steps in aoi.steps insertion order, so
+      // "first step that produced the file" stays deterministic.
+      const out: AoiResult[] = await Promise.all(aois.map(async (aoi) => {
         const res: AoiResult = { aoi, runStatus: null, files: [] };
-        for (const [step, summary] of Object.entries(aoi.steps ?? {})) {
-          const run = await getStepRun(summary.id).catch(() => null);
+        const entries = Object.entries(aoi.steps ?? {});
+        const runs = await Promise.all(
+          entries.map(([, summary]) => getStepRun(summary.id).catch(() => null)));
+        for (let k = 0; k < entries.length; k++) {
+          const [step] = entries[k];
+          const run = runs[k];
           if (!run || run.status !== 'succeeded') {
             if (step === 'run') res.runStatus = run?.status ?? null;
             continue;
@@ -81,8 +87,8 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
             }
           }
         }
-        out.push(res);
-      }
+        return res;
+      }));
       if (alive) setResults(out);
     })();
     return () => { alive = false; };
