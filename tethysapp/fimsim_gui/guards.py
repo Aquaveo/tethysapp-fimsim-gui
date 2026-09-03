@@ -37,6 +37,8 @@ def predicted_dem_cells(aoi, res_m: float) -> int:
 
 
 def check_dem_submit(aoi, config: dict, max_cells: int):
+    """Reject a DEM submit whose grid would exceed max_cells (reason or None).
+    Runs BEFORE anything is superseded, so an oversized request costs nothing."""
     res_m = float(config.get("dem_res_m") or 30)
     cells = predicted_dem_cells(aoi, res_m)
     if cells > max_cells:
@@ -74,6 +76,7 @@ def check_run_submit(aoi, config: dict, timeout_s: float):
 
 
 def active_runs_count(session, username: str) -> int:
+    """How many of this user's runs are queued/running right now."""
     from tethysapp.fimsim_gui.models import Aoi, Project, StepRun
     return (session.query(StepRun)
             .join(Aoi, StepRun.aoi_id == Aoi.id)
@@ -95,6 +98,8 @@ def check_concurrency(session, username: str, wanted: int, max_jobs: int):
 
 
 def check_storage_quota(storage, username: str, quota_gb: float):
+    """Reject new submits once the user's stored bytes exceed the quota
+    (reason or None) — deleting old projects/results frees the space."""
     used = storage.usage_bytes(username)
     if used > quota_gb * 1e9:
         return (
@@ -132,6 +137,8 @@ def stale_active_runs(session, older_than_s: float = 3 * 3600):
 
 
 def reap_stale_runs(session, older_than_s: float = 3 * 3600) -> int:
+    """Fail runs whose worker died without reporting (no progress > N h);
+    called by scripts/maintenance.py so rows can't sit 'running' forever."""
     n = 0
     for run in stale_active_runs(session, older_than_s):
         run.status = "failed"

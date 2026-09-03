@@ -13,10 +13,12 @@ callers fall back to streaming through Django). Browser-facing presigns honor
 the s3_public_endpoint_url setting for split-horizon deployments where the
 browser reaches storage at a different host than the server does.
 """
+import logging
 import mimetypes
-import os
 import re
 from pathlib import Path, PurePosixPath
+
+logger = logging.getLogger(__name__)
 
 _FILENAME_SAFE = re.compile(r"[^A-Za-z0-9._\-]+")
 
@@ -154,6 +156,22 @@ class StorageService:
 
     def usage_bytes(self, username: str) -> int:
         return sum(b for _, b in self.list_prefix_with_sizes(user_prefix(username)))
+
+    def delete_prefix(self, prefix: str) -> int:
+        """Delete every object under prefix; returns the count removed.
+
+        Deleting a Project/AOI row cascades in the DB but leaves its files
+        behind (a single test project left 620 orphaned objects) — the DELETE
+        endpoints call this so storage tracks the database.
+        """
+        n = 0
+        for key, _size in self.list_prefix_with_sizes(prefix):
+            try:
+                self.delete(key)
+                n += 1
+            except Exception:  # a straggler must not fail the whole delete
+                logger.warning("could not delete %s", key)
+        return n
 
     # -- presign (S3 backends only; family method names per FIMeval) --
     @property

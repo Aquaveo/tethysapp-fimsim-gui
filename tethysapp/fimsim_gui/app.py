@@ -29,7 +29,8 @@ class App(TethysAppBase):
             CustomSetting(
                 name='minio_endpoint_url',
                 type=CustomSetting.TYPE_STRING,
-                description='MinIO/S3 endpoint URL (e.g. http://127.0.0.1:9000). Leave blank for real AWS.',
+                description='MinIO/S3 endpoint URL (e.g. http://127.0.0.1:9000). '
+                            'Leave blank for real AWS.',
                 required=False,
             ),
             CustomSetting(

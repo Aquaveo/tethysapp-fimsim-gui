@@ -132,7 +132,7 @@ class Aoi(Base):
                         nullable=False, index=True)
     name = Column(String(200), nullable=False)
     source = Column(String(16), nullable=False)          # upload | drawn | example
-    source_key = Column(String(512))                     # storage key of the uploaded file (ctx: aoi_path)
+    source_key = Column(String(512))    # storage key of the upload (ctx: aoi_path)
     feature_index = Column(Integer, default=0)           # ctx: aoi_feature_index
     geometry = Column(Geometry("POLYGON", srid=4326), nullable=False)
     area_km2 = Column(Float)
@@ -146,8 +146,8 @@ class Aoi(Base):
     huc6_codes = Column(JSONB)                           # ["031501", ...]
     huc8_codes = Column(JSONB)
     river_name = Column(String(200))                     # ctx: main_river_name
-    lookup = Column(JSONB)                               # the long tail: upstream_reach_id,
-                                                         # upstream_x/y, num_sources, gages [...]
+    # the long tail: upstream_reach_id, upstream_x/y, num_sources, gages [...]
+    lookup = Column(JSONB)
 
     project = relationship("Project", back_populates="aois")
     step_runs = relationship("StepRun", back_populates="aoi",
@@ -201,7 +201,8 @@ class StepRun(Base):
     superseded = Column(Boolean, default=False, nullable=False)  # re-run semantics
 
     config = Column(JSONB)      # the per_aoi_configs dict (request JSON)
-    manifest = Column(JSONB)    # [{"key","name","bytes","content_type"}] — storage keys, never paths
+    # [{"key","name","bytes","content_type"}] — storage keys, never paths
+    manifest = Column(JSONB)
     progress = Column(JSONB)    # [{"stage","current","total","message","at"}]
     log = Column(Text)          # unstructured passthrough lines
     error = Column(Text)

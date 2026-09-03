@@ -49,6 +49,7 @@ export default function NewSimulation() {
     setAoisState(updater);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- deliberate full wizard reset when the URL's projectId changes; restructuring (key-remount) would change focus/scroll behavior.
     setProject(null);
     setAoisState([]);
     setLoadError(null);
