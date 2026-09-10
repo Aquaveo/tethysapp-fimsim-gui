@@ -30,7 +30,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 30, label: '30 m (fast preview)' },
         { value: 90, label: '90 m (fastest, coarse)' },
       ],
-      help: '10 m is the baseline product; finer grids increase simulation time substantially.',
+      help: 'Source: USGS 3DEP 1/3 arc-second DEM (~10 m) — other resolutions are '
+        + 'resampled from it. Finer grids increase simulation time substantially.',
     },
   ],
   manning: [

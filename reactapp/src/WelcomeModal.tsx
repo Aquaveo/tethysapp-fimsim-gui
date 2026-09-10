@@ -59,9 +59,14 @@ export default function WelcomeModal({ onClose }: Props) {
               </a>.
             </li>
             <li>
-              <strong>{baseline} elevation is the baseline product.</strong>{' '}
-              Finer resolutions (1 m / 3 m) are available but increase
-              simulation times substantially.
+              <strong>Elevation comes from the USGS 3DEP 1/3 arc-second DEM
+              (~{baseline}).</strong> Other resolutions are resampled from it;
+              finer grids increase simulation times substantially.
+            </li>
+            <li>
+              <strong>You can run several study areas at once</strong> — each
+              polygon in an upload (or each drawn area) becomes its own
+              simulation.
             </li>
             <li>
               <strong>Areas must be rectangular</strong> (a LISFLOOD-FP/TRITON

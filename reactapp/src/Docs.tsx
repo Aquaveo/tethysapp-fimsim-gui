@@ -137,11 +137,12 @@ export default function Docs() {
           <h3>3 · Terrain</h3>
           <p>
             Downloads elevation and grids it for the model
-            (<code>dem.ascii</code>). Sources: <strong>USGS 3DEP</strong>{' '}
-            (standard elevation; 10 m is the baseline product) or{' '}
+            (<code>dem.ascii</code>). Sources: the{' '}
+            <strong>USGS 3DEP 1/3 arc-second DEM</strong> (~10 m — the native
+            product; other resolutions are resampled from it) or{' '}
             <strong>TACC HAND</strong> (height above nearest drainage). Finer
-            resolutions (1 m / 3 m) increase download sizes and simulation
-            times substantially; 30 m / 90 m are useful for fast previews.
+            grids (1 m / 3 m) increase simulation times substantially;
+            30 m / 90 m are useful for fast previews.
           </p>
 
           <h3>4 · Roughness</h3>
@@ -243,7 +244,7 @@ export default function Docs() {
                 <tr><th>Dataset</th><th>Provider</th><th>Coverage</th></tr>
               </thead>
               <tbody>
-                <tr><td>Elevation (DEM)</td><td>USGS 3DEP</td><td>USA · 1 m – 90 m</td></tr>
+                <tr><td>Elevation (DEM)</td><td>USGS 3DEP 1/3 arc-second (~10 m)</td><td>USA · resampled to 1–90 m</td></tr>
                 <tr><td>HAND</td><td>TACC</td><td>USA</td></tr>
                 <tr><td>Land cover</td><td>NLCD — USGS</td><td>USA · 30 m</td></tr>
                 <tr><td>Land cover</td><td>Sentinel-2 — Esri</td><td>Global · 10 m</td></tr>

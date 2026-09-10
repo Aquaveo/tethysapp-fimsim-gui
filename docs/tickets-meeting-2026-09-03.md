@@ -70,15 +70,13 @@ Notes: BLOCKED on Parvaneh's code snippet.
 
 TASK: BYU CIROH: FIMsim GUI – Unlisted Land-Cover Class Default n (FIMSIM-BE13)
 
-Description: The demo surfaced a discrepancy for land-cover classes without a Manning's n entry: the app discussion mentioned 0.045 while Parvaneh typically uses 0.035. She is verifying the correct value.
+Description: The demo surfaced a discrepancy for land-cover classes without a Manning's n entry: the app discussion mentioned 0.045 while Parvaneh typically uses 0.035. She verified by email (2026-09-03): **0.045 is correct** — the value the app already uses.
 
-[   ]  Confirmed value from Parvaneh applied as the unlisted-class default (fimcore table or web override — wherever the desktop keeps it, for parity)
-[   ]  Manning table footnote states the unlisted-class default so users aren't surprised
-[   ]  Validation/regression test pins the value
+[ ✓ ]  Confirmed value (0.045) is what fimcore's DEFAULT_MANNING_MAP and the manning-table API already use — no change needed
+[ ✓ ]  Manning table footnote already states the unlisted-class fallback
+[ ✓ ]  Regression test pins 0.045 (test_validation.py)
 
-Notes: BLOCKED on Parvaneh's confirmation (0.035 vs 0.045).
-
-🚦 Status: Blocked (waiting on Parvaneh)
+🚦 Status: ✅ Complete (confirmed as-built)
 
 —
 
@@ -86,13 +84,13 @@ TASK: BYU CIROH: FIMsim GUI – Data-Source Naming + Forecast-Cycle Explanations
 
 Description: Two accuracy items for the interface and docs: (1) use the official product name for the "10 m elevation data" (Parvaneh providing; likely the 3DEP 1/3 arc-second product name); (2) explain the NWM forecast cycle options properly — the demo found short-range cycle options not updating as expected, and Parvaneh is asking the client what the cycles mean.
 
-[   ]  Official 10 m DEM product name used in the Terrain step, welcome modal, and docs
+[ ✓ ]  Official 10 m DEM product name used in the Terrain step, welcome modal, and docs — "USGS 3DEP 1/3 arc-second DEM (~10 m)"; copy also states other resolutions are resampled from it (Parvaneh's email, 2026-09-03)
 [   ]  Forecast cycle options explained in the Flow Data step help + docs once Parvaneh reports back
 [   ]  Investigate the short-range cycle options not updating (bug or expectation?) and fix or document
 
-Notes: BLOCKED on Parvaneh (product name; client answer on cycles).
+Notes: naming done; still BLOCKED on the client's answer about forecast cycles.
 
-🚦 Status: Blocked (waiting on Parvaneh)
+🚦 Status: In progress (cycles blocked on Parvaneh/client)
 
 —
 
@@ -105,6 +103,18 @@ Description: Deploy the current version to the Tethys portal so user testing can
 [   ]  App live on the portal with the alpha badge; Parvaneh notified to start testing (boundary-condition verification pass)
 
 🚦 Status: Not started (deployment path pending Nathan)
+
+—
+
+TASK: BYU CIROH: FIMsim GUI – Multi-Case Mention + Case-Count Limit (FIMSIM-FE20)
+
+Description: Parvaneh (email, 2026-09-03): mention on the first page that multiple cases can run at the same time, and set a limit on the number of cases — the limit value needs Dr. Cohen's input.
+
+[ ✓ ]  Welcome modal states that several study areas can run at once (each polygon = its own simulation)
+[   ]  Per-project case-count limit decided with Dr. Cohen
+[   ]  Limit enforced at AOI creation with a clear rejection reason + stated in the welcome modal/docs (same pattern as the area cap)
+
+🚦 Status: In progress (limit value pending Dr. Cohen)
 
 —
 

@@ -144,6 +144,13 @@ def test_par_numeric_ranges():
     assert any("sim_time" in p for p in _problems("par", {"sim_time": -5}))
 
 
+def test_unlisted_lulc_class_default_is_the_confirmed_value():
+    # Parvaneh confirmed 0.045 for unclassified land cover (email 2026-09-03);
+    # fimcore and the manning-table API must agree on it
+    from fimcore.manning import DEFAULT_MANNING_MAP
+    assert DEFAULT_MANNING_MAP["default"] == 0.045
+
+
 def test_run_timeout_and_snapshots():
     assert any("solver_timeout_s" in p
                for p in _problems("run", {"solver_timeout_s": 999999}))
