@@ -74,6 +74,11 @@ export default function WelcomeModal({ onClose }: Props) {
               enclosing rectangle automatically.
             </li>
             <li>
+              <strong>Two models:</strong> LISFLOOD-FP runs right here on the
+              portal; TRITON generates a ready-to-run input deck for your own
+              GPU/HPC system.
+            </li>
+            <li>
               <strong>Your work is saved per project</strong> — reopen it any
               time from the Simulations list.
             </li>

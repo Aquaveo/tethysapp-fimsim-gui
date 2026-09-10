@@ -30,15 +30,15 @@ TASK: BYU CIROH: FIMsim GUI – Per-Step Overview Panels (Desktop Parity) (FIMSI
 
 Description: Parvaneh demonstrated how the desktop version shows users detailed context at every step (AOI details, detected river data) so errors are caught where they arise. Agreed as the main pre-deployment feature work — and Parvaneh noted the same pattern will streamline the later TRITON work.
 
-[   ]  Each wizard step shows a compact overview of the state it consumes: AOI (area, working CRS, states/HUCs), Terrain (source, resolution, grid size), Boundaries (detected main river + inflow/outflow locations), Flow Data (source, window, peak), Settings (solver, sim time)
-[   ]  Boundary-condition step surfaces the detected upstream/downstream points prominently (the desktop's "check the markers before building the model" guidance)
-[   ]  Data comes from existing ctx/StepRun fields — no new fimcore calls
-[   ]  Step overviews reviewed against Parvaneh's desktop screens for parity
+[ ✓ ]  Each AOI card in every step panel shows a context strip: area, working CRS, states, detected main river, gage count, plus one chip per upstream step summarizing its submitted config (source/resolution, friction mode, boundary types, event window, solver)
+[ ✓ ]  Boundary-condition panels carry the "check the markers" guidance (map-marker rendering of the exact inflow/outflow points deferred — coords live in the worker ctx, not the DB)
+[ ✓ ]  Data comes from AOI rows + step summaries (configs now included server-side) — no new fimcore calls, no extra fetches
+[   ]  Parity review against Parvaneh's desktop screens (her deployment testing pass covers this)
 
 Out of Scope
 * LULC coverage percentages (FIMSIM-BE12 — blocked on Parvaneh's snippet)
 
-🚦 Status: Not started
+🚦 Status: ✅ Complete (pending Parvaneh's parity look)
 
 —
 
@@ -48,7 +48,7 @@ Description: Deployment decision: the portal version ships clearly labeled as th
 
 [   ]  "Alpha" badge in the header chrome (FIMeval welcome-modal callout pattern for the copy: lightweight version, link to the desktop app for the full feature set)
 [   ]  Welcome modal mentions alpha status alongside the existing limits
-[   ]  Mode slug in the URL: the wizard lives under a model-scoped path (LISFLOOD-FP today) so future TRITON/HAND modes get their own slugs without breaking links
+[ ✓ ]  Mode slug in the URL: /new/<project>/triton etc., with model-switch chips above the step rail (shipped with the TRITON work, 2026-09-10)
 
 🚦 Status: Not started
 
@@ -115,6 +115,22 @@ Description: Parvaneh (email, 2026-09-03): mention on the first page that multip
 [   ]  Limit enforced at AOI creation with a clear rejection reason + stated in the welcome modal/docs (same pattern as the area cap)
 
 🚦 Status: In progress (limit value pending Dr. Cohen)
+
+—
+
+TASK: BYU CIROH: FIMsim GUI – TRITON Deck Generation: Wizard + Backend (FIMSIM-BE14/FE21)
+
+Description: TRITON support at desktop parity — the wizard prepares the complete TRITON input package for download (the desktop likewise hands users the package to run on their own GPU/HPC; neither executes ORNL's solver). Built ahead of schedule after the Sep 3 meeting noted the step-overview work would streamline it.
+
+[ ✓ ]  Five job types (tdem/tfric/tbc/thyg/tcfg) on fimcore's triton_orchestrate, with desktop-parity defaults + validation; scratch projects stamped as TRITON so shared fimcore steps write the triton-files layout
+[ ✓ ]  Supersede is dependency-graph based — LISFLOOD re-runs and TRITON decks can't invalidate each other (regression test)
+[ ✓ ]  Model-aware wizard: per-model step lists, URL slugs, switch chips ("deck only" tag), TRITON step forms, model-aware Results
+[ ✓ ]  Verified live on the Neuse AOI: complete deck (dem.asc, friction.asc, .src, .extbc, .hyg, .cfg) with correct .cfg references; wizard screenshot-verified
+[ ✓ ]  Docs section + welcome-modal mention
+[   ]  Parvaneh runs a generated deck in actual TRITON (the real acceptance test)
+[   ]  "Level vs time" downstream boundary type (needs a stage-file upload) — post-MVP
+
+🚦 Status: ✅ Complete (acceptance run pending Parvaneh)
 
 —
 

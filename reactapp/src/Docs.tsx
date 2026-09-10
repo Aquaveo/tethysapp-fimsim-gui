@@ -11,6 +11,7 @@ const SECTIONS = [
   ['overview', 'Overview'],
   ['aoi', 'Drawing a good study area'],
   ['steps', 'The wizard, step by step'],
+  ['triton', 'TRITON (deck generation)'],
   ['data', 'Data sources'],
   ['formats', 'Output files & formats'],
   ['tutorial', 'Tutorial: Hurricane Matthew'],
@@ -51,9 +52,12 @@ export default function Docs() {
             You define a study area; FIMsim downloads every input the model
             needs — terrain (USGS 3DEP), land cover and Manning&apos;s
             roughness (NLCD / Esri Sentinel-2), the river network (NHD), and
-            streamflow (National Water Model or USGS gages) — writes the
-            LISFLOOD-FP configuration, runs the simulation on the portal&apos;s
-            compute cluster, and maps the flood.
+            streamflow (National Water Model or USGS gages). For{' '}
+            <strong>LISFLOOD-FP</strong> it then runs the simulation on the
+            portal&apos;s compute cluster and maps the flood; for{' '}
+            <strong>TRITON</strong> it generates the complete input deck for
+            you to download and run on your own GPU/HPC system — switch models
+            with the chips above the step rail.
           </p>
           <img
             className="dc-diagram"
@@ -233,6 +237,30 @@ export default function Docs() {
             button — including the complete model input deck if you want to
             re-run or modify the simulation on your own machine
             (<code>lisflood -v model.par</code>).
+          </p>
+        </section>
+
+        <section id="triton">
+          <h2>TRITON (deck generation)</h2>
+          <p>
+            The TRITON wizard mirrors the desktop&apos;s tabs and produces the
+            full input package in <code>triton-files/</code>: the terrain grid
+            (<code>dem.asc</code>), the friction grid
+            (<code>friction.asc</code>, a headerless Manning&apos;s n matrix),
+            the inflow source point and downstream external boundary
+            (<code>.src</code> + <code>.extbc</code>), the inflow hydrograph
+            (<code>.hyg</code>, hours vs m³/s), and the control file
+            (<code>.cfg</code>) with file references, source counts, and the
+            simulation duration filled in automatically from the hydrograph.
+          </p>
+          <p>
+            TRITON itself is ORNL&apos;s GPU/OpenMP solver — like the desktop
+            FIMsim, the web app hands you the ready-to-run package rather than
+            executing it. Download everything from the Results step and run it
+            per the{' '}
+            <a href="https://triton.ornl.gov/documentation/" target="_blank" rel="noreferrer">
+              TRITON documentation
+            </a>.
           </p>
         </section>
 
