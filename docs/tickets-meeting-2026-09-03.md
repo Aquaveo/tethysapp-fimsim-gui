@@ -99,10 +99,10 @@ TASK: BYU CIROH: FIMsim GUI – Deploy the Alpha for User Testing (FIMSIM-OPS1)
 Description: Deploy the current version to the Tethys portal so user testing can start. Parvaneh will evaluate the deployment and specifically verify the boundary-condition step (her area of concern; the BF2 inflow-snap fix is directly relevant to her check).
 
 [   ]  FE16–FE18 + the tests/hardening PR merged into the deployed build (per the meeting: step overviews + feature improvements go in before official deployment)
-[   ]  Deployment path settled with Nathan (portal target, storage + Dask + LISFLOOD binary provisioning, maintenance cron with Gio)
+[   ]  Deployment path settled with Gio (portal target, storage + Dask + LISFLOOD binary provisioning, maintenance cron; Nathan in the loop on portal access)
 [   ]  App live on the portal with the alpha badge; Parvaneh notified to start testing (boundary-condition verification pass)
 
-🚦 Status: Not started (deployment path pending Nathan)
+🚦 Status: Not started (deployment path pending Gio)
 
 —
 
