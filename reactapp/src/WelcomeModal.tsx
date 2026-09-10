@@ -44,6 +44,14 @@ export default function WelcomeModal({ onClose }: Props) {
         </div>
 
         <div className="wm-body">
+          <div className="wm-alpha" role="note">
+            This is the <strong>lightweight alpha</strong> of FIMsim — tuned
+            for a shared portal. For the full feature set (TRITON execution,
+            OWP HAND-FIM, ARC-Curve2Flood, standalone data tools), use the{' '}
+            <a href="https://github.com/pnikrou/FIMsim" target="_blank" rel="noreferrer">
+              desktop FIMsim
+            </a>.
+          </div>
           <p>
             Define a study area and FIMsim downloads every input a LISFLOOD-FP
             flood simulation needs — terrain, land cover, river network,

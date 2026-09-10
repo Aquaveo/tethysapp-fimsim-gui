@@ -16,11 +16,22 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
-  padding: 1.5rem 2rem;
-  line-height: 1.6;
+  padding: 1.1rem 1.6rem 1.3rem;
+  line-height: 1.5;
   font-size: 0.93rem;
 }
-.dc-body h2 { font-size: 1.15rem; margin: 1.6rem 0 0.5rem; }
+.dc-body h2 { font-size: 1.1rem; margin: 1.1rem 0 0.35rem; }
+.dc-body p { margin: 0.35rem 0 0.6rem; }
+/* FE16: meeting feedback — less white space; steps + lists flow in two
+   columns on wide screens (each h3 block stays intact) */
+@media (min-width: 1000px) {
+  #steps { column-count: 2; column-gap: 2.2rem; }
+  #steps h2 { column-span: all; }
+  #steps h3 { break-after: avoid; margin-top: 0.7rem; }
+  #steps p, #steps .dc-tablewrap { break-inside: avoid; }
+  #trouble ul, #limits ul { column-count: 2; column-gap: 2.2rem; }
+  #trouble li, #limits li { break-inside: avoid; }
+}
 .dc-body section:first-child h2 { margin-top: 0; }
 .dc-body ul, .dc-body ol { padding-left: 1.3rem; }
 .dc-body li { margin-bottom: 0.45rem; }

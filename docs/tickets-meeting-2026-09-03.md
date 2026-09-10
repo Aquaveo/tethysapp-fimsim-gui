@@ -15,14 +15,14 @@ TASK: BYU CIROH: FIMsim GUI – Docs Page Layout: Two-Column, Tighter Whitespace
 
 Description: Meeting feedback: the documentation page carries excess white space. Reorganize the layout — consider a two-column format — so the parameter reference and tutorials read denser without losing the FIM-family look.
 
-[   ]  Excess vertical/horizontal white space removed (notably around the TOC rail and section headings)
-[   ]  Two-column layout evaluated and applied where it helps (e.g., parameter tables / data-sources side by side); single column retained where columns would hurt readability
-[   ]  Mobile behavior unchanged (columns collapse below the existing 820 px breakpoint)
+[ ✓ ]  Tighter margins/heading spacing throughout the docs body
+[ ✓ ]  Two-column flow where it helps: the step-by-step reference and the troubleshooting/limits lists (columns only ≥1000 px; blocks kept intact via break rules)
+[ ✓ ]  Mobile behavior unchanged (single column below the breakpoint)
 
 Out of Scope
 * New documentation content (the Sep rewrite already covers the manual); naming corrections (FIMSIM-FE19)
 
-🚦 Status: Not started
+🚦 Status: ✅ Complete
 
 —
 
@@ -46,11 +46,11 @@ TASK: BYU CIROH: FIMsim GUI – Alpha Badge + Mode URL Slugs (FIMSIM-FE18)
 
 Description: Deployment decision: the portal version ships clearly labeled as the lightweight alpha (Dr. Cohen wants the web apps kept "light"; the FIMeval alpha uses the same convention). Parvaneh also proposed URL slugs distinguishing app modes (e.g. /fimsim/lisflood-fp) so users always know which model they're driving.
 
-[   ]  "Alpha" badge in the header chrome (FIMeval welcome-modal callout pattern for the copy: lightweight version, link to the desktop app for the full feature set)
-[   ]  Welcome modal mentions alpha status alongside the existing limits
+[ ✓ ]  "Alpha" badge in the header chrome (amber, with a tooltip pointing to the desktop app for the full feature set)
+[ ✓ ]  Welcome modal opens with the amber lightweight-alpha callout (FIMeval FE52 pattern) linking to the desktop FIMsim
 [ ✓ ]  Mode slug in the URL: /new/<project>/triton etc., with model-switch chips above the step rail (shipped with the TRITON work, 2026-09-10)
 
-🚦 Status: Not started
+🚦 Status: ✅ Complete
 
 —
 
