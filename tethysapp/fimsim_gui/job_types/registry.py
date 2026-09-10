@@ -157,16 +157,19 @@ class StepJobType:
 class UniformStepJobType(StepJobType):
     """Steps whose orchestrator takes (ctx_path, ctx, per_aoi_configs, log_fn)."""
 
-    #: attribute name on fimcore.orchestrate
+    #: attribute name on the orchestrator module
     orchestrator: str = ""
+    #: which fimcore module hosts it (TRITON steps point elsewhere)
+    orchestrator_module: str = "fimcore.orchestrate"
 
     def transform_config(self, cfg: dict, ctx) -> dict:
         """Hook: JSON config → fimcore kwargs (e.g. ISO strings → datetime)."""
         return cfg
 
     def execute(self, ctx_path, ctx, config, log_fn):
-        import fimcore.orchestrate as orch
+        import importlib
 
+        orch = importlib.import_module(self.orchestrator_module)
         fn = getattr(orch, self.orchestrator)
         cfg = self.transform_config(self.merged(config), ctx)
         fn(ctx_path, ctx, per_aoi_configs=[cfg], log_fn=log_fn)

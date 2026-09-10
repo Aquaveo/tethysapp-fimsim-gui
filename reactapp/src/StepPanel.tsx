@@ -11,6 +11,7 @@ import {
 } from './api';
 import HydrographChart from './HydrographChart';
 import ManningTable, { type ManningMapping } from './ManningTable';
+import StepOverview from './StepOverview';
 import { STEP_FIELDS, type FieldSpec } from './stepFields';
 import './StepPanel.css';
 
@@ -61,11 +62,15 @@ interface Props {
   stepKey: string;
   aois: ServerAoi[];
   schema: StepSchema | null;
+  /** the active model's job steps in order — drives the FE17 overview strip */
+  stepOrder?: { id: string; label: string }[];
   /** notify the wizard something changed (statuses refresh) */
   onSubmitted: () => void;
 }
 
-export default function StepPanel({ projectId, stepKey, aois, schema, onSubmitted }: Props) {
+export default function StepPanel({
+  projectId, stepKey, aois, schema, stepOrder = [], onSubmitted,
+}: Props) {
   const fields: FieldSpec[] = STEP_FIELDS[stepKey] ?? [];
   const defaults = useMemo(
     () => ({ ...(schema?.defaults ?? {}) }), [schema]);
@@ -231,6 +236,14 @@ export default function StepPanel({ projectId, stepKey, aois, schema, onSubmitte
                   </button>
                 )}
               </div>
+              <StepOverview aoi={a} stepOrder={stepOrder} currentStep={stepKey} />
+              {(stepKey === 'bci' || stepKey === 'tbc') && (
+                <p className="sp-field-help">
+                  Check the map on the Area of Interest step: the detected main
+                  river should enter and leave your rectangle where you expect —
+                  the inflow and outflow are placed where it crosses the edges.
+                </p>
+              )}
               {note && <div className="sp-note">{note}</div>}
               {run ? (
                 <>

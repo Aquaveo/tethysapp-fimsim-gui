@@ -422,7 +422,7 @@ def api_step_submit(request, session, project_id, step_key):
                 continue
         # per-AOI resource prechecks BEFORE anything is superseded or created
         guard_reason = None
-        if step_key == 'dem':
+        if step_key in ('dem', 'tdem'):
             guard_reason = guards.check_dem_submit(
                 aoi, jt.merged(merged_config),
                 _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS))

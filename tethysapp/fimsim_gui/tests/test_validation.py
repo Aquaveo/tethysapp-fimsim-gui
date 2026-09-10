@@ -14,6 +14,7 @@ def _problems(step, config):
 #: defaults) — bdy's event window has no sensible default
 REQUIRED_INPUT = {
     "bdy": {"start_dt": "2016-10-05T00:00", "end_dt": "2016-10-15T00:00"},
+    "thyg": {"start_dt": "2016-10-05T00:00", "end_dt": "2016-10-15T00:00"},
 }
 
 

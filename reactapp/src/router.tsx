@@ -21,6 +21,7 @@ export const router = createBrowserRouter(
         { index: true, element: <Navigate to="/new" replace /> },
         { path: 'new', element: <NewSimulation /> },
         { path: 'new/:projectId', element: <NewSimulation /> },
+        { path: 'new/:projectId/:model', element: <NewSimulation /> },
         { path: 'docs', element: <Docs /> },
       ],
     },

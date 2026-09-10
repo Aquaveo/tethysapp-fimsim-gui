@@ -80,7 +80,11 @@ PER_AOI_KEY_HOMES = {
 }
 
 # Step keys, in wizard order (mirrors reactapp/src/steps.ts).
-STEP_KEYS = ("dem", "manning", "bci", "bdy", "par", "run")
+# wizard order per model: LISFLOOD-FP first (runs on the portal), then the
+# TRITON deck steps (t*). Supersede uses the REGISTRY dependency graph, not
+# this order — the tuple orders zips/summaries and namespaces storage keys.
+STEP_KEYS = ("dem", "manning", "bci", "bdy", "par", "run",
+             "tdem", "tfric", "tbc", "thyg", "tcfg")
 
 STEPRUN_STATUSES = (
     "pending", "queued", "running", "uploading",
@@ -220,6 +224,9 @@ class StepRun(Base):
             "id": self.id,
             "status": self.status,
             "finished": self.finished.isoformat() + "Z" if self.finished else None,
+            # the submitted config, for the per-step overview chips (FE17) —
+            # small dicts; server-only values are never client-sensitive here
+            "config": self.config or {},
         }
 
     def to_dict(self):

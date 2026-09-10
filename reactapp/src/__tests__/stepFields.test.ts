@@ -2,13 +2,14 @@
 // wizard's field specs so a typo in a key/showIf can't silently hide a field.
 import { describe, expect, it } from 'vitest';
 import { STEP_FIELDS } from '../stepFields';
-import { STEPS } from '../steps';
+import { MODELS } from '../steps';
 
 const entries = Object.entries(STEP_FIELDS);
 
 describe('STEP_FIELDS consistency', () => {
   it('covers only real wizard steps', () => {
-    const known = new Set(STEPS.map((s) => s.id));
+    const known = new Set(
+      Object.values(MODELS).flatMap((m) => m.steps.map((s) => s.id)));
     const strays = entries.map(([step]) => step).filter((s) => !known.has(s as never));
     expect(strays).toEqual([]);
   });

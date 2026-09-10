@@ -14,6 +14,8 @@ import './ResultsStep.css';
 const STEP_LABELS: Record<string, string> = {
   dem: 'Terrain', manning: 'Roughness', bci: 'Boundaries',
   bdy: 'Flow Data', par: 'Settings', run: 'Simulation',
+  tdem: 'Terrain', tfric: 'Friction', tbc: 'Boundaries',
+  thyg: 'Hydrograph', tcfg: 'Config',
 };
 
 interface FileRow {
@@ -32,7 +34,11 @@ interface AoiResult {
   bdyRun?: ServerStepRun;
 }
 
-export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
+export default function ResultsStep({ aois, hasRunStep = true }: {
+  aois: ServerAoi[];
+  /** false for deck-only models (TRITON): no flood overlay, no run nagging */
+  hasRunStep?: boolean;
+}) {
   const [results, setResults] = useState<AoiResult[]>([]);
   const [opacity, setOpacity] = useState(0.8);
 
@@ -99,7 +105,7 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
 
   return (
     <div className="sp-wrap">
-      {anySucceeded ? (
+      {hasRunStep && (anySucceeded ? (
         <div className="sp-field" style={{ maxWidth: '18rem' }}>
           <span className="sp-field-label">Flood layer opacity</span>
           <input type="range" min={0.1} max={1} step={0.05} value={opacity}
@@ -107,7 +113,7 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
         </div>
       ) : (
         <p className="sp-muted">No completed simulations yet — finish the Run step first.</p>
-      )}
+      ))}
 
       <AoiMap
         aois={aois}
