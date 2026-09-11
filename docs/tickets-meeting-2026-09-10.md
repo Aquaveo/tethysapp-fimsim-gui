@@ -1,10 +1,8 @@
 # FIMsim GUI — tickets from the testing/demo meeting (Sep 10, 2026)
 
 Reshma's FIMsim/TRITON action items from the joint testing session (Reshma,
-Parvaneh, Dipsikha, Dinuke). Reshma's FIMeval items from the same meeting
-(username display on run history; medians computed from the source CSV, with
-TN/FP/FN medians excluded but TN/FP metrics retained) belong on the FIMeval
-board, not here.
+Parvaneh, Dipsikha, Dinuke). FIMeval items from the same meeting live on the
+FIMeval board.
 
 Waiting on others: Parvaneh owes example/test datasets + a user-CSV sample
 (two columns, specific headers) + valid land-cover year ranges + the
