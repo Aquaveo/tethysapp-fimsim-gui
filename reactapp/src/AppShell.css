@@ -164,3 +164,17 @@
   .wk-nav { flex-basis: 128px; }
   .wk-detail { padding: 1rem; }
 }
+
+/* FE18: alpha badge — amber, distinct from the cyan brand accents */
+.wk-alpha-badge {
+  display: inline-block;
+  padding: 0.3rem 0.9rem;
+  border-radius: 999px;
+  border: 2px solid var(--color-warning);
+  color: var(--color-warning);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: help;
+}

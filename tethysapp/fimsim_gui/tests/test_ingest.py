@@ -1,6 +1,5 @@
 """FIMSIM-BE6 ingestion tests — the three accepted formats (using the desktop
 repo's bundled test AOIs), every rejection path, and the zip-slip guard."""
-import io
 import json
 import zipfile
 from pathlib import Path

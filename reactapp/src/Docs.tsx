@@ -11,6 +11,7 @@ const SECTIONS = [
   ['overview', 'Overview'],
   ['aoi', 'Drawing a good study area'],
   ['steps', 'The wizard, step by step'],
+  ['triton', 'TRITON (deck generation)'],
   ['data', 'Data sources'],
   ['formats', 'Output files & formats'],
   ['tutorial', 'Tutorial: Hurricane Matthew'],
@@ -51,9 +52,12 @@ export default function Docs() {
             You define a study area; FIMsim downloads every input the model
             needs — terrain (USGS 3DEP), land cover and Manning&apos;s
             roughness (NLCD / Esri Sentinel-2), the river network (NHD), and
-            streamflow (National Water Model or USGS gages) — writes the
-            LISFLOOD-FP configuration, runs the simulation on the portal&apos;s
-            compute cluster, and maps the flood.
+            streamflow (National Water Model or USGS gages). For{' '}
+            <strong>LISFLOOD-FP</strong> it then runs the simulation on the
+            portal&apos;s compute cluster and maps the flood; for{' '}
+            <strong>TRITON</strong> it generates the complete input deck for
+            you to download and run on your own GPU/HPC system — switch models
+            with the chips above the step rail.
           </p>
           <img
             className="dc-diagram"
@@ -137,11 +141,12 @@ export default function Docs() {
           <h3>3 · Terrain</h3>
           <p>
             Downloads elevation and grids it for the model
-            (<code>dem.ascii</code>). Sources: <strong>USGS 3DEP</strong>{' '}
-            (standard elevation; 10 m is the baseline product) or{' '}
+            (<code>dem.ascii</code>). Sources: the{' '}
+            <strong>USGS 3DEP 1/3 arc-second DEM</strong> (~10 m — the native
+            product; other resolutions are resampled from it) or{' '}
             <strong>TACC HAND</strong> (height above nearest drainage). Finer
-            resolutions (1 m / 3 m) increase download sizes and simulation
-            times substantially; 30 m / 90 m are useful for fast previews.
+            grids (1 m / 3 m) increase simulation times substantially;
+            30 m / 90 m are useful for fast previews.
           </p>
 
           <h3>4 · Roughness</h3>
@@ -235,6 +240,30 @@ export default function Docs() {
           </p>
         </section>
 
+        <section id="triton">
+          <h2>TRITON (deck generation)</h2>
+          <p>
+            The TRITON wizard mirrors the desktop&apos;s tabs and produces the
+            full input package in <code>triton-files/</code>: the terrain grid
+            (<code>dem.asc</code>), the friction grid
+            (<code>friction.asc</code>, a headerless Manning&apos;s n matrix),
+            the inflow source point and downstream external boundary
+            (<code>.src</code> + <code>.extbc</code>), the inflow hydrograph
+            (<code>.hyg</code>, hours vs m³/s), and the control file
+            (<code>.cfg</code>) with file references, source counts, and the
+            simulation duration filled in automatically from the hydrograph.
+          </p>
+          <p>
+            TRITON itself is ORNL&apos;s GPU/OpenMP solver — like the desktop
+            FIMsim, the web app hands you the ready-to-run package rather than
+            executing it. Download everything from the Results step and run it
+            per the{' '}
+            <a href="https://triton.ornl.gov/documentation/" target="_blank" rel="noreferrer">
+              TRITON documentation
+            </a>.
+          </p>
+        </section>
+
         <section id="data">
           <h2>Data sources</h2>
           <div className="dc-tablewrap">
@@ -243,7 +272,7 @@ export default function Docs() {
                 <tr><th>Dataset</th><th>Provider</th><th>Coverage</th></tr>
               </thead>
               <tbody>
-                <tr><td>Elevation (DEM)</td><td>USGS 3DEP</td><td>USA · 1 m – 90 m</td></tr>
+                <tr><td>Elevation (DEM)</td><td>USGS 3DEP 1/3 arc-second (~10 m)</td><td>USA · resampled to 1–90 m</td></tr>
                 <tr><td>HAND</td><td>TACC</td><td>USA</td></tr>
                 <tr><td>Land cover</td><td>NLCD — USGS</td><td>USA · 30 m</td></tr>
                 <tr><td>Land cover</td><td>Sentinel-2 — Esri</td><td>Global · 10 m</td></tr>

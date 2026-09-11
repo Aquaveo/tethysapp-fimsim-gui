@@ -44,6 +44,14 @@ export default function WelcomeModal({ onClose }: Props) {
         </div>
 
         <div className="wm-body">
+          <div className="wm-alpha" role="note">
+            This is the <strong>lightweight alpha</strong> of FIMsim — tuned
+            for a shared portal. For the full feature set (TRITON execution,
+            OWP HAND-FIM, ARC-Curve2Flood, standalone data tools), use the{' '}
+            <a href="https://github.com/pnikrou/FIMsim" target="_blank" rel="noreferrer">
+              desktop FIMsim
+            </a>.
+          </div>
           <p>
             Define a study area and FIMsim downloads every input a LISFLOOD-FP
             flood simulation needs — terrain, land cover, river network,
@@ -59,14 +67,24 @@ export default function WelcomeModal({ onClose }: Props) {
               </a>.
             </li>
             <li>
-              <strong>{baseline} elevation is the baseline product.</strong>{' '}
-              Finer resolutions (1 m / 3 m) are available but increase
-              simulation times substantially.
+              <strong>Elevation comes from the USGS 3DEP 1/3 arc-second DEM
+              (~{baseline}).</strong> Other resolutions are resampled from it;
+              finer grids increase simulation times substantially.
+            </li>
+            <li>
+              <strong>You can run several study areas at once</strong> — each
+              polygon in an upload (or each drawn area) becomes its own
+              simulation.
             </li>
             <li>
               <strong>Areas must be rectangular</strong> (a LISFLOOD-FP/TRITON
               mesh requirement) — draw any shape and it closes into its
               enclosing rectangle automatically.
+            </li>
+            <li>
+              <strong>Two models:</strong> LISFLOOD-FP runs right here on the
+              portal; TRITON generates a ready-to-run input deck for your own
+              GPU/HPC system.
             </li>
             <li>
               <strong>Your work is saved per project</strong> — reopen it any

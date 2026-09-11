@@ -101,7 +101,7 @@ def test_adapter_caps_progress_events():
 
 def test_adapter_bounds_log_size():
     a, run, _ = _adapter()
-    for i in range(300):
+    for _i in range(300):
         a("x" * 1000)
     assert len(run.log) <= 100_000
 

@@ -18,8 +18,11 @@ export default function Header() {
         </span>
       </Link>
       <nav className="wk-header-actions">
-        <span className="wk-model-badge" title="TRITON, OWP HAND-FIM, and ARC-Curve2Flood arrive after the MVP">
-          LISFLOOD-FP
+        <span
+          className="wk-alpha-badge"
+          title="Lightweight alpha — for the full feature set (HAND-FIM, ARC, standalone tools) use the desktop FIMsim"
+        >
+          Alpha
         </span>
         <NavLink
           to="/docs"

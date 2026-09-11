@@ -78,8 +78,9 @@ class LogAdapter:
         self._last_flush = 0.0
         self._last_cancel_check = 0.0
         self._cancel_latched = False
-        self.failure_messages = []  # ✗ markers — fimcore orchestrators swallow
-                                    # per-AOI exceptions, so the wrapper checks this
+        # ✗ markers — fimcore orchestrators swallow per-AOI exceptions,
+        # so the wrapper checks this list after execute()
+        self.failure_messages = []
 
     def __call__(self, line):
         line = str(line)
@@ -505,10 +506,21 @@ def prerequisites_missing(aoi, step_key) -> list:
 
 def supersede_step_and_downstream(aoi, step_key) -> int:
     """Re-run semantics: a resubmit supersedes this step's runs AND every
-    downstream step's (their inputs just changed). Returns count superseded."""
-    from tethysapp.fimsim_gui.models import STEP_KEYS
+    step downstream of it in the REGISTRY dependency graph (their inputs just
+    changed). Graph-based, not list-order-based: with two models in
+    STEP_KEYS, a LISFLOOD re-run must not invalidate TRITON decks (and vice
+    versa). Returns count superseded."""
+    from tethysapp.fimsim_gui.job_types import REGISTRY
 
-    invalidated = STEP_KEYS[STEP_KEYS.index(step_key):]
+    invalidated = {step_key}
+    # transitive closure over `requires` edges
+    changed = True
+    while changed:
+        changed = False
+        for key, jt in REGISTRY.items():
+            if key not in invalidated and invalidated & set(jt.requires):
+                invalidated.add(key)
+                changed = True
     n = 0
     for run in aoi.step_runs:
         if run.step_key in invalidated and not run.superseded:

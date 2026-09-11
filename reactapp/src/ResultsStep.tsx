@@ -14,6 +14,8 @@ import './ResultsStep.css';
 const STEP_LABELS: Record<string, string> = {
   dem: 'Terrain', manning: 'Roughness', bci: 'Boundaries',
   bdy: 'Flow Data', par: 'Settings', run: 'Simulation',
+  tdem: 'Terrain', tfric: 'Friction', tbc: 'Boundaries',
+  thyg: 'Hydrograph', tcfg: 'Config',
 };
 
 interface FileRow {
@@ -32,18 +34,28 @@ interface AoiResult {
   bdyRun?: ServerStepRun;
 }
 
-export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
+export default function ResultsStep({ aois, hasRunStep = true }: {
+  aois: ServerAoi[];
+  /** false for deck-only models (TRITON): no flood overlay, no run nagging */
+  hasRunStep?: boolean;
+}) {
   const [results, setResults] = useState<AoiResult[]>([]);
   const [opacity, setOpacity] = useState(0.8);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const out: AoiResult[] = [];
-      for (const aoi of aois) {
+      // All step-run fetches go out in parallel (per AOI and across AOIs);
+      // the dedupe below still walks steps in aoi.steps insertion order, so
+      // "first step that produced the file" stays deterministic.
+      const out: AoiResult[] = await Promise.all(aois.map(async (aoi) => {
         const res: AoiResult = { aoi, runStatus: null, files: [] };
-        for (const [step, summary] of Object.entries(aoi.steps ?? {})) {
-          const run = await getStepRun(summary.id).catch(() => null);
+        const entries = Object.entries(aoi.steps ?? {});
+        const runs = await Promise.all(
+          entries.map(([, summary]) => getStepRun(summary.id).catch(() => null)));
+        for (let k = 0; k < entries.length; k++) {
+          const [step] = entries[k];
+          const run = runs[k];
           if (!run || run.status !== 'succeeded') {
             if (step === 'run') res.runStatus = run?.status ?? null;
             continue;
@@ -81,8 +93,8 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
             }
           }
         }
-        out.push(res);
-      }
+        return res;
+      }));
       if (alive) setResults(out);
     })();
     return () => { alive = false; };
@@ -93,7 +105,7 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
 
   return (
     <div className="sp-wrap">
-      {anySucceeded ? (
+      {hasRunStep && (anySucceeded ? (
         <div className="sp-field" style={{ maxWidth: '18rem' }}>
           <span className="sp-field-label">Flood layer opacity</span>
           <input type="range" min={0.1} max={1} step={0.05} value={opacity}
@@ -101,7 +113,7 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
         </div>
       ) : (
         <p className="sp-muted">No completed simulations yet — finish the Run step first.</p>
-      )}
+      ))}
 
       <AoiMap
         aois={aois}
