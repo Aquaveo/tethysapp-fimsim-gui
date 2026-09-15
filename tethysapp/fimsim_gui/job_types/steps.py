@@ -136,10 +136,21 @@ class ManningStepJobType(UniformStepJobType):
 
 
 class BCIStepJobType(UniformStepJobType):
-    clean_patterns = ("*.bci", "NHD_flowlines_*.gpkg")
+    clean_patterns = ("*.bci", "NHD_flowlines_*.gpkg", "preview_features.geojson")
     step_key = "bci"
     requires = ("dem",)
     orchestrator = "run_lisflood_bci_for_all_aois"
+
+    def collect(self, ctx, workdir) -> str:
+        # boundary-marker preview (visuals plan Phase 1): upstream/downstream
+        # + main river, reprojected worker-side
+        from tethysapp.fimsim_gui.job_types.previews import write_boundary_preview
+        outputs = super().collect(ctx, workdir)
+        try:
+            write_boundary_preview(ctx, outputs)
+        except Exception:  # a preview must never fail the step
+            pass
+        return outputs
 
     def defaults(self) -> dict:
         return {

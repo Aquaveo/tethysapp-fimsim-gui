@@ -9,6 +9,7 @@ import {
   ApiError, cancelStepRun, getStepRun, getStepRunOutputs, submitStep,
   type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
 } from './api';
+import BoundaryPreview from './BoundaryPreview';
 import HydrographChart from './HydrographChart';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
@@ -250,6 +251,9 @@ export default function StepPanel({
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
                   {run.status === 'succeeded' && stepKey === 'bdy' && (
                     <HydrographChart run={run} />
+                  )}
+                  {run.status === 'succeeded' && (stepKey === 'bci' || stepKey === 'tbc') && (
+                    <BoundaryPreview aoi={a} run={run} defaultOpen={aois.length === 1} />
                   )}
                   {run.status === 'succeeded' && <Outputs runId={run.id} />}
                   {run.status === 'failed' && (

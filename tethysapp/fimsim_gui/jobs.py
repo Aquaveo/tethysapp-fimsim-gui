@@ -33,6 +33,13 @@ class JobCancelled(Exception):
     pass
 
 
+class ProjBroken(RuntimeError):
+    """PROJ transforms return inf and in-process retries cannot heal it —
+    the process's libproj database context is poisoned at the C level. The
+    job wrappers record the failure, then exit the worker so the nanny
+    respawns a clean process (resubmits then succeed)."""
+
+
 class JobTimeout(Exception):
     pass
 
@@ -157,17 +164,24 @@ def _sanity_check_proj():
             wheel = Path(pyproj.__file__).parent / "proj_dir" / "share" / "proj"
             if (wheel / "proj.db").exists():
                 pyproj.datadir.set_data_dir(str(wheel))
+            # belt-and-braces: clear any transformer caches (a no-op on
+            # pyproj 3.7, which has none — the real healing is the worker
+            # self-restart in the wrappers when this check ultimately fails)
+            import pyproj.transformer as _pt
+            for cached in ("TransformerFromCRS", "TransformerFromPipeline"):
+                fn = getattr(_pt, cached, None)
+                if fn is not None and hasattr(fn, "cache_clear"):
+                    fn.cache_clear()
         from pyproj import Transformer
         x, y = Transformer.from_crs(26917, 4326, always_xy=True).transform(
             762300, 3909100)
         if -180 <= x <= 180 and -90 <= y <= 90:
             return
         last = (x, y)
-    raise RuntimeError(
+    raise ProjBroken(
         f"pyproj transform returned {last} after 3 attempts — PROJ data is "
-        f"broken on this worker (PROJ_DATA={os.environ.get('PROJ_DATA')!r}). "
-        f"Align the env's PROJ database with the pyproj build before running "
-        f"jobs."
+        f"broken in this worker process (PROJ_DATA="
+        f"{os.environ.get('PROJ_DATA')!r}); the worker will restart itself."
     )
 
 
@@ -328,12 +342,28 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         tb_tail = traceback.format_exc()[-4000:]
         _finalize(session, steprun_id, "failed",
                   f"{type(exc).__name__}: {exc}\n{tb_tail}")
+        if isinstance(exc, ProjBroken):
+            _exit_poisoned_worker(session, engine)
         return {"status": "failed", "steprun_id": steprun_id, "error": str(exc)}
     finally:
         if scratch is not None:
             shutil.rmtree(scratch, ignore_errors=True)
         session.close()
         engine.dispose()
+
+
+def _exit_poisoned_worker(session, engine):
+    """Hard-exit a worker whose PROJ state is unfixable. The failure is
+    already committed to the DB; the Dask nanny respawns a fresh process, so
+    the user's resubmit lands on healthy PROJ. os._exit skips finalizers by
+    design (scratch dirs are reaped separately)."""
+    import os as _os
+    try:
+        session.close()
+        engine.dispose()
+    except Exception:
+        pass
+    _os._exit(70)
 
 
 def _finalize(session, steprun_id, status, error):
@@ -457,6 +487,8 @@ def run_aoi_lookup(db_url: str, aoi_id: int) -> dict:
             aoi.lookup_status = "failed"
             aoi.lookup_error = f"{type(exc).__name__}: {exc}"
             session.commit()
+        if isinstance(exc, ProjBroken):
+            _exit_poisoned_worker(session, engine)
         return {"status": "failed", "aoi_id": aoi_id, "error": str(exc)}
     finally:
         if scratch is not None:

@@ -110,8 +110,18 @@ class TritonBCJobType(TritonDeckMixin, UniformStepJobType):
     requires = ("tdem",)
     orchestrator = "run_triton_bc_for_all_aois"
     orchestrator_module = "fimcore.triton_orchestrate"
-    clean_patterns = ("*.src", "*.extbc", "*_inflow_loc.txt", "NHD_flowlines_*.gpkg")
+    clean_patterns = ("*.src", "*.extbc", "*_inflow_loc.txt",
+                      "NHD_flowlines_*.gpkg", "preview_features.geojson")
     extra_config_keys = ("value",)
+
+    def collect(self, ctx, workdir) -> str:
+        from tethysapp.fimsim_gui.job_types.previews import write_boundary_preview
+        outputs = super().collect(ctx, workdir)
+        try:
+            write_boundary_preview(ctx, outputs)
+        except Exception:  # a preview must never fail the step
+            pass
+        return outputs
 
     def defaults(self) -> dict:
         # desktop BC panel defaults: normal slope 0.001
