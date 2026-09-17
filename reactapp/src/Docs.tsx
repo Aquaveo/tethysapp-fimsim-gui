@@ -12,6 +12,7 @@ const SECTIONS = [
   ['aoi', 'Drawing a good study area'],
   ['steps', 'The wizard, step by step'],
   ['triton', 'TRITON (deck generation)'],
+  ['previews', 'Reading the step previews'],
   ['data', 'Data sources'],
   ['formats', 'Output files & formats'],
   ['tutorial', 'Tutorial: Hurricane Matthew'],
@@ -262,6 +263,49 @@ export default function Docs() {
               TRITON documentation
             </a>.
           </p>
+        </section>
+
+        <section id="previews">
+          <h2>Reading the step previews</h2>
+          <p>
+            Every data step shows its result on the map right after it runs —
+            check each one before moving on, and errors surface where they
+            happen instead of as an empty flood map at the end.
+          </p>
+          <ul>
+            <li>
+              <strong>Terrain:</strong> the elevation model drapes over the
+              basemap (blue-green = low, brown-white = high). The stats line
+              gives the grid size, resolution, CRS, and elevation range —
+              sanity-check that the river valley reads as the low corridor.
+            </li>
+            <li>
+              <strong>Roughness / Friction:</strong> toggle between the
+              land-cover classes and the Manning&apos;s n grid; the breakdown
+              table lists each class&apos;s share of the area and the n value
+              the model will use.
+            </li>
+            <li>
+              <strong>Boundaries:</strong> the critical check. The{' '}
+              <strong>upstream marker (orange)</strong> must sit where the main
+              river <em>enters</em> your area and the{' '}
+              <strong>downstream marker (red)</strong> where it <em>exits</em> —
+              both at the domain edge. If either is misplaced, fix the study
+              area (or the boundary settings) before running: misplaced
+              boundaries cause empty flood maps or water pooling against an
+              artificial wall.
+            </li>
+            <li>
+              <strong>Flow Data / Hydrograph:</strong> the event hydrograph
+              with its source and reach/gage id. Include 2–3 days of
+              lead-in before the flood peak — hydrodynamic models need
+              spin-up time.
+            </li>
+            <li>
+              <strong>Settings / Config:</strong> the generated control file,
+              exactly as the solver will read it.
+            </li>
+          </ul>
         </section>
 
         <section id="data">

@@ -122,6 +122,9 @@ export default function AoiMap({
       container: container.current,
       style: {
         version: 8,
+        // symbol layers (gage numbers, river label) need a glyph server;
+        // same trust level as the Esri basemap tiles we already load
+        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
         sources: {
           basemap: {
             type: 'raster',
@@ -156,11 +159,31 @@ export default function AoiMap({
             paint: { 'line-color': '#123458', 'line-width': 3 },
           },
           {
-            // USGS gages — click for details
+            // USGS gages — click for details (desktop: numbered dots)
             id: 'gages', type: 'circle', source: 'gages',
             paint: {
-              'circle-radius': 6, 'circle-color': '#FFC107',
+              'circle-radius': 8, 'circle-color': '#FFC107',
               'circle-stroke-color': '#123458', 'circle-stroke-width': 2,
+            },
+          },
+          {
+            id: 'gage-nums', type: 'symbol', source: 'gages',
+            layout: {
+              'text-field': ['get', 'num'], 'text-size': 10,
+              'text-font': ['Noto Sans Bold'], 'text-allow-overlap': true,
+            },
+            paint: { 'text-color': '#123458' },
+          },
+          {
+            // main-river name along the line (desktop: panel title = river name)
+            id: 'river-label', type: 'symbol', source: 'mainriver',
+            layout: {
+              'symbol-placement': 'line', 'text-field': ['get', 'label'],
+              'text-size': 12, 'text-font': ['Noto Sans Bold'],
+            },
+            paint: {
+              'text-color': '#123458', 'text-halo-color': '#ffffff',
+              'text-halo-width': 1.5,
             },
           },
           {
@@ -385,15 +408,22 @@ export default function AoiMap({
 
     const collect = (key: 'flowlines' | 'main_river'): FeatureCollection => ({
       type: 'FeatureCollection',
-      features: aois.flatMap((a) => a.lookup?.[key]?.features ?? []),
+      features: aois.flatMap((a) =>
+        (a.lookup?.[key]?.features ?? []).map((f) => ({
+          ...f,
+          // river-name label rides the feature (desktop: title = river name)
+          properties: { ...f.properties,
+            label: key === 'main_river' ? (a.river_name ?? '') : '' },
+        }))),
     });
     (map.getSource('flowlines') as maplibregl.GeoJSONSource | undefined)?.setData(collect('flowlines'));
     (map.getSource('mainriver') as maplibregl.GeoJSONSource | undefined)?.setData(collect('main_river'));
     const gagesFc: FeatureCollection = {
       type: 'FeatureCollection',
-      features: aois.flatMap((a) => (a.lookup?.gages ?? []).map((g): Feature => ({
+      features: aois.flatMap((a) => (a.lookup?.gages ?? []).map((g, i): Feature => ({
         type: 'Feature',
-        properties: { site_no: g.site_no, station_nm: g.station_nm },
+        properties: { site_no: g.site_no, station_nm: g.station_nm,
+                      num: String(i + 1) },
         geometry: { type: 'Point', coordinates: [g.lon, g.lat] },
       }))),
     };
