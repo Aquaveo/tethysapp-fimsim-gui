@@ -134,7 +134,7 @@ Description: Parvaneh's twice-requested per-step visuals, replicated from a full
 [ ✓ ]  Terrain: elevation overlay ('terrain' ramp, transparent nodata) + ramp legend + stats line (grid, resolution, CRS, min/max/mean) (e15cb80)
 [ ✓ ]  Roughness/Friction: LULC ⇄ Manning-n overlay toggle + land-cover breakdown table (km², % area by pixel counts, effective n) — closes FIMSIM-BE12 (e15cb80)
 [ ✓ ]  Settings/Config/Boundaries: generated .par/.cfg/.bci/.src/.extbc monospace previews + LISFLOOD run-command chip; hydrograph gains its source · reach/gage caption; AOI map gains numbered gages + river-name label; docs section "Reading the step previews" (d1dd8ed)
-[ ✓ ]  Works for both models; previews can never fail a step; downsampled reads capped (worker memory); 93 backend tests green incl. exact %-table pins
+[ ✓ ]  Works for both models; previews can never fail a step; downsampled reads capped (worker memory); 90 backend tests green incl. exact %-table pins
 [ ✓ ]  Screenshot-verified headless per phase on the Neuse project
 
 Notes: FE26 (opacity slider) not reproducible — probe kept as a regression check. Hardening ride-along: ProjBroken workers now self-restart (nanny respawn), verified live. Deferred: boundary markers under the Results flood map; the desktop's CONUS/state locator panels (the web map's zoom-out covers it).
