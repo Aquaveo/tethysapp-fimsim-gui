@@ -123,3 +123,20 @@ Notes: BLOCKED on Parvaneh's confirmed year ranges (interim values can ship).
 * **User-defined CSV hydrograph upload** — desktop has it, web doesn't;
   becomes a ticket once Parvaneh's sample CSV (two columns, specific headers)
   arrives.
+
+—
+
+TASK: BYU CIROH: FIMsim GUI – Per-Step Visual Previews (Desktop Parity) (FIMSIM-BE16/FE29)
+
+Description: Parvaneh's twice-requested per-step visuals, replicated from a full inventory of the desktop's preview code (gui/*_preview.py) and delivered on the web's interactive map. Plan artifact: claude.ai/code/artifact/23f62590 (signed off 2026-09-15; shipped 2026-09-17).
+
+[ ✓ ]  Boundaries/BC: upstream (orange/#f6ad55) + downstream (red/#f56565) markers + main river on the map, desktop symbology verbatim, legend + edge-placement guidance; GeoJSON reprojected to WGS84 on the worker (commit 791c1a7)
+[ ✓ ]  Terrain: elevation overlay ('terrain' ramp, transparent nodata) + ramp legend + stats line (grid, resolution, CRS, min/max/mean) (e15cb80)
+[ ✓ ]  Roughness/Friction: LULC ⇄ Manning-n overlay toggle + land-cover breakdown table (km², % area by pixel counts, effective n) — closes FIMSIM-BE12 (e15cb80)
+[ ✓ ]  Settings/Config/Boundaries: generated .par/.cfg/.bci/.src/.extbc monospace previews + LISFLOOD run-command chip; hydrograph gains its source · reach/gage caption; AOI map gains numbered gages + river-name label; docs section "Reading the step previews" (d1dd8ed)
+[ ✓ ]  Works for both models; previews can never fail a step; downsampled reads capped (worker memory); 93 backend tests green incl. exact %-table pins
+[ ✓ ]  Screenshot-verified headless per phase on the Neuse project
+
+Notes: FE26 (opacity slider) not reproducible — probe kept as a regression check. Hardening ride-along: ProjBroken workers now self-restart (nanny respawn), verified live. Deferred: boundary markers under the Results flood map; the desktop's CONUS/state locator panels (the web map's zoom-out covers it).
+
+🚦 Status: ✅ Complete
