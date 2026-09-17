@@ -77,6 +77,15 @@ class TritonDEMJobType(TritonDeckMixin, DEMStepJobType):
             log_fn=log_fn,
         )
 
+    def collect(self, ctx, workdir) -> str:
+        from tethysapp.fimsim_gui.job_types.previews import write_dem_preview
+        outputs = super().collect(ctx, workdir)
+        try:
+            write_dem_preview(ctx, outputs)
+        except Exception:  # a preview must never fail the step
+            pass
+        return outputs
+
 
 class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
     step_key = "tfric"
@@ -103,6 +112,25 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
         _check_number(config, "lulc_year", 1985, 2035, problems)
         _check_choice(config, "dem_res_m", (1, 3, 10, 30, 90), problems)
         return problems
+
+    def transform_config(self, cfg: dict, ctx) -> dict:
+        if ctx is not None:
+            ctx["_preview_lulc_source"] = cfg.get("lulc_source", "download")
+            ctx["_preview_manning_mapping"] = cfg.get("manning_mapping") \
+                or cfg.get("lulc_class_to_n")
+        return cfg
+
+    def collect(self, ctx, workdir) -> str:
+        from tethysapp.fimsim_gui.job_types.previews import write_manning_preview
+        outputs = super().collect(ctx, workdir)
+        try:
+            write_manning_preview(
+                ctx, outputs,
+                lulc_source=ctx.get("_preview_lulc_source", "download"),
+                manning_mapping=ctx.get("_preview_manning_mapping"))
+        except Exception:  # a preview must never fail the step
+            pass
+        return outputs
 
 
 class TritonBCJobType(TritonDeckMixin, UniformStepJobType):

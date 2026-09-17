@@ -29,6 +29,16 @@ class DEMStepJobType(StepJobType):
         _check_choice(config, "dem_res_m", (1, 3, 10, 30, 90), problems)
         return problems
 
+    def collect(self, ctx, workdir) -> str:
+        # terrain preview (visuals plan Phase 2)
+        from tethysapp.fimsim_gui.job_types.previews import write_dem_preview
+        outputs = super().collect(ctx, workdir)
+        try:
+            write_dem_preview(ctx, outputs)
+        except Exception:  # a preview must never fail the step
+            pass
+        return outputs
+
     # -- BE11: share full 3DEP tiles across users (fimcore's full-tile path
     #    already skips downloads for valid local tiles, so pre-staging them
     #    is a cache hit with zero engine changes; windowed *_aoi.tif reads
@@ -101,6 +111,26 @@ class ManningStepJobType(UniformStepJobType):
     step_key = "manning"
     requires = ("dem",)
     orchestrator = "run_lisflood_manning_for_all_aois"
+
+    def transform_config(self, cfg: dict, ctx) -> dict:
+        # stash what the preview needs (collect() doesn't see the config)
+        if ctx is not None:
+            ctx["_preview_lulc_source"] = cfg.get("lulc_download_source", "esri")
+            ctx["_preview_manning_mapping"] = cfg.get("manning_mapping")
+        return cfg
+
+    def collect(self, ctx, workdir) -> str:
+        # land-cover + Manning previews incl. the coverage-% table (BE12)
+        from tethysapp.fimsim_gui.job_types.previews import write_manning_preview
+        outputs = super().collect(ctx, workdir)
+        try:
+            write_manning_preview(
+                ctx, outputs,
+                lulc_source=ctx.get("_preview_lulc_source", "esri"),
+                manning_mapping=ctx.get("_preview_manning_mapping"))
+        except Exception:  # a preview must never fail the step
+            pass
+        return outputs
 
     extra_config_keys = ("fpfric_val", "manning_mapping")
 

@@ -11,6 +11,7 @@ import {
 } from './api';
 import BoundaryPreview from './BoundaryPreview';
 import HydrographChart from './HydrographChart';
+import RasterPreview from './RasterPreview';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import { STEP_FIELDS, type FieldSpec } from './stepFields';
@@ -254,6 +255,14 @@ export default function StepPanel({
                   )}
                   {run.status === 'succeeded' && (stepKey === 'bci' || stepKey === 'tbc') && (
                     <BoundaryPreview aoi={a} run={run} defaultOpen={aois.length === 1} />
+                  )}
+                  {run.status === 'succeeded' && (stepKey === 'dem' || stepKey === 'tdem') && (
+                    <RasterPreview aoi={a} run={run} kind="dem"
+                                   defaultOpen={aois.length === 1} />
+                  )}
+                  {run.status === 'succeeded' && (stepKey === 'manning' || stepKey === 'tfric') && (
+                    <RasterPreview aoi={a} run={run} kind="lulc"
+                                   defaultOpen={aois.length === 1} />
                   )}
                   {run.status === 'succeeded' && <Outputs runId={run.id} />}
                   {run.status === 'failed' && (
