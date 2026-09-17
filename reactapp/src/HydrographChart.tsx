@@ -13,6 +13,7 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
   const [series, setSeries] = useState<Series[] | null>(null);
   const [unit, setUnit] = useState<'m³/s' | 'm²/s'>('m³/s');
   const [error, setError] = useState<string | null>(null);
+  const [sourceNote, setSourceNote] = useState<string>('');
 
   const startMs = useMemo(() => {
     const s = run.config?.start_dt;
@@ -30,6 +31,16 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
         // the solver, misleading as "discharge".
         // same-origin proxy: presigned MinIO URLs are CORS-hostile to fetch()
         const csv = outputs.find((o) => /discharge.*\.csv$/i.test(o.name));
+        {
+          // Phase 3: the desktop's per-AOI caption — data source + reach/gage id
+          const cfg = (run.config ?? {}) as Record<string, unknown>;
+          const src = String(cfg.bdy_source ?? 'nwm_retro');
+          const reach = csv && /NWM_(\d+)_/.exec(csv.name)?.[1];
+          if (alive) setSourceNote(
+            src === 'usgs' ? `USGS gage ${cfg.gage_id ?? '?'}`
+              : src === 'nwm_forecast' ? `NWM Forecast${reach ? ` · reach ${reach}` : ''}`
+              : `NWM Retrospective${reach ? ` · reach ${reach}` : ''}`);
+        }
         if (csv) {
           const parsed = parseDischargeCsv(
             await (await fetch(fileProxyUrl(run.id, csv.name))).text());
@@ -49,7 +60,7 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
       }
     })();
     return () => { alive = false; };
-  }, [run.id, startMs]);
+  }, [run.id, run.config, startMs]);
 
   if (error) return <span className="sp-muted">hydrograph unavailable ({error})</span>;
   if (!series) return <span className="sp-muted">loading hydrograph…</span>;
@@ -103,6 +114,7 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
         <ReactECharts option={option} style={{ height: 230 }} notMerge />
       </Suspense>
       <span className="sp-muted">
+        {sourceNote && <>{sourceNote} · </>}
         {s0.boundary} · peak {peak[1].toFixed(1)} {unit} · {durationH.toFixed(0)} h event
         {startMs !== null && ` from ${new Date(s0.points[0][0]).toLocaleString()}`}
         {unit === 'm³/s'

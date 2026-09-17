@@ -10,6 +10,8 @@ export interface ServerStepSummary {
   id: number;
   status: string;
   finished: string | null;
+  /** the submitted config — drives the FE17 per-step overview chips */
+  config?: Record<string, unknown>;
 }
 
 export interface ServerAoi {

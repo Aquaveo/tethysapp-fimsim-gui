@@ -1,0 +1,28 @@
+/* reactapp/src/BoundaryPreview.css — the Phase 1 boundary check map. */
+
+.bp { margin: 0.5rem 0; }
+.bp > summary {
+  cursor: pointer; font-size: 0.85rem; font-weight: 600;
+  color: var(--color-primary-active);
+}
+.bp-body { margin-top: 0.5rem; }
+.bp-body .am-map { height: 320px; }
+.bp-guidance {
+  font-size: 0.82rem; color: var(--color-text-secondary);
+  margin: 0 0 0.5rem; line-height: 1.5;
+}
+.bp-legend {
+  display: flex; gap: 1.2rem; flex-wrap: wrap;
+  font-size: 0.8rem; color: var(--color-text-secondary);
+  margin-top: 0.45rem;
+}
+.bp-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+/* desktop symbology, verbatim (gui/bci_preview.py) */
+.bp-line { width: 1.4rem; height: 3px; border-radius: 2px; background: #2b6cb0; }
+.bp-dot {
+  width: 0.85rem; height: 0.85rem; border-radius: 50%;
+  display: inline-block; box-sizing: border-box;
+}
+.bp-up { background: #f6ad55; border: 2.5px solid #744210; }
+.bp-down { background: #f56565; border: 2.5px solid #742a2a; }
+.bp-hint { font-size: 0.8rem; color: var(--color-text-muted); margin: 0.4rem 0; }

@@ -1,0 +1,5 @@
+# Backend lint gate: run `flake8 tethysapp/fimsim_gui` from the repo root.
+# 100-char lines match the existing code; public/ is the built frontend bundle.
+[flake8]
+max-line-length = 100
+extend-exclude = tethysapp/fimsim_gui/public

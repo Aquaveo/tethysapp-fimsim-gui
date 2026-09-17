@@ -77,6 +77,7 @@ const RULES: [RegExp, OutputMeta][] = [
   }],
 ];
 
+/** First matching rule wins; unknown names get a generic row, never hidden. */
 export function outputMeta(name: string): OutputMeta {
   for (const [re, meta] of RULES) {
     if (re.test(name)) return meta;
@@ -84,8 +85,11 @@ export function outputMeta(name: string): OutputMeta {
   return { label: name, description: 'Additional output from this step.' };
 }
 
+/** Same-origin file proxy (MinIO presigned URLs are CORS-blocked for fetch/
+ *  MapLibre). Trailing slash required (Django); ?dl=1 forces attachment. */
 export const fileProxyUrl = (runId: number, name: string, download = false) =>
   `/apps/fimsim-gui/api/stepruns/${runId}/file/${encodeURIComponent(name)}/`
   + (download ? '?dl=1' : '');
 
+/** "Download all" zip of every stored output for one AOI. */
 export const aoiZipUrl = (aoiId: number) => `/apps/fimsim-gui/api/aois/${aoiId}/zip/`;

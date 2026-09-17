@@ -14,7 +14,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from tethysapp.fimsim_gui.job_types.registry import StepJobType
+from tethysapp.fimsim_gui.job_types.registry import StepJobType, _check_number
 
 _PAR_FILE_KEYS = ("DEMfile", "manningfile", "bcifile", "bdyfile", "SGCwidth",
                   "SGCbank", "SGCbed", "weirfile", "startfile", "loadcheck")
@@ -56,9 +56,23 @@ class RunSimJobType(StepJobType):
     step_key = "run"
     requires = ("par",)
 
+    # solver_path is injected from the lisflood_binary_path app setting at
+    # submit time; accepting it from a client would execute an arbitrary
+    # binary on the worker
+    server_only_keys = ("solver_path",)
+
     def defaults(self) -> dict:
         return {"solver_path": None, "solver_timeout_s": 3600,
                 "keep_snapshots": False}
+
+    def check_values(self, config: dict) -> list:
+        problems = []
+        _check_number(config, "solver_timeout_s", 10, 6 * 3600, problems, " s")
+        if "keep_snapshots" in config and \
+                str(config["keep_snapshots"]).lower() not in ("true", "false"):
+            problems.append("'keep_snapshots' must be true or false "
+                            f"(got {config['keep_snapshots']!r})")
+        return problems
 
     def execute(self, ctx_path, ctx, config, log_fn):
         from tethysapp.fimsim_gui.geo_env import ensure_proj_data
@@ -107,7 +121,8 @@ class RunSimJobType(StepJobType):
         except BaseException:
             # cooperative cancel/timeout raised inside log_fn → kill the process tree
             try:
-                import os, signal
+                import os
+                import signal
                 os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             except Exception:
                 pass

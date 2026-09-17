@@ -9,8 +9,12 @@ import {
   ApiError, cancelStepRun, getStepRun, getStepRunOutputs, submitStep,
   type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
 } from './api';
+import BoundaryPreview from './BoundaryPreview';
 import HydrographChart from './HydrographChart';
+import RasterPreview from './RasterPreview';
 import ManningTable, { type ManningMapping } from './ManningTable';
+import StepOverview from './StepOverview';
+import TextPreview from './TextPreview';
 import { STEP_FIELDS, type FieldSpec } from './stepFields';
 import './StepPanel.css';
 
@@ -61,11 +65,15 @@ interface Props {
   stepKey: string;
   aois: ServerAoi[];
   schema: StepSchema | null;
+  /** the active model's job steps in order — drives the FE17 overview strip */
+  stepOrder?: { id: string; label: string }[];
   /** notify the wizard something changed (statuses refresh) */
   onSubmitted: () => void;
 }
 
-export default function StepPanel({ projectId, stepKey, aois, schema, onSubmitted }: Props) {
+export default function StepPanel({
+  projectId, stepKey, aois, schema, stepOrder = [], onSubmitted,
+}: Props) {
   const fields: FieldSpec[] = STEP_FIELDS[stepKey] ?? [];
   const defaults = useMemo(
     () => ({ ...(schema?.defaults ?? {}) }), [schema]);
@@ -231,12 +239,36 @@ export default function StepPanel({ projectId, stepKey, aois, schema, onSubmitte
                   </button>
                 )}
               </div>
+              <StepOverview aoi={a} stepOrder={stepOrder} currentStep={stepKey} />
+              {(stepKey === 'bci' || stepKey === 'tbc') && (
+                <p className="sp-field-help">
+                  Check the map on the Area of Interest step: the detected main
+                  river should enter and leave your rectangle where you expect —
+                  the inflow and outflow are placed where it crosses the edges.
+                </p>
+              )}
               {note && <div className="sp-note">{note}</div>}
               {run ? (
                 <>
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
                   {run.status === 'succeeded' && stepKey === 'bdy' && (
                     <HydrographChart run={run} />
+                  )}
+                  {run.status === 'succeeded' && (stepKey === 'bci' || stepKey === 'tbc') && (
+                    <BoundaryPreview aoi={a} run={run} defaultOpen={aois.length === 1} />
+                  )}
+                  {run.status === 'succeeded' && (stepKey === 'dem' || stepKey === 'tdem') && (
+                    <RasterPreview aoi={a} run={run} kind="dem"
+                                   defaultOpen={aois.length === 1} />
+                  )}
+                  {run.status === 'succeeded' && (stepKey === 'manning' || stepKey === 'tfric') && (
+                    <RasterPreview aoi={a} run={run} kind="lulc"
+                                   defaultOpen={aois.length === 1} />
+                  )}
+                  {run.status === 'succeeded' && (
+                    <TextPreview run={run} stepKey={stepKey}
+                                 defaultOpen={(stepKey === 'par' || stepKey === 'tcfg')
+                                   && aois.length === 1} />
                   )}
                   {run.status === 'succeeded' && <Outputs runId={run.id} />}
                   {run.status === 'failed' && (

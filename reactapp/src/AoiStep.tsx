@@ -108,7 +108,8 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
     }
   };
 
-  const useBbox = async (a: ServerAoi) => {
+  // "use" prefix reads as a hook to the linter — named replaceWithBbox instead.
+  const replaceWithBbox = async (a: ServerAoi) => {
     // LISFLOOD-FP/TRITON require rectangles: replace with the bounding box.
     const coords = a.geometry.coordinates.flat();
     const xs = coords.map((p) => p[0]);
@@ -231,7 +232,7 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
               {!a.is_rectangular && (
                 <button
                   type="button" className="as-card-fix"
-                  onClick={() => void useBbox(a)}
+                  onClick={() => void replaceWithBbox(a)}
                   title="Replace this area with its bounding box"
                 >
                   Use bounding box
