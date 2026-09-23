@@ -1,0 +1,27 @@
+/* reactapp/src/TextPreview.css — Phase 3 monospace file previews. */
+
+.tp { margin: 0.5rem 0; }
+.tp > summary {
+  cursor: pointer; font-size: 0.85rem; font-weight: 600;
+  color: var(--color-primary-active);
+}
+.tp-body { margin-top: 0.4rem; }
+.tp-file { margin-bottom: 0.5rem; }
+.tp-name {
+  display: block; font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.75rem; color: var(--color-text-muted); margin-bottom: 0.15rem;
+}
+/* desktop styling: monospace on the pale panel (#f7fafc equivalent) */
+.tp-pre {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.78rem; line-height: 1.45;
+  background: var(--color-surface-alt);
+  border: 1px solid var(--color-border); border-radius: 6px;
+  padding: 0.6rem 0.8rem; margin: 0;
+  max-height: 16rem; overflow: auto; white-space: pre;
+}
+.tp-cmd { font-size: 0.82rem; color: var(--color-text-secondary); margin: 0.4rem 0 0; }
+.tp-cmd code {
+  background: var(--color-surface-alt); border-radius: 4px;
+  padding: 0.1em 0.45em; font-size: 0.85em;
+}

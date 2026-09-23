@@ -88,7 +88,8 @@ def resolve_aoi_context(geojson_geom: dict) -> dict:
     states_gdf = gpd.read_file(data_dir / "us_states.geojson")
     s_hits = states_gdf[states_gdf.intersects(geom)]
     name_c = next((c for c in s_hits.columns if c.lower() in ("name", "state_name")), None)
-    abbr_c = next((c for c in s_hits.columns if c.lower() in ("abbr", "stusps", "state_abbr", "postal")), None)
+    abbr_c = next((c for c in s_hits.columns
+                   if c.lower() in ("abbr", "stusps", "state_abbr", "postal")), None)
     states = [
         {"name": str(r[name_c]) if name_c else None,
          "abbr": str(r[abbr_c]) if abbr_c else None}

@@ -7,13 +7,15 @@ import { useEffect, useState } from 'react';
 import AoiMap, { type MapOverlay } from './AoiMap';
 import HydrographChart from './HydrographChart';
 import { getStepRun, type ServerAoi, type ServerStepRun } from './api';
-import { aoiZipUrl, fileProxyUrl, outputMeta } from './outputsMeta';
+import { aoiZipUrl, fileProxyUrl, keepModelSteps, outputMeta } from './outputsMeta';
 import './StepPanel.css';
 import './ResultsStep.css';
 
 const STEP_LABELS: Record<string, string> = {
   dem: 'Terrain', manning: 'Roughness', bci: 'Boundaries',
   bdy: 'Flow Data', par: 'Settings', run: 'Simulation',
+  tdem: 'Terrain', tfric: 'Friction', tbc: 'Boundaries',
+  thyg: 'Hydrograph', tcfg: 'Config',
 };
 
 interface FileRow {
@@ -32,18 +34,36 @@ interface AoiResult {
   bdyRun?: ServerStepRun;
 }
 
-export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
+export default function ResultsStep({ aois, hasRunStep = true, modelStepKeys }: {
+  aois: ServerAoi[];
+  /** false for deck-only models (TRITON): no flood overlay, no run nagging */
+  hasRunStep?: boolean;
+  /** the active model's job-step keys; other models' steps are ignored so a
+   *  LISFLOOD run never leaks an overlay/files into a TRITON deck view */
+  modelStepKeys?: string[];
+}) {
   const [results, setResults] = useState<AoiResult[]>([]);
   const [opacity, setOpacity] = useState(0.8);
+  // stable primitive so the effect doesn't refetch on every render (the prop
+  // is a fresh array literal) yet still reruns if the model's steps change
+  const modelKeysSig = (modelStepKeys ?? []).join(',');
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const out: AoiResult[] = [];
-      for (const aoi of aois) {
+      // All step-run fetches go out in parallel (per AOI and across AOIs);
+      // the dedupe below still walks steps in aoi.steps insertion order, so
+      // "first step that produced the file" stays deterministic.
+      const out: AoiResult[] = await Promise.all(aois.map(async (aoi) => {
         const res: AoiResult = { aoi, runStatus: null, files: [] };
-        for (const [step, summary] of Object.entries(aoi.steps ?? {})) {
-          const run = await getStepRun(summary.id).catch(() => null);
+        const allEntries = Object.entries(aoi.steps ?? {});
+        const entries = modelKeysSig
+          ? keepModelSteps(allEntries, modelKeysSig.split(',')) : allEntries;
+        const runs = await Promise.all(
+          entries.map(([, summary]) => getStepRun(summary.id).catch(() => null)));
+        for (let k = 0; k < entries.length; k++) {
+          const [step] = entries[k];
+          const run = runs[k];
           if (!run || run.status !== 'succeeded') {
             if (step === 'run') res.runStatus = run?.status ?? null;
             continue;
@@ -81,19 +101,19 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
             }
           }
         }
-        out.push(res);
-      }
+        return res;
+      }));
       if (alive) setResults(out);
     })();
     return () => { alive = false; };
-  }, [aois]);
+  }, [aois, modelKeysSig]);
 
   const overlays = results.flatMap((r) => (r.overlay ? [r.overlay] : []));
   const anySucceeded = results.some((r) => r.runStatus === 'succeeded');
 
   return (
     <div className="sp-wrap">
-      {anySucceeded ? (
+      {hasRunStep && (anySucceeded ? (
         <div className="sp-field" style={{ maxWidth: '18rem' }}>
           <span className="sp-field-label">Flood layer opacity</span>
           <input type="range" min={0.1} max={1} step={0.05} value={opacity}
@@ -101,7 +121,7 @@ export default function ResultsStep({ aois }: { aois: ServerAoi[] }) {
         </div>
       ) : (
         <p className="sp-muted">No completed simulations yet — finish the Run step first.</p>
-      )}
+      ))}
 
       <AoiMap
         aois={aois}

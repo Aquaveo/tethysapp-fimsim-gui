@@ -162,3 +162,20 @@
 }
 .as-card-lookup { font-size: 0.82rem; color: var(--color-text-secondary); }
 .as-card-resolving { color: var(--color-text-muted); font-style: italic; }
+
+/* ── Model switch (FE18 slice): slugged chips above the stepper ── */
+.ns-models { display: flex; gap: 0.4rem; margin: 0 0 0.9rem; }
+.ns-model {
+  border: 1.5px solid var(--color-border); border-radius: 999px;
+  background: var(--color-surface); color: var(--color-text-secondary);
+  padding: 0.25rem 0.9rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+}
+.ns-model.is-active {
+  border-color: var(--color-primary); color: var(--color-primary-active);
+  background: var(--color-surface-alt);
+}
+.ns-model-tag {
+  margin-left: 0.4rem; font-size: 0.65rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}

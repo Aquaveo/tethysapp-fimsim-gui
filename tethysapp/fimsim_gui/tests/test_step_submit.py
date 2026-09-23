@@ -9,7 +9,16 @@ from tethysapp.fimsim_gui.models import STEP_KEYS
 
 
 def test_registry_covers_the_wizard_steps():
-    assert set(REGISTRY) == {"dem", "manning", "bci", "bdy", "par", "run"}
+    assert set(REGISTRY) == {"dem", "manning", "bci", "bdy", "par", "run",
+                             "tdem", "tfric", "tbc", "thyg", "tcfg"}
+    # TRITON DAG
+    assert REGISTRY["tdem"].requires == ()
+    assert REGISTRY["tfric"].requires == ("tdem",)
+    assert REGISTRY["tbc"].requires == ("tdem",)
+    assert REGISTRY["thyg"].requires == ("tbc",)
+    # tcfg needs friction too: the .cfg references friction.asc, so generating
+    # it after only Hydrograph could ship a deck without a friction grid.
+    assert REGISTRY["tcfg"].requires == ("tfric", "thyg")
     assert REGISTRY["dem"].requires == ()
     assert REGISTRY["manning"].requires == ("dem",)
     assert REGISTRY["bci"].requires == ("dem",)
@@ -19,6 +28,17 @@ def test_registry_covers_the_wizard_steps():
     for key, jt in REGISTRY.items():
         assert jt.step_key == key
         assert isinstance(jt.defaults(), dict)
+
+
+def test_aoi_override_must_be_a_json_object():
+    # a per-AOI override that is a list/string (valid JSON, wrong shape) used to
+    # reach `{**override}` and raise TypeError → a 500; it must be rejected with
+    # a reason instead.
+    from tethysapp.fimsim_gui.job_types.registry import validate_aoi_override
+    assert validate_aoi_override({"dem_res_m": 10}) is None
+    assert validate_aoi_override(None) is None  # "no override" is fine
+    assert "object" in (validate_aoi_override([1, 2, 3]) or "")
+    assert "object" in (validate_aoi_override("nope") or "")
 
 
 def _fake_aoi(runs):
@@ -66,8 +86,27 @@ def test_supersede_cascades_downstream_only():
                       "bci": True, "bdy": True, "par": True}
 
 
-def test_supersede_order_matches_wizard():
-    assert STEP_KEYS == ("dem", "manning", "bci", "bdy", "par", "run")
+def test_step_keys_cover_both_models_in_wizard_order():
+    assert STEP_KEYS == ("dem", "manning", "bci", "bdy", "par", "run",
+                         "tdem", "tfric", "tbc", "thyg", "tcfg")
+
+
+def test_supersede_is_graph_based_not_order_based():
+    # re-running a LISFLOOD step must NOT invalidate TRITON decks (and vice
+    # versa) even though the t* keys sit after 'run' in STEP_KEYS
+    aoi = _fake_aoi([("dem", "succeeded", False), ("bdy", "succeeded", False),
+                     ("par", "succeeded", False), ("tdem", "succeeded", False),
+                     ("tcfg", "succeeded", False)])
+    n = supersede_step_and_downstream(aoi, "bdy")
+    assert n == 2                                      # bdy + par only
+    by_key = {r.step_key: r.superseded for r in aoi.step_runs}
+    assert by_key["bdy"] and by_key["par"]
+    assert not by_key["dem"]
+    assert not by_key["tdem"] and not by_key["tcfg"]   # other model untouched
+
+    supersede_step_and_downstream(aoi, "tdem")
+    by_key = {r.step_key: r.superseded for r in aoi.step_runs}
+    assert by_key["tdem"] and by_key["tcfg"]           # whole TRITON chain
 
 
 def test_bdy_requires_event_window():

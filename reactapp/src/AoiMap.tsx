@@ -50,10 +50,17 @@ export interface MapOverlay {
   coordinates: [[number, number], [number, number], [number, number], [number, number]];
 }
 
+/** Vector preview layers (step previews): features carry a `kind` property —
+ *  main_river | upstream | downstream — styled to the desktop's symbology. */
+export interface VectorOverlay {
+  id: string;
+  data: FeatureCollection;
+}
+
 /** Closed ring of the axis-aligned bounding box of any clicked points —
  *  irregular click patterns commit as their smallest enclosing rectangle
  *  (LISFLOOD-FP/TRITON need rectangular meshes). */
-function bboxRing(pts: Position[]): Position[] {
+export function bboxRing(pts: Position[]): Position[] {
   const xs = pts.map((p) => p[0]);
   const ys = pts.map((p) => p[1]);
   const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
@@ -72,6 +79,8 @@ interface Props {
   /** Raster results draped on the map (FE8). */
   overlays?: MapOverlay[];
   overlayOpacity?: number;
+  /** Vector step previews (boundary markers etc.). */
+  vectorOverlays?: VectorOverlay[];
 }
 
 export default function AoiMap({
@@ -83,6 +92,7 @@ export default function AoiMap({
   zoomTo,
   overlays = [],
   overlayOpacity = 0.8,
+  vectorOverlays = [],
 }: Props) {
   const container = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -96,10 +106,14 @@ export default function AoiMap({
   const cancelRef = useRef(onDrawCancel);
   const resetDraftRef = useRef<() => void>(() => {});
   const fitCount = useRef(-1);
-  drawingRef.current = drawing;
-  modeRef.current = drawMode;
-  completeRef.current = onDrawComplete;
-  cancelRef.current = onDrawCancel;
+  // Mirror the latest props into refs after each commit (an effect, not render
+  // — react-hooks/refs): map event handlers fire on user input, always later.
+  useEffect(() => {
+    drawingRef.current = drawing;
+    modeRef.current = drawMode;
+    completeRef.current = onDrawComplete;
+    cancelRef.current = onDrawCancel;
+  });
 
   // ── Build the map once ──
   useEffect(() => {
@@ -108,6 +122,9 @@ export default function AoiMap({
       container: container.current,
       style: {
         version: 8,
+        // symbol layers (gage numbers, river label) need a glyph server;
+        // same trust level as the Esri basemap tiles we already load
+        glyphs: 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf',
         sources: {
           basemap: {
             type: 'raster',
@@ -142,11 +159,31 @@ export default function AoiMap({
             paint: { 'line-color': '#123458', 'line-width': 3 },
           },
           {
-            // USGS gages — click for details
+            // USGS gages — click for details (desktop: numbered dots)
             id: 'gages', type: 'circle', source: 'gages',
             paint: {
-              'circle-radius': 6, 'circle-color': '#FFC107',
+              'circle-radius': 8, 'circle-color': '#FFC107',
               'circle-stroke-color': '#123458', 'circle-stroke-width': 2,
+            },
+          },
+          {
+            id: 'gage-nums', type: 'symbol', source: 'gages',
+            layout: {
+              'text-field': ['get', 'num'], 'text-size': 10,
+              'text-font': ['Noto Sans Bold'], 'text-allow-overlap': true,
+            },
+            paint: { 'text-color': '#123458' },
+          },
+          {
+            // main-river name along the line (desktop: panel title = river name)
+            id: 'river-label', type: 'symbol', source: 'mainriver',
+            layout: {
+              'symbol-placement': 'line', 'text-field': ['get', 'label'],
+              'text-size': 12, 'text-font': ['Noto Sans Bold'],
+            },
+            paint: {
+              'text-color': '#123458', 'text-halo-color': '#ffffff',
+              'text-halo-width': 1.5,
             },
           },
           {
@@ -371,15 +408,22 @@ export default function AoiMap({
 
     const collect = (key: 'flowlines' | 'main_river'): FeatureCollection => ({
       type: 'FeatureCollection',
-      features: aois.flatMap((a) => a.lookup?.[key]?.features ?? []),
+      features: aois.flatMap((a) =>
+        (a.lookup?.[key]?.features ?? []).map((f) => ({
+          ...f,
+          // river-name label rides the feature (desktop: title = river name)
+          properties: { ...f.properties,
+            label: key === 'main_river' ? (a.river_name ?? '') : '' },
+        }))),
     });
     (map.getSource('flowlines') as maplibregl.GeoJSONSource | undefined)?.setData(collect('flowlines'));
     (map.getSource('mainriver') as maplibregl.GeoJSONSource | undefined)?.setData(collect('main_river'));
     const gagesFc: FeatureCollection = {
       type: 'FeatureCollection',
-      features: aois.flatMap((a) => (a.lookup?.gages ?? []).map((g): Feature => ({
+      features: aois.flatMap((a) => (a.lookup?.gages ?? []).map((g, i): Feature => ({
         type: 'Feature',
-        properties: { site_no: g.site_no, station_nm: g.station_nm },
+        properties: { site_no: g.site_no, station_nm: g.station_nm,
+                      num: String(i + 1) },
         geometry: { type: 'Point', coordinates: [g.lon, g.lat] },
       }))),
     };
@@ -425,6 +469,46 @@ export default function AoiMap({
       }
     }
   }, [overlays, overlayOpacity, ready]);
+
+  // ── Vector preview overlays (boundary markers — desktop symbology) ──
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    for (const vo of vectorOverlays) {
+      const srcId = `vec-${vo.id}`;
+      const src = map.getSource(srcId) as maplibregl.GeoJSONSource | undefined;
+      if (src) {
+        src.setData(vo.data);
+        continue;
+      }
+      map.addSource(srcId, { type: 'geojson', data: vo.data });
+      map.addLayer({
+        id: `${srcId}-river`, type: 'line', source: srcId,
+        filter: ['==', ['get', 'kind'], 'main_river'],
+        paint: { 'line-color': '#2b6cb0', 'line-width': 2.5 },
+      });
+      map.addLayer({
+        id: `${srcId}-pts`, type: 'circle', source: srcId,
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-radius': 8,
+          'circle-color': ['match', ['get', 'kind'],
+            'upstream', '#f6ad55', 'downstream', '#f56565', '#888888'],
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': ['match', ['get', 'kind'],
+            'upstream', '#744210', 'downstream', '#742a2a', '#333333'],
+        },
+      });
+    }
+    const wanted = new Set(vectorOverlays.map((v) => `vec-${v.id}`));
+    for (const layer of map.getStyle().layers ?? []) {
+      const m = layer.id.match(/^(vec-.*)-(river|pts)$/);
+      if (m && !wanted.has(m[1])) map.removeLayer(layer.id);
+    }
+    for (const srcId of Object.keys(map.getStyle().sources ?? {})) {
+      if (srcId.startsWith('vec-') && !wanted.has(srcId)) map.removeSource(srcId);
+    }
+  }, [vectorOverlays, ready]);
 
   // ── Basemap toggle (swap tiles in place, family pattern) ──
   useEffect(() => {

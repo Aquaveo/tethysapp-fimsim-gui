@@ -6,6 +6,18 @@ export interface OutputMeta {
   description: string;
 }
 
+/**
+ * Keep only the step entries that belong to the active model. The Results view
+ * for a deck-only model (TRITON) must not pick up a LISFLOOD `run` overlay or
+ * list LISFLOOD files when both models have run against the same AOI.
+ */
+export function keepModelSteps<T>(
+  entries: [string, T][], allowed: readonly string[],
+): [string, T][] {
+  const keep = new Set(allowed);
+  return entries.filter(([step]) => keep.has(step));
+}
+
 const RULES: [RegExp, OutputMeta][] = [
   [/^max_depth\.tif$/i, {
     label: 'Flood map (GeoTIFF)',
@@ -77,6 +89,7 @@ const RULES: [RegExp, OutputMeta][] = [
   }],
 ];
 
+/** First matching rule wins; unknown names get a generic row, never hidden. */
 export function outputMeta(name: string): OutputMeta {
   for (const [re, meta] of RULES) {
     if (re.test(name)) return meta;
@@ -84,8 +97,11 @@ export function outputMeta(name: string): OutputMeta {
   return { label: name, description: 'Additional output from this step.' };
 }
 
+/** Same-origin file proxy (MinIO presigned URLs are CORS-blocked for fetch/
+ *  MapLibre). Trailing slash required (Django); ?dl=1 forces attachment. */
 export const fileProxyUrl = (runId: number, name: string, download = false) =>
   `/apps/fimsim-gui/api/stepruns/${runId}/file/${encodeURIComponent(name)}/`
   + (download ? '?dl=1' : '');
 
+/** "Download all" zip of every stored output for one AOI. */
 export const aoiZipUrl = (aoiId: number) => `/apps/fimsim-gui/api/aois/${aoiId}/zip/`;
