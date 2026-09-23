@@ -114,8 +114,8 @@ const TRITON_STEPS: StepDef[] = [
   },
   {
     id: 'tfric',
-    label: 'Friction',
-    title: 'Friction (Manning’s n)',
+    label: 'Roughness',
+    title: "Roughness (Manning's n)",
     blurb: "Fetch land cover and build TRITON's friction grid — a headerless Manning's n matrix aligned to the terrain.",
     produces: 'friction.asc',
   },
@@ -128,8 +128,8 @@ const TRITON_STEPS: StepDef[] = [
   },
   {
     id: 'thyg',
-    label: 'Hydrograph',
-    title: 'Hydrograph',
+    label: 'Flow Data',
+    title: 'Flow Data',
     blurb: 'Pull the inflow discharge for your event window — National Water Model retrospective or forecast, or a USGS gage.',
     produces: '.hyg',
   },
