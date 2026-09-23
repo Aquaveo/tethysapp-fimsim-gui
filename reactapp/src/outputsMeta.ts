@@ -6,6 +6,18 @@ export interface OutputMeta {
   description: string;
 }
 
+/**
+ * Keep only the step entries that belong to the active model. The Results view
+ * for a deck-only model (TRITON) must not pick up a LISFLOOD `run` overlay or
+ * list LISFLOOD files when both models have run against the same AOI.
+ */
+export function keepModelSteps<T>(
+  entries: [string, T][], allowed: readonly string[],
+): [string, T][] {
+  const keep = new Set(allowed);
+  return entries.filter(([step]) => keep.has(step));
+}
+
 const RULES: [RegExp, OutputMeta][] = [
   [/^max_depth\.tif$/i, {
     label: 'Flood map (GeoTIFF)',

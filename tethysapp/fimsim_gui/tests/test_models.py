@@ -27,6 +27,24 @@ def test_sanitize_name_parity_cases():
     assert sanitize_name("_.trimmed._") == "trimmed"
 
 
+# ── client-facing config projection hides server-only keys (Copilot review) ───
+
+def test_run_config_projection_hides_solver_path():
+    # `run` stores solver_path in config at submit; every project-status poll
+    # and steprun read projects config back to the client — the worker's binary
+    # path must not leak. Server-only keys are stripped from both projections.
+    from datetime import datetime, timezone
+    run = StepRun(
+        step_key="run",
+        config={"solver_path": "/opt/lisflood/bin/lisflood",
+                "solver_timeout_s": 3600, "keep_snapshots": False},
+        created=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
+    for projection in (run.to_summary_dict(), run.to_dict()):
+        assert "solver_path" not in projection["config"]
+        assert projection["config"]["solver_timeout_s"] == 3600  # non-secret kept
+
+
 # ── _PER_AOI_KEYS coverage: schema must account for every desktop ctx key ────
 
 def _fimcore_per_aoi_keys():

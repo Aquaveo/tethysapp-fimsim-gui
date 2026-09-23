@@ -139,6 +139,44 @@ def test_par_rejects_deck_breaking_names():
     assert _problems("par", {"par_name": "model_v2"}) == []
 
 
+def test_par_rejects_names_with_a_trailing_newline():
+    # SAFE_NAME_RE anchored with $ + re.match still accepts "model\n"; a newline
+    # in a .par filename fragment breaks the whitespace-delimited parser.
+    assert any("par_name" in p for p in _problems("par", {"par_name": "model\n"}))
+    assert any("resroot" in p for p in _problems("par", {"resroot": "res\n"}))
+
+
+# ── flow-data window edge cases (Copilot review) ────────────────────────────────
+
+def test_bdy_normalizes_timezone_aware_windows_instead_of_crashing():
+    # datetime.fromisoformat accepts "…Z"/offsets → aware; comparing against the
+    # naive NWM constants used to raise TypeError (a 500), not a clean reason.
+    assert _problems("bdy", {"start_dt": "2016-10-05T00:00+00:00",
+                             "end_dt": "2016-10-15T00:00+00:00"}) == []
+    assert _problems("bdy", {"start_dt": "2016-10-05T00:00Z",
+                             "end_dt": "2016-10-15T00:00Z"}) == []
+
+
+def test_bdy_366_day_cap_counts_fractional_days():
+    # 366 days exactly is allowed; 366 days + hours must be rejected
+    # (timedelta.days truncation let over-limit windows through).
+    assert _problems("bdy", {"start_dt": "2016-01-01T00:00",
+                             "end_dt": "2017-01-01T00:00"}) == []  # 366d (leap)
+    assert any("366 days" in p for p in _problems(
+        "bdy", {"start_dt": "2016-01-01T00:00",
+                "end_dt": "2017-01-01T12:00"}))  # 366d 12h
+
+
+# ── TRITON friction: no misleading duplicate resolution field (Copilot #2/#5) ───
+
+def test_tfric_has_no_independent_resolution_field():
+    # the TRITON friction builder snaps to the DEM grid regardless of dem_res_m,
+    # so a second resolution control only misleads — it was removed.
+    assert "dem_res_m" not in REGISTRY["tfric"].defaults()
+    assert any("unknown option 'dem_res_m'" in p
+               for p in _problems("tfric", {"dem_res_m": 90}))
+
+
 def test_par_numeric_ranges():
     assert any("initial_tstep" in p
                for p in _problems("par", {"initial_tstep": 0}))

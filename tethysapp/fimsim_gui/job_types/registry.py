@@ -38,9 +38,22 @@ def _check_number(cfg, key, lo, hi, problems, unit=""):
         problems.append(f"'{key}' must be between {lo} and {hi}{unit} (got {val})")
 
 
+def validate_aoi_override(override):
+    """Reason a per-AOI config override is unusable, or None if fine.
+
+    Overrides arrive as JSON values inside the request's ``aoi_configs`` map; a
+    list or string there is valid JSON but the wrong shape, and merging it with
+    ``{**override}`` raises TypeError (a 500). ``None`` means "no override".
+    """
+    if override is None or isinstance(override, dict):
+        return None
+    return (f"per-AOI config override must be a JSON object "
+            f"(got {type(override).__name__})")
+
+
 def _check_safe_name(cfg, key, problems):
     """Reject cfg[key] unless it is a deck-safe filename fragment."""
-    if key in cfg and not (isinstance(cfg[key], str) and SAFE_NAME_RE.match(cfg[key])):
+    if key in cfg and not (isinstance(cfg[key], str) and SAFE_NAME_RE.fullmatch(cfg[key])):
         problems.append(
             f"'{key}' must be letters/digits/._- only, max 64 chars "
             f"(got {cfg[key]!r}) — spaces break the LISFLOOD-FP deck")

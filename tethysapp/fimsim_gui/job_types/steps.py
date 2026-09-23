@@ -5,7 +5,7 @@ fimcore step-function kwargs (see fimcore docs/step-functions.md — these
 dicts are the request schemas the desktop built from Qt widget state).
 """
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from tethysapp.fimsim_gui.job_types.registry import (
@@ -258,7 +258,14 @@ class BDYStepJobType(UniformStepJobType):
                                 f"(ISO datetime, e.g. 2016-10-05T00:00)")
                 continue
             try:
-                window[key] = datetime.fromisoformat(str(raw))
+                dt = datetime.fromisoformat(str(raw))
+                # fromisoformat accepts "…Z"/offsets → aware; the NWM coverage
+                # constants are naive UTC, so normalize to UTC-naive before any
+                # comparison (mixing the two raises TypeError → a 500, not a
+                # clean rejection).
+                if dt.tzinfo is not None:
+                    dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+                window[key] = dt
             except ValueError:
                 problems.append(f"'{key}' is not a valid ISO datetime "
                                 f"(got {raw!r})")
@@ -267,7 +274,7 @@ class BDYStepJobType(UniformStepJobType):
             if start >= end:
                 problems.append("the event window is empty — 'start_dt' must "
                                 "be before 'end_dt'")
-            elif (end - start).days > 366:
+            elif (end - start) > timedelta(days=366):
                 problems.append("event windows are capped at 366 days — "
                                 "narrow the window to the flood of interest")
             elif config.get("bdy_source", "nwm_retro") == "nwm_retro" and (

@@ -219,14 +219,28 @@ class StepRun(Base):
 
     aoi = relationship("Aoi", back_populates="step_runs")
 
+    def _client_config(self):
+        """The submitted config with server-only keys removed. `run` stores
+        solver_path (the worker's binary path) in config; it must never reach
+        a client through a status poll or a steprun read."""
+        cfg = self.config or {}
+        try:
+            from tethysapp.fimsim_gui.job_types import REGISTRY
+            jt = REGISTRY.get(self.step_key)
+            server_only = set(jt.server_only_keys) if jt else {"solver_path"}
+        except Exception:
+            server_only = {"solver_path"}
+        if not server_only:
+            return dict(cfg)
+        return {k: v for k, v in cfg.items() if k not in server_only}
+
     def to_summary_dict(self):
         return {
             "id": self.id,
             "status": self.status,
             "finished": self.finished.isoformat() + "Z" if self.finished else None,
-            # the submitted config, for the per-step overview chips (FE17) —
-            # small dicts; server-only values are never client-sensitive here
-            "config": self.config or {},
+            # the submitted config, for the per-step overview chips (FE17)
+            "config": self._client_config(),
         }
 
     def to_dict(self):
@@ -236,7 +250,7 @@ class StepRun(Base):
             "step_key": self.step_key,
             "status": self.status,
             "superseded": self.superseded,
-            "config": self.config,
+            "config": self._client_config(),
             "manifest": self.manifest,
             "progress": self.progress,
             "error": self.error,

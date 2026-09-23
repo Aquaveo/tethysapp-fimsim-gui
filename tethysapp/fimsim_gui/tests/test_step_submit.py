@@ -16,7 +16,9 @@ def test_registry_covers_the_wizard_steps():
     assert REGISTRY["tfric"].requires == ("tdem",)
     assert REGISTRY["tbc"].requires == ("tdem",)
     assert REGISTRY["thyg"].requires == ("tbc",)
-    assert REGISTRY["tcfg"].requires == ("thyg",)
+    # tcfg needs friction too: the .cfg references friction.asc, so generating
+    # it after only Hydrograph could ship a deck without a friction grid.
+    assert REGISTRY["tcfg"].requires == ("tfric", "thyg")
     assert REGISTRY["dem"].requires == ()
     assert REGISTRY["manning"].requires == ("dem",)
     assert REGISTRY["bci"].requires == ("dem",)
@@ -26,6 +28,17 @@ def test_registry_covers_the_wizard_steps():
     for key, jt in REGISTRY.items():
         assert jt.step_key == key
         assert isinstance(jt.defaults(), dict)
+
+
+def test_aoi_override_must_be_a_json_object():
+    # a per-AOI override that is a list/string (valid JSON, wrong shape) used to
+    # reach `{**override}` and raise TypeError → a 500; it must be rejected with
+    # a reason instead.
+    from tethysapp.fimsim_gui.job_types.registry import validate_aoi_override
+    assert validate_aoi_override({"dem_res_m": 10}) is None
+    assert validate_aoi_override(None) is None  # "no override" is fine
+    assert "object" in (validate_aoi_override([1, 2, 3]) or "")
+    assert "object" in (validate_aoi_override("nope") or "")
 
 
 def _fake_aoi(runs):

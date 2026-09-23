@@ -153,5 +153,18 @@ export const MODELS: Record<ModelId, { label: string; steps: StepDef[]; runsOnPo
 
 export const DEFAULT_MODEL: ModelId = 'lisflood-fp';
 
+/**
+ * A step that is safe to render for the given model's step list.
+ * Switching models can leave `step` pointing at a step the new model lacks
+ * (e.g. LISFLOOD "run" → TRITON), which would index past the steps array and
+ * crash on `def.title`. Fall back to a step every model shares.
+ */
+export function resolveActiveStep(
+  steps: StepDef[], step: StepId, hasProject: boolean,
+): StepId {
+  if (steps.some((s) => s.id === step)) return step;
+  return hasProject ? 'aoi' : 'project';
+}
+
 /** Back-compat export — the LISFLOOD wizard (existing imports/tests). */
 export const STEPS: StepDef[] = LISFLOOD_STEPS;

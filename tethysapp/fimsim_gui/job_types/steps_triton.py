@@ -26,9 +26,12 @@ class TritonDeckMixin:
 
     def prepare(self, workdir, aoi_geojson_path, log_fn):
         ctx_path, ctx = super().prepare(workdir, aoi_geojson_path, log_fn)
-        # fimcore's shared steps key TRITON mode off ctx["triton_dir"] (the
-        # desktop stamps it at project setup); without it the DEM lands in
-        # lisflood-files/dem.ascii and the .cfg step can't find dem.asc
+        # This value is only a MODE FLAG: fimcore's TRITON orchestrators key off
+        # bool(ctx["triton_dir"]) (is_triton), then OVERRIDE it per-AOI to that
+        # feature's actual "triton-files" folder (triton_orchestrate.py) — which
+        # is exactly where collect() below reads. So the deck never lands outside
+        # the collected dir; without this flag the DEM would fall back to
+        # lisflood-files/dem.ascii and the .cfg step couldn't find dem.asc.
         ctx["triton_dir"] = str(Path(ctx["project_dir"]) / "triton_files")
         ctx.pop("lisflood_dir", None)
         from fimcore.context import save_context
@@ -101,8 +104,10 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
             "lulc_source": "download",   # esri | "download_nlcd" for NLCD
             "lulc_year": 2023,
             "nlcd_year": "2021",
-            "dem_res_m": 30,             # must match tdem for grid alignment
         }
+        # NOTE: no dem_res_m here — the friction builder snaps the grid to the
+        # terrain's DEM (fimcore.triton_manning reprojects to the DEM cell
+        # size/extent), so a second resolution control only misleads the user.
 
     def check_values(self, config: dict) -> list:
         problems = []
@@ -110,7 +115,6 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
         _check_choice(config, "lulc_source", ("download", "download_nlcd"), problems)
         _check_number(config, "fpfric_val", 0.001, 1.0, problems)
         _check_number(config, "lulc_year", 1985, 2035, problems)
-        _check_choice(config, "dem_res_m", (1, 3, 10, 30, 90), problems)
         return problems
 
     def transform_config(self, cfg: dict, ctx) -> dict:
@@ -181,7 +185,10 @@ class TritonHydroJobType(TritonDeckMixin, BDYStepJobType):
 
 class TritonCfgJobType(TritonDeckMixin, UniformStepJobType):
     step_key = "tcfg"
-    requires = ("thyg",)
+    # thyg (→tbc→tdem) covers terrain + BC + hydrograph; tfric is a separate
+    # branch off tdem, so require it explicitly — the .cfg references
+    # friction.asc and must not be generated without a friction grid.
+    requires = ("tfric", "thyg")
     orchestrator = "run_triton_cfg_for_all_aois"
     orchestrator_module = "fimcore.triton_orchestrate"
     clean_patterns = ("*.cfg",)

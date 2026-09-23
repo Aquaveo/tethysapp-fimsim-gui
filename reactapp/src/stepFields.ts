@@ -12,6 +12,29 @@ export interface FieldSpec {
   required?: boolean;
 }
 
+/**
+ * Coerce number-widget values to real numbers at SUBMIT time only.
+ * The inputs keep the user's raw string while typing (so "0.0001" isn't
+ * collapsed to 0 by a mid-keystroke Number("0.")); this runs once on submit.
+ * Empty strings become null so the caller drops them.
+ */
+export function coerceConfigNumbers(
+  config: Record<string, unknown>,
+  fields: Pick<FieldSpec, 'key' | 'widget'>[],
+): Record<string, unknown> {
+  const numberKeys = new Set(
+    fields.filter((f) => f.widget === 'number').map((f) => f.key));
+  const out: Record<string, unknown> = { ...config };
+  for (const k of Object.keys(out)) {
+    if (!numberKeys.has(k) || typeof out[k] !== 'string') continue;
+    const s = (out[k] as string).trim();
+    if (s === '') { out[k] = null; continue; }
+    const n = Number(s);
+    out[k] = Number.isFinite(n) ? n : out[k]; // leave bad input for the server
+  }
+  return out;
+}
+
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
     {
@@ -158,10 +181,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       key: 'lulc_year', label: 'Land cover year', widget: 'number',
       showIf: { key: 'fric_mode', value: 'varying' },
     },
-    {
-      key: 'dem_res_m', label: 'Grid resolution (m)', widget: 'number',
-      help: 'Match the Terrain resolution so the friction grid aligns with the DEM.',
-    },
+    // No resolution control: the friction grid is snapped to the terrain DEM
+    // on the server, so a second resolution here would only mislead.
   ],
   tbc: [
     {

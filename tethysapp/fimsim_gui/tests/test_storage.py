@@ -24,6 +24,16 @@ def test_build_key_scheme():
     assert build_key("reshma", 3) == "reshma/3"
 
 
+def test_source_key_orphaned_only_when_no_sibling_references_it():
+    # deleting one AOI must not delete a shared upload still referenced by a
+    # sibling AOI (a multi-feature shapefile makes several AOIs from one file).
+    from tethysapp.fimsim_gui.storage import is_source_key_orphaned
+    assert is_source_key_orphaned("reshma/3/boundary.zip", []) is True
+    assert is_source_key_orphaned(
+        "reshma/3/boundary.zip", ["reshma/3/boundary.zip"]) is False
+    assert is_source_key_orphaned(None, []) is False  # drawn AOIs have no upload
+
+
 def test_filename_sanitization():
     assert safe_filename("../../etc/passwd") == "passwd"
     assert safe_filename("weird name (v2).tif") == "weird_name_v2_.tif"

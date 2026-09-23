@@ -70,6 +70,18 @@ def build_key(username: str, project_id: int, aoi_id=None, step=None,
     return "/".join(parts)
 
 
+def is_source_key_orphaned(source_key, sibling_source_keys) -> bool:
+    """True when *source_key* is a real upload no sibling AOI still references.
+
+    An uploaded boundary file lives at the project prefix and can back several
+    AOIs (a multi-feature shapefile), so it may be deleted only once the last
+    AOI referencing it is gone. Drawn/example AOIs have no ``source_key``.
+    """
+    if not source_key:
+        return False
+    return source_key not in set(sibling_source_keys or ())
+
+
 def assert_owned(key: str, username: str) -> str:
     """Raise unless *key* sits inside *username*'s prefix. Returns the key."""
     key = str(key)

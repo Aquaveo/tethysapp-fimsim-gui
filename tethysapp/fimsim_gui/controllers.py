@@ -255,15 +255,25 @@ def api_aoi(request, session, aoi_id):
     if err:
         return err
     if request.method == 'DELETE':
-        from tethysapp.fimsim_gui.storage import build_key, get_storage
+        from tethysapp.fimsim_gui.storage import (
+            build_key, get_storage, is_source_key_orphaned,
+        )
         prefix = build_key(request.user.username, aoi.project_id, aoi.id)
+        # the uploaded boundary lives at the PROJECT prefix and can back several
+        # AOIs — delete it only if no sibling AOI still references it.
+        source_key = aoi.source_key
+        siblings = [a.source_key for a in aoi.project.aois
+                    if a.id != aoi.id and a.source_key]
         session.delete(aoi)
         session.commit()
+        n = 0
         try:  # DB row is gone either way; orphaned files are reaped later
-            n = get_storage().delete_prefix(prefix)
+            storage = get_storage()
+            n = storage.delete_prefix(prefix)
+            if is_source_key_orphaned(source_key, siblings):
+                storage.delete(source_key)
         except Exception as exc:
             logger.warning('storage cleanup for %s failed: %s', prefix, exc)
-            n = 0
         return JsonResponse({'deleted': True, 'files_removed': n})
     return JsonResponse(aoi.to_dict())
 
@@ -335,6 +345,7 @@ def api_step_submit(request, session, project_id, step_key):
     AOIs failing the dependency guard are reported, never silently skipped.
     """
     from tethysapp.fimsim_gui.job_types import REGISTRY
+    from tethysapp.fimsim_gui.job_types.registry import validate_aoi_override
     from tethysapp.fimsim_gui.jobs import (
         prerequisites_missing, submit_step, supersede_step_and_downstream,
     )
@@ -411,7 +422,15 @@ def api_step_submit(request, session, project_id, step_key):
                 'reason': 'this step is already running for this AOI',
             })
             continue
-        merged_config = {**base_config, **(aoi_configs.get(str(aoi.id)) or {})}
+        override = aoi_configs.get(str(aoi.id))
+        # a non-object override (list/string) would blow up the {**...} merge
+        # with a TypeError → a 500; reject this AOI with a reason instead
+        override_problem = validate_aoi_override(override)
+        if override_problem:
+            results.append({'aoi_id': aoi.id, 'submitted': False,
+                            'reason': override_problem})
+            continue
+        merged_config = {**base_config, **(override or {})}
         # per-AOI overlays can introduce their own bad values — reject this
         # AOI with the reasons rather than crashing its worker job
         if str(aoi.id) in aoi_configs:

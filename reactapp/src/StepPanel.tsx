@@ -15,7 +15,7 @@ import RasterPreview from './RasterPreview';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview from './TextPreview';
-import { STEP_FIELDS, type FieldSpec } from './stepFields';
+import { STEP_FIELDS, coerceConfigNumbers, type FieldSpec } from './stepFields';
 import './StepPanel.css';
 
 const POLL_MS = 4000;
@@ -123,8 +123,9 @@ export default function StepPanel({
       const allowed = new Set([
         ...Object.keys(defaults), ...fields.map((f) => f.key), 'manning_mapping',
       ]);
+      const coerced = coerceConfigNumbers({ ...defaults, ...config }, fields);
       const merged: Record<string, unknown> = Object.fromEntries(
-        Object.entries({ ...defaults, ...config })
+        Object.entries(coerced)
           .filter(([k, v]) => allowed.has(k) && v !== null && v !== ''));
       for (const f of fields) {
         if (f.required && !merged[f.key]) {
@@ -192,10 +193,10 @@ export default function StepPanel({
                 step="any"
                 value={String(value(f.key))}
                 onChange={(e) => setConfig({
-                  ...config,
-                  [f.key]: f.widget === 'number'
-                    ? (e.target.value === '' ? null : Number(e.target.value))
-                    : e.target.value,
+                  // keep the raw string while typing — coercing mid-keystroke
+                  // turns "0.0001" into 0 (Number("0.")===0). Numbers are
+                  // coerced once at submit (coerceConfigNumbers).
+                  ...config, [f.key]: e.target.value,
                 })}
               />
             )}

@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import AoiMap, { type MapOverlay } from './AoiMap';
 import HydrographChart from './HydrographChart';
 import { getStepRun, type ServerAoi, type ServerStepRun } from './api';
-import { aoiZipUrl, fileProxyUrl, outputMeta } from './outputsMeta';
+import { aoiZipUrl, fileProxyUrl, keepModelSteps, outputMeta } from './outputsMeta';
 import './StepPanel.css';
 import './ResultsStep.css';
 
@@ -34,13 +34,19 @@ interface AoiResult {
   bdyRun?: ServerStepRun;
 }
 
-export default function ResultsStep({ aois, hasRunStep = true }: {
+export default function ResultsStep({ aois, hasRunStep = true, modelStepKeys }: {
   aois: ServerAoi[];
   /** false for deck-only models (TRITON): no flood overlay, no run nagging */
   hasRunStep?: boolean;
+  /** the active model's job-step keys; other models' steps are ignored so a
+   *  LISFLOOD run never leaks an overlay/files into a TRITON deck view */
+  modelStepKeys?: string[];
 }) {
   const [results, setResults] = useState<AoiResult[]>([]);
   const [opacity, setOpacity] = useState(0.8);
+  // stable primitive so the effect doesn't refetch on every render (the prop
+  // is a fresh array literal) yet still reruns if the model's steps change
+  const modelKeysSig = (modelStepKeys ?? []).join(',');
 
   useEffect(() => {
     let alive = true;
@@ -50,7 +56,9 @@ export default function ResultsStep({ aois, hasRunStep = true }: {
       // "first step that produced the file" stays deterministic.
       const out: AoiResult[] = await Promise.all(aois.map(async (aoi) => {
         const res: AoiResult = { aoi, runStatus: null, files: [] };
-        const entries = Object.entries(aoi.steps ?? {});
+        const allEntries = Object.entries(aoi.steps ?? {});
+        const entries = modelKeysSig
+          ? keepModelSteps(allEntries, modelKeysSig.split(',')) : allEntries;
         const runs = await Promise.all(
           entries.map(([, summary]) => getStepRun(summary.id).catch(() => null)));
         for (let k = 0; k < entries.length; k++) {
@@ -98,7 +106,7 @@ export default function ResultsStep({ aois, hasRunStep = true }: {
       if (alive) setResults(out);
     })();
     return () => { alive = false; };
-  }, [aois]);
+  }, [aois, modelKeysSig]);
 
   const overlays = results.flatMap((r) => (r.overlay ? [r.overlay] : []));
   const anySucceeded = results.some((r) => r.runStatus === 'succeeded');

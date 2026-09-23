@@ -13,7 +13,7 @@ import AoiStep from './AoiStep';
 import ProjectStep from './ProjectStep';
 import ResultsStep from './ResultsStep';
 import StepPanel from './StepPanel';
-import { DEFAULT_MODEL, MODELS, type ModelId, type StepId } from './steps';
+import { DEFAULT_MODEL, MODELS, resolveActiveStep, type ModelId, type StepId } from './steps';
 import './NewSimulation.css';
 
 const NON_JOB_STEPS = new Set(['project', 'aoi', 'results']);
@@ -76,7 +76,11 @@ export default function NewSimulation() {
     }
   }, [projectId, model]);
 
-  const idx = STEPS.findIndex((s) => s.id === step);
+  // A model switch can leave `step` pointing at a step the new model lacks
+  // (LISFLOOD "run" → TRITON); render a shared step until the reset effect
+  // syncs `step`, so we never index past STEPS and crash on def.title.
+  const activeStep = resolveActiveStep(STEPS, step, !!projectId);
+  const idx = STEPS.findIndex((s) => s.id === activeStep);
   const def = STEPS[idx];
 
   const goTo = (id: StepId) => {
@@ -144,17 +148,21 @@ export default function NewSimulation() {
 
         {loadError && <div className="as-error" role="alert">{loadError}</div>}
 
-        {step === 'project' ? (
+        {activeStep === 'project' ? (
           <ProjectStep />
-        ) : step === 'aoi' && projectId ? (
+        ) : activeStep === 'aoi' && projectId ? (
           <AoiStep projectId={projectId} aois={aois} setAois={setAois} />
-        ) : step === 'results' && projectId ? (
-          <ResultsStep aois={aois} hasRunStep={JOB_STEPS.has('run')} />
-        ) : JOB_STEPS.has(step) && projectId ? (
+        ) : activeStep === 'results' && projectId ? (
+          <ResultsStep
+            aois={aois}
+            hasRunStep={JOB_STEPS.has('run')}
+            modelStepKeys={[...JOB_STEPS]}
+          />
+        ) : JOB_STEPS.has(activeStep) && projectId ? (
           <StepPanel
-            key={step}  /* fresh form state per step — config must never leak across steps */
+            key={activeStep}  /* fresh form state per step — config must never leak across steps */
             projectId={projectId}
-            stepKey={step}
+            stepKey={activeStep}
             aois={aois}
             stepOrder={stepOrder}
             schema={schemas?.[step] ?? null}
