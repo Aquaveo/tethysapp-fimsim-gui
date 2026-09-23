@@ -101,3 +101,32 @@ describe('parseDischargeCsv', () => {
     expect(parseDischargeCsv('time,discharge_cms\n')).toEqual([]);
   });
 });
+
+// ── TRITON .hyg (feedback #13): "time_hr,discharge_cms" with % comments ──────
+const HYG = [
+  '%Time(hr) Discharge(cms)',
+  '0,100.5',
+  '1,150.25',
+  '2,120',
+].join('\n');
+
+describe('parseHyg', () => {
+  it('parses a single-source .hyg into a discharge series (m³/s)', async () => {
+    const { parseHyg } = await import('../bdy');
+    const series = parseHyg(HYG, 0);
+    expect(series).toHaveLength(1);
+    // time is HOURS → ms; discharge is real cms
+    expect(series[0].points).toEqual([
+      [0, 100.5],
+      [3_600_000, 150.25],
+      [7_200_000, 120],
+    ]);
+  });
+
+  it('offsets by startMs and skips % comment lines', async () => {
+    const { parseHyg } = await import('../bdy');
+    const start = Date.UTC(2016, 9, 5);
+    const series = parseHyg(HYG, start);
+    expect(series[0].points[1]).toEqual([start + 3_600_000, 150.25]);
+  });
+});

@@ -252,7 +252,7 @@ export default function StepPanel({
               {run ? (
                 <>
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
-                  {run.status === 'succeeded' && stepKey === 'bdy' && (
+                  {run.status === 'succeeded' && (stepKey === 'bdy' || stepKey === 'thyg') && (
                     <HydrographChart run={run} />
                   )}
                   {run.status === 'succeeded' && (stepKey === 'bci' || stepKey === 'tbc') && (

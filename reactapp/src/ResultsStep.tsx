@@ -69,7 +69,7 @@ export default function ResultsStep({ aois, hasRunStep = true, modelStepKeys }: 
             continue;
           }
           if (step === 'run') res.runStatus = 'succeeded';
-          if (step === 'bdy') res.bdyRun = run;
+          if (step === 'bdy' || step === 'thyg') res.bdyRun = run;  // flow step (both models)
           for (const m of (Array.isArray(run.manifest) ? run.manifest : [])) {
             // manifests are cumulative (each step re-ships the whole deck) —
             // list every file once, under the step that first produced it

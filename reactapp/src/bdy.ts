@@ -37,6 +37,26 @@ export function parseBdy(text: string, startMs: number | null): Series[] {
 }
 
 
+/** Parse a TRITON .hyg: "%"-comment lines, then rows of
+ *  "<time_hr>,<discharge_cms>[,<discharge_cms_2>…]". Unlike the LISFLOOD .bdy
+ *  the values are true discharge (m³/s) and the time column is in HOURS. Only
+ *  the first source column is charted. */
+export function parseHyg(text: string, startMs: number | null): Series[] {
+  const points: [number, number][] = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('%') || line.startsWith('#')) continue;
+    const cols = line.split(',');
+    const t = Number(cols[0]);
+    const q = Number(cols[1]);
+    if (Number.isFinite(t) && Number.isFinite(q)) {
+      points.push([(startMs ?? 0) + t * 3_600_000, q]); // hours → ms
+    }
+  }
+  return points.length ? [{ boundary: 'inflow discharge', points }] : [];
+}
+
+
 export interface ParsedSeries {
   series: Series[];
   /** true discharge (m³/s) vs LISFLOOD's per-metre-width inflow (m²/s) */

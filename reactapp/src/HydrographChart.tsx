@@ -4,7 +4,7 @@
 // echarts bundle is heavy, so the chart lazy-loads; parsing happens here.
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { getStepRunOutputs, type ServerStepRun } from './api';
-import { parseBdy, parseDischargeCsv, type Series } from './bdy';
+import { parseBdy, parseDischargeCsv, parseHyg, type Series } from './bdy';
 import { fileProxyUrl } from './outputsMeta';
 
 const ReactECharts = lazy(() => import('echarts-for-react'));
@@ -48,6 +48,15 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
             if (alive) { setSeries(parsed); setUnit('m³/s'); }
             return;
           }
+        }
+        // TRITON has no .bdy — its flow step ships a .hyg (true discharge, cms)
+        const hyg = outputs.find((o) => o.name.toLowerCase().endsWith('.hyg'));
+        if (hyg) {
+          const parsed = parseHyg(
+            await (await fetch(fileProxyUrl(run.id, hyg.name))).text(), startMs);
+          if (!parsed.length) throw new Error('no readable series in the .hyg');
+          if (alive) { setSeries(parsed); setUnit('m³/s'); }
+          return;
         }
         const bdy = outputs.find((o) => o.name.toLowerCase().endsWith('.bdy'));
         if (!bdy) throw new Error('no .bdy in outputs');
