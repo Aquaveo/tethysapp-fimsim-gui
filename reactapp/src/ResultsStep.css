@@ -36,3 +36,12 @@
   text-decoration: none; font-size: 0.78rem; font-weight: 600; white-space: nowrap;
 }
 .rs-dl:hover { background: var(--color-surface-alt); }
+
+/* FE30 — file selection + Download Selected */
+.rs-check { width: 1.5rem; text-align: center; }
+.rs-check input { cursor: pointer; }
+.rs-table tr.rs-row-sel td { background: var(--color-surface-alt); }
+.rs-dl-bar {
+  display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;
+  justify-content: flex-end; margin-top: 0.6rem;
+}

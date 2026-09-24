@@ -203,3 +203,21 @@ export const cancelStepRun = (id: number) =>
 
 export const getStepRunOutputs = (id: number) =>
   request<{ outputs: OutputEntry[] }>(`/stepruns/${id}/outputs/`);
+
+/** POST a selected {run_id, name} list, get back a zip of just those files. */
+export async function downloadSelectedZip(
+  aoiId: number, files: { run_id: number; name: string }[],
+): Promise<Blob> {
+  await ensureCsrf();
+  const res = await fetch(`${BASE}/aois/${aoiId}/zip/`, {
+    method: 'POST',
+    headers: { 'X-CSRFToken': csrfToken(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+  if (!res.ok) {
+    let msg = 'download failed';
+    try { msg = ((await res.json()) as { error?: string }).error ?? msg; } catch { /* non-JSON */ }
+    throw new ApiError(res.status, msg);
+  }
+  return res.blob();
+}

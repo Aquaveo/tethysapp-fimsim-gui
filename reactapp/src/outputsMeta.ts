@@ -6,6 +6,25 @@ export interface OutputMeta {
   description: string;
 }
 
+/** Bytes → a short "12.3 MB" / "48 kB" label (matches the Results table). */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 kB';
+  return bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} kB`;
+}
+
+/** Count + total bytes of the rows whose key is in `selected`. */
+export function summarizeSelection(
+  rows: { key: string; bytes: number }[], selected: ReadonlySet<string>,
+): { count: number; bytes: number } {
+  let count = 0;
+  let bytes = 0;
+  for (const r of rows) {
+    if (selected.has(r.key)) { count += 1; bytes += r.bytes; }
+  }
+  return { count, bytes };
+}
+
 /**
  * Keep only the step entries that belong to the active model. The Results view
  * for a deck-only model (TRITON) must not pick up a LISFLOOD `run` overlay or

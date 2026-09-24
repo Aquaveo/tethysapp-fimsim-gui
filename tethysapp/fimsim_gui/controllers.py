@@ -584,7 +584,11 @@ def api_steprun_file(request, session, steprun_id, name):
 @controller(url='api/aois/{aoi_id}/zip', name='api_aoi_zip')
 @with_session
 def api_aoi_zip(request, session, aoi_id):
-    """Everything the AOI's current runs produced, one zip, foldered by step."""
+    """Zip the AOI's outputs, foldered by step.
+
+    GET: everything the AOI's current runs produced. POST {"files": [{run_id,
+    name}, ...]}: only those selected files (the "Download Selected" button).
+    """
     import io
     import zipfile
 
@@ -593,29 +597,47 @@ def api_aoi_zip(request, session, aoi_id):
     aoi, err = _owned_aoi(session, request, aoi_id)
     if err:
         return err
-    from tethysapp.fimsim_gui.models import STEP_KEYS
+    from tethysapp.fimsim_gui.models import STEP_KEYS, selected_manifest_entries
     from tethysapp.fimsim_gui.storage import get_storage
     storage = get_storage()
+
+    entries = None       # list of (arcname, key); None → the everything path
+    if request.method == 'POST':
+        try:
+            selection = (json.loads(request.body or '{}') or {}).get('files')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'invalid JSON'}, status=400)
+        if not isinstance(selection, list) or not selection:
+            return JsonResponse({'error': 'no files selected'}, status=400)
+        entries = selected_manifest_entries(aoi, selection)
 
     buf = io.BytesIO()
     n = 0
     seen = set()  # manifests are cumulative — ship each file once, under the
     #               step that first produced it
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for step in STEP_KEYS:
-            run = aoi.current_step_run(step)
-            if not run or not isinstance(run.manifest, list):
-                continue
-            for m in run.manifest:
-                if m['name'] in seen or not storage.exists(m['key']):
+        if entries is not None:
+            for arcname, key in entries:
+                if storage.exists(key):
+                    with storage.open(key) as fh:
+                        zf.writestr(arcname, fh.read())
+                        n += 1
+        else:
+            for step in STEP_KEYS:
+                run = aoi.current_step_run(step)
+                if not run or not isinstance(run.manifest, list):
                     continue
-                seen.add(m['name'])
-                with storage.open(m['key']) as fh:
-                    zf.writestr(f"{step}/{m['name']}", fh.read())
-                    n += 1
+                for m in run.manifest:
+                    if m['name'] in seen or not storage.exists(m['key']):
+                        continue
+                    seen.add(m['name'])
+                    with storage.open(m['key']) as fh:
+                        zf.writestr(f"{step}/{m['name']}", fh.read())
+                        n += 1
     if not n:
         return JsonResponse({'error': 'no stored outputs for this area yet'}, status=404)
     buf.seek(0)
-    fname = sanitize_name(f"{aoi.project.name}_{aoi.name}") + '.zip'
+    suffix = '_selected' if entries is not None else ''
+    fname = sanitize_name(f"{aoi.project.name}_{aoi.name}") + suffix + '.zip'
     return FileResponse(buf, as_attachment=True, filename=fname,
                         content_type='application/zip')

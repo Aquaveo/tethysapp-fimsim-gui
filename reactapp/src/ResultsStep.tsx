@@ -6,8 +6,10 @@
 import { useEffect, useState } from 'react';
 import AoiMap, { type MapOverlay } from './AoiMap';
 import HydrographChart from './HydrographChart';
-import { getStepRun, type ServerAoi, type ServerStepRun } from './api';
-import { aoiZipUrl, fileProxyUrl, keepModelSteps, outputMeta } from './outputsMeta';
+import { downloadSelectedZip, getStepRun, type ServerAoi, type ServerStepRun } from './api';
+import {
+  fileProxyUrl, formatBytes, keepModelSteps, outputMeta, summarizeSelection,
+} from './outputsMeta';
 import './StepPanel.css';
 import './ResultsStep.css';
 
@@ -44,9 +46,49 @@ export default function ResultsStep({ aois, hasRunStep = true, modelStepKeys }: 
 }) {
   const [results, setResults] = useState<AoiResult[]>([]);
   const [opacity, setOpacity] = useState(0.8);
+  // per-AOI file selection (keys "runId:name") for "Download Selected"
+  const [selected, setSelected] = useState<Record<number, Set<string>>>({});
+  const [dlBusy, setDlBusy] = useState<number | null>(null);
+  const [dlError, setDlError] = useState<string | null>(null);
   // stable primitive so the effect doesn't refetch on every render (the prop
   // is a fresh array literal) yet still reruns if the model's steps change
   const modelKeysSig = (modelStepKeys ?? []).join(',');
+
+  const fileKey = (f: FileRow) => `${f.runId}:${f.name}`;
+  const setFor = (aoiId: number) => selected[aoiId] ?? new Set<string>();
+  const setSel = (aoiId: number, next: Set<string>) =>
+    setSelected((prev) => ({ ...prev, [aoiId]: next }));
+  const toggleFile = (aoiId: number, key: string) => {
+    const next = new Set(setFor(aoiId));
+    if (next.has(key)) next.delete(key); else next.add(key);
+    setSel(aoiId, next);
+  };
+  const toggleAll = (aoiId: number, files: FileRow[], on: boolean) =>
+    setSel(aoiId, on ? new Set(files.map(fileKey)) : new Set());
+
+  const downloadSelected = async (aoi: ServerAoi, files: FileRow[]) => {
+    const sel = setFor(aoi.id);
+    const picked = files.filter((f) => sel.has(fileKey(f)));
+    if (!picked.length) return;
+    setDlError(null);
+    setDlBusy(aoi.id);
+    try {
+      const blob = await downloadSelectedZip(
+        aoi.id, picked.map((f) => ({ run_id: f.runId, name: f.name })));
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${aoi.name.replace(/[^\w.-]+/g, '_')}_selected.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setDlError(`${aoi.name}: ${(e as Error).message ?? 'download failed'}`);
+    } finally {
+      setDlBusy(null);
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -145,48 +187,79 @@ export default function ResultsStep({ aois, hasRunStep = true, modelStepKeys }: 
                 </span>
               )}
             </div>
-            {r.files.length > 0 && (
-              <a className="button-primary rs-zip" href={aoiZipUrl(r.aoi.id)}>
-                ⬇ Download all ({r.files.length} files)
-              </a>
-            )}
           </div>
 
           {r.bdyRun && <HydrographChart run={r.bdyRun} />}
 
           {r.files.length > 0 ? (
-            <div className="rs-tablewrap">
-              <table className="rs-table">
-                <thead>
-                  <tr><th>Step</th><th>File</th><th>What it is</th><th>Size</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {r.files.map((f) => {
-                    const meta = outputMeta(f.name);
-                    return (
-                      <tr key={`${f.step}-${f.name}`}>
-                        <td className="rs-step">{STEP_LABELS[f.step] ?? f.step}</td>
-                        <td className="rs-name">{f.name}</td>
-                        <td className="rs-desc">
-                          <strong>{meta.label}.</strong> {meta.description}
-                        </td>
-                        <td className="rs-size">
-                          {f.bytes >= 1e6 ? `${(f.bytes / 1e6).toFixed(1)} MB`
-                            : `${Math.max(1, Math.round(f.bytes / 1024))} kB`}
-                        </td>
-                        <td>
-                          <a className="rs-dl" href={fileProxyUrl(f.runId, f.name, true)}>
-                            Download
-                          </a>
-                        </td>
+            (() => {
+              const sel = setFor(r.aoi.id);
+              const allOn = r.files.every((f) => sel.has(fileKey(f)));
+              const rows = r.files.map((f) => ({ key: fileKey(f), bytes: f.bytes }));
+              const { count, bytes } = summarizeSelection(rows, sel);
+              return (
+                <div className="rs-tablewrap">
+                  <table className="rs-table">
+                    <thead>
+                      <tr>
+                        <th className="rs-check">
+                          <input type="checkbox" aria-label="Select all files"
+                                 checked={allOn}
+                                 onChange={(e) => toggleAll(r.aoi.id, r.files, e.target.checked)} />
+                        </th>
+                        <th>Step</th><th>File</th><th>What it is</th><th>Size</th><th></th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {r.files.map((f) => {
+                        const meta = outputMeta(f.name);
+                        const key = fileKey(f);
+                        return (
+                          <tr key={`${f.step}-${f.name}`}
+                              className={sel.has(key) ? 'rs-row-sel' : undefined}>
+                            <td className="rs-check">
+                              <input type="checkbox"
+                                     aria-label={`Select ${f.name}`}
+                                     checked={sel.has(key)}
+                                     onChange={() => toggleFile(r.aoi.id, key)} />
+                            </td>
+                            <td className="rs-step">{STEP_LABELS[f.step] ?? f.step}</td>
+                            <td className="rs-name">{f.name}</td>
+                            <td className="rs-desc">
+                              <strong>{meta.label}.</strong> {meta.description}
+                            </td>
+                            <td className="rs-size">{formatBytes(f.bytes)}</td>
+                            <td>
+                              <a className="rs-dl" href={fileProxyUrl(f.runId, f.name, true)}>
+                                Download
+                              </a>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <div className="rs-dl-bar">
+                    <button type="button" className="button-secondary"
+                            disabled={count === 0}
+                            onClick={() => toggleAll(r.aoi.id, r.files, false)}>
+                      Clear Selection
+                    </button>
+                    <button type="button" className="button-primary"
+                            disabled={count === 0 || dlBusy === r.aoi.id}
+                            onClick={() => void downloadSelected(r.aoi, r.files)}>
+                      {dlBusy === r.aoi.id ? 'Zipping…'
+                        : `⬇ Download Selected (${count} file${count === 1 ? '' : 's'} · ${formatBytes(bytes)})`}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()
           ) : (
             <p className="sp-muted">No stored outputs for this area yet.</p>
+          )}
+          {dlError && dlError.startsWith(`${r.aoi.name}:`) && (
+            <p className="sp-error" role="alert">{dlError}</p>
           )}
         </section>
       ))}

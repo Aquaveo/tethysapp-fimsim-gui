@@ -94,6 +94,28 @@ STEPRUN_STATUSES = (
 LOOKUP_STATUSES = ("pending", "running", "done", "failed")
 
 
+def selected_manifest_entries(aoi, selection):
+    """(arcname, storage_key) pairs for a client's selected files.
+
+    `selection` is a list of {"run_id", "name"}. Only files from runs that
+    belong to *aoi* are returned (a run_id for another AOI is ignored, so a
+    client can't zip files it doesn't own), and each name is included once.
+    """
+    runs = {r.id: r for r in aoi.step_runs}
+    entries, seen = [], set()
+    for sel in selection or []:
+        run = runs.get(sel.get("run_id"))
+        name = sel.get("name")
+        if not run or not isinstance(run.manifest, list) or name in seen:
+            continue
+        for m in run.manifest:
+            if m.get("name") == name:
+                seen.add(name)
+                entries.append((f"{run.step_key}/{name}", m["key"]))
+                break
+    return entries
+
+
 def sanitize_name(name: str) -> str:
     """fimcore.project.clean_name parity (kept local so the web app never
     needs fimcore importable at request time)."""

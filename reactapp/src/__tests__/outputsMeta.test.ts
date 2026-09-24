@@ -56,3 +56,27 @@ describe('URL builders', () => {
     expect(aoiZipUrl(7)).toBe('/apps/fimsim-gui/api/aois/7/zip/');
   });
 });
+
+import { formatBytes, summarizeSelection } from '../outputsMeta';
+
+describe('formatBytes', () => {
+  it('formats MB and kB, guarding zero/negatives', () => {
+    expect(formatBytes(2_500_000)).toBe('2.5 MB');
+    expect(formatBytes(48_000)).toBe('47 kB');
+    expect(formatBytes(0)).toBe('0 kB');
+    expect(formatBytes(-5)).toBe('0 kB');
+  });
+});
+
+describe('summarizeSelection', () => {
+  it('counts and sums only the selected rows', () => {
+    const rows = [
+      { key: '5:a.tif', bytes: 1_000_000 },
+      { key: '5:b.asc', bytes: 500_000 },
+      { key: '6:c.png', bytes: 200_000 },
+    ];
+    expect(summarizeSelection(rows, new Set(['5:a.tif', '6:c.png'])))
+      .toEqual({ count: 2, bytes: 1_200_000 });
+    expect(summarizeSelection(rows, new Set())).toEqual({ count: 0, bytes: 0 });
+  });
+});

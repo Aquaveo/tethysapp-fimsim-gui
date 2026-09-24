@@ -30,6 +30,30 @@ def test_registry_covers_the_wizard_steps():
         assert isinstance(jt.defaults(), dict)
 
 
+def test_selected_manifest_entries_maps_a_selection_to_zip_keys():
+    from types import SimpleNamespace
+    from tethysapp.fimsim_gui.models import selected_manifest_entries
+    aoi = SimpleNamespace(step_runs=[
+        SimpleNamespace(id=5, step_key="dem", manifest=[
+            {"name": "DEM.tif", "key": "u/1/1/dem/DEM.tif"},
+            {"name": "dem.ascii", "key": "u/1/1/dem/dem.ascii"}]),
+        SimpleNamespace(id=6, step_key="run", manifest=[
+            {"name": "max_depth.tif", "key": "u/1/1/run/max_depth.tif"}]),
+    ])
+    sel = [{"run_id": 5, "name": "DEM.tif"},
+           {"run_id": 6, "name": "max_depth.tif"}]
+    assert selected_manifest_entries(aoi, sel) == [
+        ("dem/DEM.tif", "u/1/1/dem/DEM.tif"),
+        ("run/max_depth.tif", "u/1/1/run/max_depth.tif")]
+    # a run_id not on this AOI is ignored (can't zip another AOI's file)
+    assert selected_manifest_entries(aoi, [{"run_id": 999, "name": "x"}]) == []
+    # an unknown file name is ignored
+    assert selected_manifest_entries(aoi, [{"run_id": 5, "name": "nope"}]) == []
+    # empty / None selection → nothing
+    assert selected_manifest_entries(aoi, []) == []
+    assert selected_manifest_entries(aoi, None) == []
+
+
 def test_aoi_override_must_be_a_json_object():
     # a per-AOI override that is a list/string (valid JSON, wrong shape) used to
     # reach `{**override}` and raise TypeError → a 500; it must be rejected with
