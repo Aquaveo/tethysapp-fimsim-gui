@@ -62,6 +62,28 @@ def test_manning_bounds():
                for p in _problems("manning", {"lulc_year": 1802}))
 
 
+def test_manning_year_must_be_a_year_the_source_actually_publishes():
+    # Parvaneh (2026-09-23): the ESRI/MRLC services answer an unpublished year
+    # with a blank raster, not an error — so the app must refuse them. Esri
+    # Sentinel-2 = 2017–2025; NLCD = 2001,2004,2006,2008,2011,2013,2016,2019,2021.
+    assert _problems("manning", {"lulc_year": 2023}) == []          # published
+    assert any("lulc_year" in p for p in _problems("manning", {"lulc_year": 2026}))
+    assert any("lulc_year" in p for p in _problems("manning", {"lulc_year": 2016}))  # pre-Sentinel2
+    assert _problems("manning", {"lulc_download_source": "nlcd",
+                                 "nlcd_year": "2019"}) == []          # published
+    assert any("nlcd_year" in p for p in _problems(
+        "manning", {"lulc_download_source": "nlcd", "nlcd_year": "2020"}))  # gap year
+
+
+def test_tfric_year_validation_mirrors_manning():
+    assert _problems("tfric", {"lulc_year": 2020}) == []
+    assert any("lulc_year" in p for p in _problems("tfric", {"lulc_year": 2016}))
+    assert _problems("tfric", {"lulc_source": "download_nlcd",
+                               "nlcd_year": "2016"}) == []
+    assert any("nlcd_year" in p for p in _problems(
+        "tfric", {"lulc_source": "download_nlcd", "nlcd_year": "2005"}))
+
+
 def test_manning_mapping_shape():
     ok = {"manning_mapping": {"11": 0.03, "42": 0.11}}
     assert _problems("manning", ok) == []

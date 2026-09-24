@@ -13,6 +13,33 @@ from tethysapp.fimsim_gui.job_types.registry import (
     _check_safe_name,
 )
 
+# Land-cover years each source actually publishes (Parvaneh, verified against
+# the services 2026-09-23). An unpublished year isn't an error at the service —
+# ESRI/MRLC answer with an all-nodata raster — so the app must refuse it or the
+# Manning grid is built from a blank land cover.
+SENTINEL2_YEARS = tuple(range(2025, 2016, -1))          # 2017–2025 (ints)
+NLCD_YEARS = ("2021", "2019", "2016", "2013", "2011",   # MRLC L48 (strings)
+              "2008", "2006", "2004", "2001")
+
+
+def _check_lulc_years(config: dict, problems: list) -> None:
+    """Reject a land-cover year the chosen source doesn't publish. Keys mirror
+    fimcore: `lulc_year` (Esri Sentinel-2, int) and `nlcd_year` (NLCD, str)."""
+    yr = config.get("lulc_year")
+    if yr is not None:
+        try:
+            ok = int(yr) in SENTINEL2_YEARS
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            problems.append(
+                f"'lulc_year' {yr!r}: the ESRI Sentinel-2 land cover only "
+                f"covers {SENTINEL2_YEARS[-1]}–{SENTINEL2_YEARS[0]}")
+    ny = config.get("nlcd_year")
+    if ny is not None and str(ny) not in NLCD_YEARS:
+        problems.append(
+            f"'nlcd_year' {ny!r}: NLCD publishes {', '.join(NLCD_YEARS)}")
+
 
 class DEMStepJobType(StepJobType):
     # wildcards also sweep up "dem (1).ascii"-style versioned leftovers
@@ -148,7 +175,7 @@ class ManningStepJobType(UniformStepJobType):
         _check_choice(config, "lulc_download_source", ("esri", "nlcd"), problems)
         # Chow (1959) tables top out well below 1; 0 would zero out friction
         _check_number(config, "fpfric_val", 0.001, 1.0, problems)
-        _check_number(config, "lulc_year", 1985, 2035, problems)
+        _check_lulc_years(config, problems)
         mapping = config.get("manning_mapping")
         if mapping is not None:
             if not isinstance(mapping, dict):

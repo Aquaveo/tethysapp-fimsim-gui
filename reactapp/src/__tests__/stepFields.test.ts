@@ -42,12 +42,17 @@ describe('STEP_FIELDS consistency', () => {
     expect(bad).toEqual([]);
   });
 
+  const conds = (showIf: (typeof entries)[number][1][number]['showIf']) =>
+    (showIf ? (Array.isArray(showIf) ? showIf : [showIf]) : []);
+
   it('every showIf references a key defined in the same step', () => {
     const bad: string[] = [];
     for (const [step, fields] of entries) {
       const keys = new Set(fields.map((f) => f.key));
       for (const f of fields) {
-        if (f.showIf && !keys.has(f.showIf.key)) bad.push(`${step}.${f.key} → ${f.showIf.key}`);
+        for (const c of conds(f.showIf)) {
+          if (!keys.has(c.key)) bad.push(`${step}.${f.key} → ${c.key}`);
+        }
       }
     }
     expect(bad).toEqual([]);
@@ -57,11 +62,12 @@ describe('STEP_FIELDS consistency', () => {
     const bad: string[] = [];
     for (const [step, fields] of entries) {
       for (const f of fields) {
-        if (!f.showIf) continue;
-        const controller = fields.find((g) => g.key === f.showIf!.key);
-        const values = controller?.options?.map((o) => o.value) ?? [];
-        if (!values.includes(f.showIf.value as string | number)) {
-          bad.push(`${step}.${f.key} → ${f.showIf.key}=${String(f.showIf.value)}`);
+        for (const c of conds(f.showIf)) {
+          const controller = fields.find((g) => g.key === c.key);
+          const values = controller?.options?.map((o) => o.value) ?? [];
+          if (!values.includes(c.value as string | number)) {
+            bad.push(`${step}.${f.key} → ${c.key}=${String(c.value)}`);
+          }
         }
       }
     }

@@ -1,7 +1,7 @@
 // Pure helpers behind three Copilot-review fixes: decimal number entry,
 // model-switch safety, and per-model Results filtering.
 import { describe, expect, it } from 'vitest';
-import { coerceConfigNumbers } from '../stepFields';
+import { coerceConfigNumbers, fieldVisible, STEP_FIELDS } from '../stepFields';
 import { resolveActiveStep } from '../steps';
 import { keepModelSteps } from '../outputsMeta';
 import { MODELS } from '../steps';
@@ -26,6 +26,32 @@ describe('coerceConfigNumbers', () => {
 
   it('already-numeric values pass through', () => {
     expect(coerceConfigNumbers({ value: 3 }, fields)).toEqual({ value: 3 });
+  });
+});
+
+describe('fieldVisible (source-aware year dropdowns)', () => {
+  const get = (cfg: Record<string, unknown>) => (k: string) => cfg[k];
+
+  it('requires every condition in an array to hold', () => {
+    const showIf = [{ key: 'fric_mode', value: 'varying' },
+                    { key: 'lulc_download_source', value: 'esri' }];
+    expect(fieldVisible(showIf, get({ fric_mode: 'varying', lulc_download_source: 'esri' }))).toBe(true);
+    expect(fieldVisible(showIf, get({ fric_mode: 'varying', lulc_download_source: 'nlcd' }))).toBe(false);
+    expect(fieldVisible(showIf, get({ fric_mode: 'fixed', lulc_download_source: 'esri' }))).toBe(false);
+  });
+
+  it('the two Manning year fields are mutually exclusive by source', () => {
+    const esri = get({ fric_mode: 'varying', lulc_download_source: 'esri' });
+    const fields = STEP_FIELDS.manning;
+    const lulc = fields.find((f) => f.key === 'lulc_year')!;
+    const nlcd = fields.find((f) => f.key === 'nlcd_year')!;
+    expect(fieldVisible(lulc.showIf, esri)).toBe(true);
+    expect(fieldVisible(nlcd.showIf, esri)).toBe(false);
+    // Esri years exclude anything before 2017; NLCD offers 2021 but not 2020
+    expect(lulc.options?.map((o) => o.value)).toContain(2023);
+    expect(lulc.options?.map((o) => o.value)).not.toContain(2016);
+    expect(nlcd.options?.map((o) => o.value)).toEqual(
+      ['2021', '2019', '2016', '2013', '2011', '2008', '2006', '2004', '2001']);
   });
 });
 

@@ -1,16 +1,35 @@
 // reactapp/src/stepFields.ts
 // Per-step form fields for the generic StepPanel. Keys are exactly the
 // fimcore kwargs (BE7's config contract); labels are user-language.
+export interface Condition { key: string; value: unknown }
+
 export interface FieldSpec {
   key: string;
   label: string;
   widget: 'select' | 'number' | 'text' | 'datetime';
   options?: { value: string | number; label: string }[];
   help?: string;
-  /** only show when another field has this value */
-  showIf?: { key: string; value: unknown };
+  /** only show when another field has this value; an array means ALL must hold */
+  showIf?: Condition | Condition[];
   required?: boolean;
 }
+
+/** Whether a field's showIf is satisfied. `get(key)` returns the live value. */
+export function fieldVisible(
+  showIf: FieldSpec['showIf'], get: (key: string) => unknown,
+): boolean {
+  if (!showIf) return true;
+  const conds = Array.isArray(showIf) ? showIf : [showIf];
+  return conds.every((c) => get(c.key) === c.value);
+}
+
+/** Land-cover years each source publishes (Parvaneh, 2026-09-23). */
+export const SENTINEL2_YEAR_OPTIONS =
+  [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017]
+    .map((y) => ({ value: y, label: String(y) }));
+export const NLCD_YEAR_OPTIONS =
+  ['2021', '2019', '2016', '2013', '2011', '2008', '2006', '2004', '2001']
+    .map((y) => ({ value: y, label: y }));
 
 /**
  * Coerce number-widget values to real numbers at SUBMIT time only.
@@ -78,8 +97,16 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       ],
     },
     {
-      key: 'lulc_year', label: 'Land cover year', widget: 'number',
-      showIf: { key: 'fric_mode', value: 'varying' },
+      key: 'lulc_year', label: 'Land cover year', widget: 'select',
+      options: SENTINEL2_YEAR_OPTIONS,
+      showIf: [{ key: 'fric_mode', value: 'varying' },
+               { key: 'lulc_download_source', value: 'esri' }],
+    },
+    {
+      key: 'nlcd_year', label: 'Land cover year', widget: 'select',
+      options: NLCD_YEAR_OPTIONS,
+      showIf: [{ key: 'fric_mode', value: 'varying' },
+               { key: 'lulc_download_source', value: 'nlcd' }],
     },
   ],
   bci: [
@@ -178,8 +205,16 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       ],
     },
     {
-      key: 'lulc_year', label: 'Land cover year', widget: 'number',
-      showIf: { key: 'fric_mode', value: 'varying' },
+      key: 'lulc_year', label: 'Land cover year', widget: 'select',
+      options: SENTINEL2_YEAR_OPTIONS,
+      showIf: [{ key: 'fric_mode', value: 'varying' },
+               { key: 'lulc_source', value: 'download' }],
+    },
+    {
+      key: 'nlcd_year', label: 'Land cover year', widget: 'select',
+      options: NLCD_YEAR_OPTIONS,
+      showIf: [{ key: 'fric_mode', value: 'varying' },
+               { key: 'lulc_source', value: 'download_nlcd' }],
     },
     // No resolution control: the friction grid is snapped to the terrain DEM
     // on the server, so a second resolution here would only mislead.

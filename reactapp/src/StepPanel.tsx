@@ -15,7 +15,7 @@ import RasterPreview from './RasterPreview';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview from './TextPreview';
-import { STEP_FIELDS, coerceConfigNumbers, type FieldSpec } from './stepFields';
+import { STEP_FIELDS, coerceConfigNumbers, fieldVisible, type FieldSpec } from './stepFields';
 import './StepPanel.css';
 
 const POLL_MS = 4000;
@@ -84,8 +84,7 @@ export default function StepPanel({
   const [error, setError] = useState<string | null>(null);
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
-  const visible = (f: FieldSpec) =>
-    !f.showIf || value(f.showIf.key) === f.showIf.value;
+  const visible = (f: FieldSpec) => fieldVisible(f.showIf, value);
 
   // seed run tracking from the AOIs' current step summaries
   useEffect(() => {
