@@ -6,7 +6,7 @@
 // layer on top later — this gets the whole workflow demoable.
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ApiError, cancelStepRun, getStepRun, getStepRunOutputs, submitStep,
+  ApiError, cancelStepRun, getStepRun, getStepRunOutputs, submitStep, uploadDem,
   type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
 } from './api';
 import BoundaryPreview from './BoundaryPreview';
@@ -96,9 +96,32 @@ export default function StepPanel({
   const [submitNotes, setSubmitNotes] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // BE17: per-AOI uploaded DEMs (keys) for the "upload my DEM" path
+  const [demKeys, setDemKeys] = useState<Record<number, { key: string; name: string }[]>>({});
+  const [demBusy, setDemBusy] = useState<number | null>(null);
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
   const visible = (f: FieldSpec) => fieldVisible(f.showIf, value);
+  const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
+    && value('dem_input') === 'upload';
+
+  const uploadDemFor = async (aoiId: number, files: File[]) => {
+    setDemBusy(aoiId);
+    setError(null);
+    try {
+      const { dems } = await uploadDem(aoiId, files);
+      setDemKeys((prev) => ({
+        ...prev,
+        [aoiId]: [...(prev[aoiId] ?? []), ...dems.map((d) => ({ key: d.key, name: d.name }))],
+      }));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String((e as Error).message ?? e));
+    } finally {
+      setDemBusy(null);
+    }
+  };
+  const clearDem = (aoiId: number) =>
+    setDemKeys((prev) => ({ ...prev, [aoiId]: [] }));
 
   // seed run tracking from the AOIs' current step summaries
   useEffect(() => {
@@ -146,7 +169,20 @@ export default function StepPanel({
           throw new Error(`"${f.label}" is required.`);
         }
       }
-      const { results } = await submitStep(projectId, stepKey, merged);
+      // BE17: when uploading DEMs, each AOI needs its own file(s), carried as
+      // per-AOI overrides (user_dem_keys)
+      let aoiConfigs: Record<string, Record<string, unknown>> | undefined;
+      if (isDemUpload) {
+        const missing = aois.filter((a) => !(demKeys[a.id]?.length));
+        if (missing.length) {
+          throw new Error(`Upload a DEM for: ${missing.map((a) => a.name).join(', ')}`);
+        }
+        aoiConfigs = {};
+        for (const a of aois) {
+          aoiConfigs[String(a.id)] = { user_dem_keys: demKeys[a.id].map((d) => d.key) };
+        }
+      }
+      const { results } = await submitStep(projectId, stepKey, merged, aoiConfigs);
       const notes: Record<number, string> = {};
       for (const r of results) {
         if (!r.submitted) notes[r.aoi_id] = r.reason ?? 'not submitted';
@@ -263,6 +299,29 @@ export default function StepPanel({
                 )}
               </div>
               <StepOverview aoi={a} stepOrder={stepOrder} currentStep={stepKey} />
+              {isDemUpload && (
+                <div className="sp-dem-upload">
+                  <label className="sp-dem-btn">
+                    {demBusy === a.id ? 'Uploading…' : '⬆ Add DEM GeoTIFF(s)'}
+                    <input type="file" accept=".tif,.tiff" multiple hidden
+                           disabled={demBusy !== null}
+                           onChange={(e) => {
+                             const fs = Array.from(e.target.files ?? []);
+                             if (fs.length) void uploadDemFor(a.id, fs);
+                             e.target.value = '';
+                           }} />
+                  </label>
+                  {(demKeys[a.id]?.length ?? 0) > 0 ? (
+                    <span className="sp-dem-files">
+                      {demKeys[a.id].map((d) => d.name).join(', ')}
+                      <button type="button" className="sp-dem-clear"
+                              onClick={() => clearDem(a.id)}>clear</button>
+                    </span>
+                  ) : (
+                    <span className="sp-muted">no DEM uploaded yet</span>
+                  )}
+                </div>
+              )}
               {(stepKey === 'bci' || stepKey === 'tbc') && (
                 <p className="sp-field-help">
                   Check the map on the Area of Interest step: the detected main

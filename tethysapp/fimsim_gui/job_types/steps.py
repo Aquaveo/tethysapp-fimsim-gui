@@ -53,7 +53,9 @@ class DEMStepJobType(StepJobType):
     server_only_keys = ("user_dem_path",)
 
     def defaults(self) -> dict:
-        return {"dem_res_m": 30, "dem_source": "3dep"}
+        # dem_input is a UI toggle (download vs upload); the engine only cares
+        # whether user_dem_path was staged. Kept here so it's an allowed key.
+        return {"dem_res_m": 30, "dem_source": "3dep", "dem_input": "download"}
 
     def prestage_inputs(self, storage, ctx, config, log_fn):
         keys = config.get("user_dem_keys") or []

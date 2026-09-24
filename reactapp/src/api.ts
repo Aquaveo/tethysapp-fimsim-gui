@@ -209,9 +209,19 @@ export const getStepSchemas = () =>
   request<Record<string, StepSchema>>('/steps/');
 
 export const submitStep = (projectId: number, stepKey: string,
-                           config: Record<string, unknown>) =>
+                           config: Record<string, unknown>,
+                           aoiConfigs?: Record<string, Record<string, unknown>>) =>
   request<{ results: SubmitResult[] }>(
-    `/projects/${projectId}/steps/${stepKey}/submit/`, json({ config }));
+    `/projects/${projectId}/steps/${stepKey}/submit/`,
+    json(aoiConfigs ? { config, aoi_configs: aoiConfigs } : { config }));
+
+/** Upload user DEM GeoTIFF(s) for an AOI (BE17); returns their storage keys. */
+export const uploadDem = async (aoiId: number, files: File[]) => {
+  const form = new FormData();
+  for (const f of files) form.append('file', f);
+  return request<{ dems: { key: string; name: string; bytes: number }[] }>(
+    `/aois/${aoiId}/dem/`, { method: 'POST', body: form });
+};
 
 export const getProjectStatus = (projectId: number) =>
   request<{ aois: ServerAoi[] }>(`/projects/${projectId}/status/`);

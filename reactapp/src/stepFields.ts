@@ -79,7 +79,17 @@ export function coerceConfigNumbers(
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
     {
+      key: 'dem_input', label: 'Elevation input', widget: 'select',
+      options: [
+        { value: 'download', label: 'Download (USGS 3DEP)' },
+        { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+      ],
+      help: 'Upload one or more GeoTIFFs (merged if several, resampled to the '
+        + 'resolution below) instead of downloading elevation.',
+    },
+    {
       key: 'dem_source', label: 'Elevation source', widget: 'select',
+      showIf: { key: 'dem_input', value: 'download' },
       options: [
         { value: '3dep', label: 'USGS 3DEP (elevation)' },
         { value: 'hand', label: 'TACC HAND (height above drainage)' },
@@ -194,6 +204,15 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   ],
   // ── TRITON (deck generation — parity with the desktop tabs) ──
   tdem: [
+    {
+      key: 'dem_input', label: 'Elevation input', widget: 'select',
+      options: [
+        { value: 'download', label: 'Download (USGS 3DEP)' },
+        { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+      ],
+      help: 'Upload one or more GeoTIFFs (merged if several, resampled to the '
+        + 'resolution below) instead of downloading elevation.',
+    },
     {
       key: 'dem_res_m', label: 'Resolution', widget: 'select',
       options: [

@@ -64,7 +64,7 @@ class TritonDEMJobType(TritonDeckMixin, DEMStepJobType):
     clean_patterns = ("dem*.asc", "dem*.ascii", "dem*.prj", "DEM_*.tif")
 
     def defaults(self) -> dict:
-        return {"dem_res_m": 30}
+        return {"dem_res_m": 30, "dem_input": "download"}
 
     def check_values(self, config: dict) -> list:
         problems = []
