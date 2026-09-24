@@ -111,6 +111,9 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   manning: [
     {
       key: 'fric_mode', label: 'Friction', widget: 'select',
+      help: "Surface roughness (Manning's n) controls how much the ground slows "
+        + 'the flow. From land cover assigns a value to each land-cover class '
+        + '(forest is rougher than open water); fixed uses one value everywhere.',
       options: [
         { value: 'varying', label: 'From land cover (varying)' },
         { value: 'fixed', label: 'Single value everywhere (fixed)' },
@@ -144,6 +147,9 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   bci: [
     {
       key: 'upstream_mode', label: 'Upstream inflow', widget: 'select',
+      help: 'How the river enters the study area. Time-varying uses the '
+        + 'hydrograph from the Flow Data step (a real event). Fixed applies one '
+        + 'constant discharge for the whole run.',
       options: [
         { value: 'varying_discharge', label: 'Time-varying discharge (from the Flow step)' },
         { value: 'fixed_discharge', label: 'Fixed discharge' },
@@ -155,6 +161,10 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
     {
       key: 'downstream_type', label: 'Downstream boundary', widget: 'select',
+      help: 'What happens where water leaves the study area. Free outflow lets '
+        + 'it drain at its natural (normal) depth — needs a bed slope below. '
+        + 'Fixed water level holds a set stage instead, e.g. a known tailwater '
+        + 'or tidal level.',
       options: [
         { value: 'FREE', label: 'Free outflow (normal depth)' },
         { value: 'HFIX', label: 'Fixed water level' },
@@ -163,7 +173,11 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'downstream_slope', label: 'Bed slope at outflow', widget: 'number',
       showIf: { key: 'downstream_type', value: 'FREE' },
-      help: 'Used for the normal-depth outflow calculation; 0.0001 suits most lowland rivers.',
+      help: 'The channel-bed slope at the downstream edge, used only for free '
+        + '(normal-depth) outflow. It sets how readily water drains out of the '
+        + 'domain. 0.0001 — a gentle 1-in-10,000 grade — is a safe default for '
+        + 'most lowland rivers: it lets flow leave without ponding at the '
+        + 'boundary. Use a steeper value for steeper terrain.',
     },
     {
       key: 'downstream_hfix', label: 'Fixed level (m)', widget: 'number',
@@ -191,6 +205,10 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   par: [
     {
       key: 'solver_mode', label: 'Solver', widget: 'select',
+      help: "LISFLOOD-FP's numerical scheme for moving water across the grid. "
+        + 'Acceleration (the local-inertial solver) is fast and stable for most '
+        + 'flood events and is recommended. Adaptive timestep and Diffusion are '
+        + 'alternative schemes that trade speed for different physics.',
       options: [
         { value: 'acceleration', label: 'Acceleration (recommended)' },
         { value: 'adaptive_default', label: 'Adaptive timestep' },
@@ -200,7 +218,10 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     { key: 'sim_time', label: 'Simulation time (s)', widget: 'number',
       help: 'Leave blank to use the flow data’s full window.' },
     { key: 'initial_tstep', label: 'Initial timestep (s)', widget: 'number' },
-    { key: 'saveint', label: 'Output interval (s)', widget: 'number' },
+    { key: 'saveint', label: 'Output interval (s)', widget: 'number',
+      help: 'How often the flood state is written out, producing the depth '
+        + 'time series (the per-step water-depth grids used for the animation '
+        + 'and the max-depth map). Smaller means more frames and larger files.' },
   ],
   // ── TRITON (deck generation — parity with the desktop tabs) ──
   tdem: [
@@ -228,6 +249,9 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   tfric: [
     {
       key: 'fric_mode', label: 'Friction', widget: 'select',
+      help: "Surface roughness (Manning's n) controls how much the ground slows "
+        + 'the flow. From land cover assigns a value to each land-cover class '
+        + '(forest is rougher than open water); fixed uses one value everywhere.',
       options: [
         { value: 'varying', label: 'From land cover (varying)' },
         { value: 'fixed', label: 'Single value everywhere (fixed)' },
@@ -295,9 +319,13 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   ],
   tcfg: [
     { key: 'time_step', label: 'Timestep (s)', widget: 'number' },
-    { key: 'print_interval', label: 'Output interval (s)', widget: 'number' },
+    { key: 'print_interval', label: 'Output interval (s)', widget: 'number',
+      help: 'How often TRITON writes a result frame, producing the depth time '
+        + 'series. Smaller means more frames and larger files.' },
     {
       key: 'output_format', label: 'Output format', widget: 'select',
+      help: 'File format for the result grids: ASCII is the most portable, '
+        + 'GeoTIFF opens directly in GIS, binary is the most compact.',
       options: [
         { value: 'ASC', label: 'ASCII grids' },
         { value: 'GTIFF', label: 'GeoTIFF' },
@@ -306,6 +334,9 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
     {
       key: 'print_option', label: 'Outputs', widget: 'select',
+      help: 'What each result frame stores. Depth + velocities (huv) keeps the '
+        + 'flow speed and direction too; depth only (h) is smaller and enough '
+        + 'for a flood-extent or max-depth map.',
       options: [
         { value: 'huv', label: 'Depth + velocities (huv)' },
         { value: 'h', label: 'Depth only (h)' },

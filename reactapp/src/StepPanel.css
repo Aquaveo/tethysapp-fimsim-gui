@@ -8,7 +8,27 @@
   align-items: start;
 }
 .sp-field { display: flex; flex-direction: column; gap: 0.25rem; }
-.sp-field-label { font-size: 0.82rem; font-weight: 600; }
+.sp-field-label { font-size: 0.82rem; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 0.35rem; }
+
+/* FE32 — ⓘ info tooltip on non-obvious fields */
+.sp-info {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1rem; height: 1rem; flex: none; border-radius: 50%;
+  border: 1px solid var(--color-primary); color: var(--color-primary-active);
+  font-size: 0.7rem; font-style: italic; font-weight: 700; line-height: 1;
+  font-family: Georgia, 'Times New Roman', serif; cursor: help;
+  user-select: none; position: relative;
+}
+.sp-info:hover, .sp-info:focus { background: var(--color-primary); color: #fff; outline: none; }
+.sp-info:hover::after, .sp-info:focus::after {
+  content: attr(data-tip);
+  position: absolute; left: 0; bottom: calc(100% + 6px);
+  width: max-content; max-width: 17rem; white-space: normal; text-align: left;
+  background: #1f2733; color: #fff; font: 400 0.75rem/1.4 inherit; font-style: normal;
+  padding: 0.45rem 0.6rem; border-radius: var(--radius-md); z-index: 30;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28); pointer-events: none;
+}
 .sp-field select, .sp-field input {
   padding: 0.45rem 0.6rem;
   border: 1.5px solid var(--color-border);

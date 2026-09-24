@@ -218,7 +218,13 @@ export default function StepPanel({
       >
         {fields.filter(visible).map((f) => (
           <label key={f.key} className="sp-field">
-            <span className="sp-field-label">{f.label}</span>
+            <span className="sp-field-label">
+              {f.label}
+              {f.help && (
+                <span className="sp-info" tabIndex={0} role="note"
+                      aria-label={f.help} data-tip={f.help}>i</span>
+              )}
+            </span>
             {f.widget === 'select' ? (
               <select
                 value={String(value(f.key))}
@@ -257,7 +263,6 @@ export default function StepPanel({
                 })}
               />
             )}
-            {f.help && <span className="sp-field-help">{f.help}</span>}
           </label>
         ))}
         {stepKey === 'manning' && value('fric_mode') === 'varying' && (
