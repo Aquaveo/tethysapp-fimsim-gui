@@ -88,6 +88,17 @@ def max_aoi_area_km2() -> float:
     return _setting('max_aoi_area_km2', DEFAULT_MAX_AOI_AREA_KM2)
 
 
+def _parse_feature_indices(raw):
+    """A JSON array of feature indices from a form field, or None for 'all'."""
+    if not raw:
+        return None
+    try:
+        val = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return val if isinstance(val, list) else None
+
+
 def _create_aois(session, request, project, ingest_result, source, source_key=None):
     """Persist ingested features as AOI rows + resolve states/HUCs (PostGIS,
     sync) + submit the network lookup job per AOI."""
@@ -212,6 +223,24 @@ def api_project_aois(request, session, project_id):
                 tmp_path = tmp.name
             try:
                 result = ingest_aoi_file(tmp_path, up.name, up.size)
+                # FE31: preview mode returns the parsed features so the user can
+                # pick which to use, WITHOUT creating AOIs or storing the file.
+                if str(request.POST.get('preview', '')).lower() in ('1', 'true'):
+                    from tethysapp.fimsim_gui.ingest import feature_preview
+                    return JsonResponse({
+                        'preview': True,
+                        'features': [feature_preview(f, i)
+                                     for i, f in enumerate(result.features)],
+                        'skipped_non_polygon': result.skipped_non_polygon,
+                        'warnings': result.warnings,
+                    })
+                # else create only the selected features (all when unspecified)
+                from tethysapp.fimsim_gui.ingest import select_features
+                indices = _parse_feature_indices(request.POST.get('feature_indices'))
+                result.features = select_features(result.features, indices)
+                if not result.features:
+                    return JsonResponse(
+                        {'error': 'no features selected to create'}, status=400)
                 source, source_key = 'upload', None
                 # keep the original upload for provenance (ctx: aoi_path)
                 from tethysapp.fimsim_gui.storage import build_key, get_storage

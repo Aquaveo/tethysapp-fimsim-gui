@@ -37,6 +37,27 @@ class IngestResult:
     warnings: list = field(default_factory=list)
 
 
+def feature_preview(feature, index: int) -> dict:
+    """One ingested feature as a client picker row (FE31 multi-feature select)."""
+    return {
+        "index": index,
+        "name": feature.name,
+        "area_km2": feature.area_km2,
+        "is_rectangular": feature.is_rectangular,
+        "in_conus": feature.in_conus,
+        "geometry": feature.geometry_geojson,
+    }
+
+
+def select_features(features: list, indices) -> list:
+    """Keep only the features at *indices* (order preserved). ``None`` keeps all;
+    out-of-range indices are ignored so a stale client can't cause a 500."""
+    if indices is None:
+        return features
+    keep = {int(i) for i in indices}
+    return [f for i, f in enumerate(features) if i in keep]
+
+
 def _safe_extract_zip(zpath: Path, dest: Path) -> Path:
     """Zip-slip-safe extraction; returns the .shp path inside."""
     with zipfile.ZipFile(zpath) as zf:
@@ -75,7 +96,8 @@ def _read_gdf(upload_path: Path, original_name: str):
 def _rectangularity(ring, mid_lat) -> bool:
     """4-corner ring with ~90° corners in a local planar frame — accepts
     rectangles drawn in projected CRSs (matches the FE11 client-side rule)."""
-    pts = list(ring)
+    # take only x,y — shapefiles can carry Z (and M) so coords may be 3-tuples
+    pts = [(float(p[0]), float(p[1])) for p in ring]
     if len(pts) >= 2 and pts[0] == pts[-1]:
         pts = pts[:-1]
     if len(pts) != 4:
@@ -193,6 +215,11 @@ def ingest_gdf(gdf, default_name: str) -> IngestResult:
         if geom is None:
             result.skipped_non_polygon += 1
             continue
+        # drop any Z/M — shapefiles can be 3D, but the DB column and every
+        # downstream step are 2D (a 3D polygon breaks the PostGIS insert)
+        if getattr(geom, "has_z", False):
+            from shapely import force_2d
+            geom = force_2d(geom)
 
         area_m2, _ = geod.geometry_area_perimeter(geom)
         area_km2 = abs(area_m2) / 1e6
