@@ -16,15 +16,25 @@ import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview from './TextPreview';
 import { STEP_FIELDS, coerceConfigNumbers, fieldVisible, type FieldSpec } from './stepFields';
+import { formatElapsed, phaseLabel } from './runProgress';
 import './StepPanel.css';
 
-const POLL_MS = 4000;
+const POLL_MS = 2500;
 const ACTIVE = ['pending', 'queued', 'running', 'uploading'];
 
 function ProgressBar({ run }: { run: ServerStepRun }) {
+  // tick once a second so the elapsed clock stays live between polls — this is
+  // what makes a queued/running job look alive instead of frozen (feedback #1)
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
   const last = [...(run.progress ?? [])].reverse()
     .find((e) => e.total > 0 && e.status !== 'failed');
   const pct = last ? Math.round(100 * last.current / last.total) : null;
+  const startMs = Date.parse(run.started ?? run.created);
+  const elapsed = Number.isFinite(startMs) ? now - startMs : NaN;
   return (
     <div className="sp-progress">
       <div className="sp-progress-track">
@@ -34,7 +44,9 @@ function ProgressBar({ run }: { run: ServerStepRun }) {
         />
       </div>
       <span className="sp-progress-label">
-        {run.status}{pct !== null ? ` · ${pct}%` : ''}
+        {/* phase name + % + live elapsed; the phase makes the post-100% "Saving
+            results" step visible instead of a stuck bar (feedback #2) */}
+        {phaseLabel(run.status)}{pct !== null ? ` · ${pct}%` : ''} · {formatElapsed(elapsed)}
         {last ? ` — ${last.message.slice(0, 60)}` : ''}
       </span>
     </div>
@@ -214,7 +226,8 @@ export default function StepPanel({
         <div className="sp-submit-row">
           <button type="submit" className="button-primary"
                   disabled={busy || anyActive || aois.length === 0}>
-            {anyActive ? 'Running…'
+            {busy ? 'Submitting…'
+              : anyActive ? 'Running…'
               : stepKey === 'run' ? `Run simulation for ${aois.length} area(s)`
               : `Run this step for ${aois.length} area(s)`}
           </button>
