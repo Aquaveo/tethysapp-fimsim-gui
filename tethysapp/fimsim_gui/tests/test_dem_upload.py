@@ -37,3 +37,47 @@ def test_non_raster_is_rejected(tmp_path):
 
 def test_missing_file_is_rejected(tmp_path):
     assert validate_dem_geotiff(str(tmp_path / "nope.tif")) is not None
+
+
+# ── BE17 slice 2: ownership guard, staging, config contract ──────────────────
+
+def test_rejected_dem_keys_flags_foreign_prefixes():
+    from tethysapp.fimsim_gui.dem_upload import rejected_dem_keys
+    prefix = "admin/3/7/user_dem/"
+    assert rejected_dem_keys(["admin/3/7/user_dem/a.tif"], prefix) == []
+    assert rejected_dem_keys(
+        ["admin/3/9/user_dem/a.tif"], prefix) == ["admin/3/9/user_dem/a.tif"]
+    assert rejected_dem_keys(None, prefix) == []
+
+
+def test_dem_prestage_stages_keys_to_user_dem_path(tmp_path):
+    from tethysapp.fimsim_gui.job_types import REGISTRY
+
+    class FakeStorage:
+        def download_to_path(self, key, dest):
+            from pathlib import Path
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_text("dem-bytes")
+
+    feat_dir = tmp_path / "aoi1"
+    feat_dir.mkdir()
+    ctx = {"aoi_features": [{"folder_path": str(feat_dir)}]}
+    cfg = {"user_dem_keys": ["u/1/1/user_dem/a.tif", "u/1/1/user_dem/b.tif"]}
+    REGISTRY["dem"].prestage_inputs(FakeStorage(), ctx, cfg, lambda *a: None)
+    import os
+    assert len(cfg["user_dem_path"]) == 2
+    assert all(os.path.exists(p) for p in cfg["user_dem_path"])
+    # no keys → hook is a no-op, no user_dem_path injected
+    cfg2 = {}
+    REGISTRY["dem"].prestage_inputs(FakeStorage(), ctx, cfg2, lambda *a: None)
+    assert "user_dem_path" not in cfg2
+
+
+def test_dem_config_contract():
+    from tethysapp.fimsim_gui.job_types import REGISTRY
+    # a client may name uploaded keys...
+    assert REGISTRY["dem"].validate_config({"user_dem_keys": ["x"]}) == []
+    assert REGISTRY["tdem"].validate_config({"user_dem_keys": ["x"]}) == []
+    # ...but never a raw worker path (server-only, also for the TRITON step)
+    assert "user_dem_path" in REGISTRY["dem"].server_only_keys
+    assert "user_dem_path" in REGISTRY["tdem"].server_only_keys

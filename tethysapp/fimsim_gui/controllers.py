@@ -514,6 +514,18 @@ def api_step_submit(request, session, project_id, step_key):
         # per-AOI resource prechecks BEFORE anything is superseded or created
         guard_reason = None
         if step_key in ('dem', 'tdem'):
+            # BE17: uploaded-DEM keys must belong to THIS AOI (no cross-AOI refs)
+            dem_keys = merged_config.get('user_dem_keys')
+            if dem_keys:
+                from tethysapp.fimsim_gui.dem_upload import rejected_dem_keys
+                from tethysapp.fimsim_gui.storage import build_key
+                prefix = build_key(request.user.username, aoi.project_id,
+                                   aoi.id, 'user_dem') + '/'
+                if rejected_dem_keys(dem_keys, prefix):
+                    results.append({'aoi_id': aoi.id, 'submitted': False,
+                                    'reason': 'an uploaded DEM does not belong '
+                                              'to this area'})
+                    continue
             guard_reason = guards.check_dem_submit(
                 aoi, jt.merged(merged_config),
                 _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS))

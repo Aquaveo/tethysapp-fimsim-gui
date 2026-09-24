@@ -8,6 +8,12 @@ workspace and passes them to fimcore as ``user_dem_path`` with ``has_dem=True``.
 from pathlib import Path
 
 
+def rejected_dem_keys(keys, prefix: str) -> list:
+    """Uploaded-DEM keys that are NOT under *prefix* (the AOI's own user_dem
+    path). A client must not reference another AOI's or user's stored DEM."""
+    return [k for k in (keys or []) if not str(k).startswith(prefix)]
+
+
 def validate_dem_geotiff(path) -> str:
     """Reason an uploaded DEM is unusable, or None if it's a valid GeoTIFF.
 

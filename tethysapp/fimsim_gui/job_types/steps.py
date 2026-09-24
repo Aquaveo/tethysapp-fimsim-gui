@@ -46,9 +46,29 @@ class DEMStepJobType(StepJobType):
     clean_patterns = ("dem*.ascii", "dem*.prj", "DEM_*.tif")
     step_key = "dem"
     requires = ()
+    # BE17: user_dem_keys are storage keys of uploaded GeoTIFF(s); the raw
+    # user_dem_path is SERVER-ONLY (a client must not name a worker path — it
+    # is set by prestage_inputs from the ownership-validated keys).
+    extra_config_keys = ("user_dem_keys",)
+    server_only_keys = ("user_dem_path",)
 
     def defaults(self) -> dict:
         return {"dem_res_m": 30, "dem_source": "3dep"}
+
+    def prestage_inputs(self, storage, ctx, config, log_fn):
+        keys = config.get("user_dem_keys") or []
+        if not keys:
+            return
+        dem_dir = Path(ctx["aoi_features"][0]["folder_path"]) / "user_dem"
+        dem_dir.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for k in keys:
+            dest = dem_dir / Path(k).name
+            storage.download_to_path(k, dest)
+            paths.append(str(dest))
+        # execute() reads user_dem_path and derives has_dem from it
+        config["user_dem_path"] = paths
+        log_fn(f"staged {len(paths)} user-supplied DEM(s)")
 
     def check_values(self, config: dict) -> list:
         problems = []

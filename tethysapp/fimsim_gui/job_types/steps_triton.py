@@ -78,7 +78,8 @@ class TritonDEMJobType(TritonDeckMixin, DEMStepJobType):
         run_triton_dem_all(
             ctx_path, ctx,
             dem_res_m=float(cfg["dem_res_m"]),
-            has_dem=False,
+            has_dem=bool(cfg.get("user_dem_path")),   # BE17: staged by prestage_inputs
+            user_dem_path=cfg.get("user_dem_path"),
             log_fn=log_fn,
         )
 

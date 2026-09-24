@@ -145,6 +145,12 @@ class StepJobType:
     def execute(self, ctx_path, ctx, config, log_fn):
         raise NotImplementedError
 
+    # -- per-run input staging (BE17): no-op unless a step pulls an uploaded
+    #    input (e.g. a user DEM) from storage into the workspace before execute.
+    #    Unlike the cache hooks, a failure here MUST fail the job. --
+    def prestage_inputs(self, storage, ctx, config, log_fn):
+        pass
+
     # -- shared-cache hooks (BE11): no-ops unless a step caches something --
     def prestage_shared_cache(self, storage, ctx, log_fn):
         pass

@@ -301,7 +301,12 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         except Exception as exc:  # a cache problem must never fail a job
             adapter(f"cache prestage skipped: {exc}")
 
-        job_type.execute(ctx_path, ctx, run.config or {}, adapter)
+        # one config object for staging + execute, so a hook that injects a
+        # staged path (BE17 user DEM) is seen by execute. A staging failure
+        # (e.g. a missing uploaded file) SHOULD fail the job — not swallowed.
+        cfg = run.config or {}
+        job_type.prestage_inputs(storage, ctx, cfg, adapter)
+        job_type.execute(ctx_path, ctx, cfg, adapter)
 
         try:
             job_type.poststage_shared_cache(storage, ctx, adapter)
