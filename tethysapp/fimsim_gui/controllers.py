@@ -307,6 +307,49 @@ def api_aoi(request, session, aoi_id):
     return JsonResponse(aoi.to_dict())
 
 
+@controller(url='api/aois/{aoi_id}/dem', name='api_aoi_dem')
+@with_session
+def api_aoi_dem(request, session, aoi_id):
+    """FIMSIM-BE17: upload user DEM GeoTIFF(s) for an AOI.
+
+    POST one or more `file`s → validate each is a GeoTIFF with a CRS → store
+    under the AOI's `user_dem` prefix → return their storage keys. The Terrain
+    step passes these keys back as `user_dem_keys`; the DEM job stages them.
+    """
+    aoi, err = _owned_aoi(session, request, aoi_id)
+    if err:
+        return err
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    ups = request.FILES.getlist('file')
+    if not ups:
+        return JsonResponse({'error': 'attach at least one GeoTIFF'}, status=400)
+
+    from tethysapp.fimsim_gui.dem_upload import validate_dem_geotiff
+    from tethysapp.fimsim_gui.storage import build_key, get_storage
+    storage = get_storage()
+    dems = []
+    for up in ups:
+        with tempfile.NamedTemporaryFile(
+                suffix=Path(up.name).suffix or '.tif', delete=False) as tmp:
+            for chunk in up.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+        try:
+            reason = validate_dem_geotiff(tmp_path)
+            if reason:
+                return JsonResponse(
+                    {'error': f"'{up.name}': {reason}"}, status=400)
+            key = build_key(request.user.username, aoi.project_id, aoi.id,
+                            'user_dem', up.name)
+            with open(tmp_path, 'rb') as fh:
+                storage.save(key, fh)
+            dems.append({'key': key, 'name': up.name, 'bytes': up.size})
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+    return JsonResponse({'dems': dems})
+
+
 @controller(url='api/aois/{aoi_id}/lookup', name='api_aoi_lookup')
 @with_session
 def api_aoi_lookup(request, session, aoi_id):
