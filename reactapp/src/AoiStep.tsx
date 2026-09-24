@@ -8,8 +8,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { Position } from 'geojson';
 import AoiMap from './AoiMap';
 import {
-  ApiError, createDrawnAoi, deleteAoi, getAoi, uploadAoiFile,
-  retryLookup, type ServerAoi,
+  ApiError, createDrawnAoi, deleteAoi, getAoi, previewAoiFile, uploadAoiFile,
+  retryLookup, type PreviewFeature, type ServerAoi,
 } from './api';
 import { NEUSE_AOI } from './exampleAois';
 import './AoiStep.css';
@@ -27,6 +27,9 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
   const [drawing, setDrawing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // FE31: a multi-feature upload waiting for the user to pick which to add
+  const [pending, setPending] = useState<{ file: File; features: PreviewFeature[] } | null>(null);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
   const [zoomTo, setZoomTo] = useState<ServerAoi | null>(null);
 
   // ── lookup polling: refresh any AOI whose lookup is still in flight ──
@@ -52,15 +55,39 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
   const addAois = (created: ServerAoi[]) =>
     setAois((prev) => [...prev, ...created]);
 
+  const createFromUpload = async (file: File, indices?: number[]) => {
+    const res = await uploadAoiFile(projectId, file, indices);
+    addAois(res.aois);
+    if (res.skipped_non_polygon) {
+      setError(`${res.skipped_non_polygon} non-polygon feature(s) were skipped.`);
+    }
+  };
+
   const handleFile = async (file: File) => {
     setError(null);
-    setBusy(`Uploading ${file.name}…`);
+    setBusy(`Reading ${file.name}…`);
     try {
-      const res = await uploadAoiFile(projectId, file);
-      addAois(res.aois);
-      if (res.skipped_non_polygon) {
-        setError(`${res.skipped_non_polygon} non-polygon feature(s) were skipped.`);
+      const { features } = await previewAoiFile(projectId, file);
+      if (features.length <= 1) {
+        await createFromUpload(file);        // single feature: add it straight away
+      } else {
+        setPending({ file, features });      // multi-feature: let the user choose
+        setPicked(new Set(features.map((f) => f.index)));  // default: all selected
       }
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmPending = async () => {
+    if (!pending) return;
+    setError(null);
+    setBusy(`Adding ${picked.size} area(s)…`);
+    try {
+      await createFromUpload(pending.file, [...picked].sort((a, b) => a - b));
+      setPending(null);
     } catch (e) {
       fail(e);
     } finally {
@@ -185,6 +212,52 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
 
       {busy && <div className="as-busy" role="status">{busy}</div>}
       {error && <div className="as-error" role="alert">{error}</div>}
+
+      {pending && (
+        <div className="as-picker" role="group" aria-label="Choose areas to add">
+          <div className="as-picker-head">
+            <strong>{pending.file.name}</strong> has {pending.features.length} areas.
+            Choose which to add:
+            <label className="as-picker-all">
+              <input type="checkbox"
+                     checked={picked.size === pending.features.length}
+                     onChange={(e) => setPicked(e.target.checked
+                       ? new Set(pending.features.map((f) => f.index)) : new Set())} />
+              Select all
+            </label>
+          </div>
+          <ul className="as-picker-list">
+            {pending.features.map((f) => (
+              <li key={f.index}>
+                <label>
+                  <input type="checkbox" checked={picked.has(f.index)}
+                         onChange={() => setPicked((prev) => {
+                           const next = new Set(prev);
+                           if (next.has(f.index)) next.delete(f.index); else next.add(f.index);
+                           return next;
+                         })} />
+                  <span className="as-picker-name">{f.name}</span>
+                  <span className="as-picker-meta">
+                    {f.area_km2.toLocaleString()} km²
+                    {' · '}{f.is_rectangular ? 'rectangular' : 'irregular'}
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+          <div className="as-picker-actions">
+            <button type="button" className="button-secondary"
+                    disabled={!!busy} onClick={() => setPending(null)}>
+              Cancel
+            </button>
+            <button type="button" className="button-primary"
+                    disabled={!!busy || picked.size === 0}
+                    onClick={() => void confirmPending()}>
+              Add {picked.size} selected area{picked.size === 1 ? '' : 's'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <AoiMap
         aois={aois}

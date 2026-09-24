@@ -125,10 +125,31 @@ export const deleteProject = (id: number) =>
 
 // ── AOIs ──────────────────────────────────────────────────────────────────────
 
-export const uploadAoiFile = async (projectId: number, file: File) => {
+export const uploadAoiFile = async (
+  projectId: number, file: File, featureIndices?: number[],
+) => {
   const form = new FormData();
   form.append('file', file);
+  if (featureIndices) form.append('feature_indices', JSON.stringify(featureIndices));
   return request<{ aois: ServerAoi[]; skipped_non_polygon: number }>(
+    `/projects/${projectId}/aois/`, { method: 'POST', body: form });
+};
+
+export interface PreviewFeature {
+  index: number;
+  name: string;
+  area_km2: number;
+  is_rectangular: boolean;
+  in_conus: boolean;
+  geometry: unknown;
+}
+
+/** Parse an upload and return its features WITHOUT creating AOIs (FE31). */
+export const previewAoiFile = async (projectId: number, file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('preview', '1');
+  return request<{ preview: boolean; features: PreviewFeature[]; skipped_non_polygon: number }>(
     `/projects/${projectId}/aois/`, { method: 'POST', body: form });
 };
 
