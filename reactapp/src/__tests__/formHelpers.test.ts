@@ -1,7 +1,7 @@
 // Pure helpers behind three Copilot-review fixes: decimal number entry,
 // model-switch safety, and per-model Results filtering.
 import { describe, expect, it } from 'vitest';
-import { coerceConfigNumbers, fieldVisible, STEP_FIELDS } from '../stepFields';
+import { coerceConfigNumbers, expandEventDates, fieldVisible, STEP_FIELDS } from '../stepFields';
 import { resolveActiveStep } from '../steps';
 import { keepModelSteps } from '../outputsMeta';
 import { MODELS } from '../steps';
@@ -26,6 +26,26 @@ describe('coerceConfigNumbers', () => {
 
   it('already-numeric values pass through', () => {
     expect(coerceConfigNumbers({ value: 3 }, fields)).toEqual({ value: 3 });
+  });
+});
+
+describe('expandEventDates (date-only picker → full-day bounds)', () => {
+  const fields = [
+    { key: 'start_dt', label: 's', widget: 'date' as const },
+    { key: 'end_dt', label: 'e', widget: 'date' as const, endOfDay: true },
+    { key: 'gage_id', label: 'g', widget: 'text' as const },
+  ];
+
+  it('expands a bare date to 00:00 (start) and 23:59 (end)', () => {
+    expect(expandEventDates(
+      { start_dt: '2016-10-05', end_dt: '2016-10-15', gage_id: '02089000' }, fields))
+      .toEqual({ start_dt: '2016-10-05T00:00', end_dt: '2016-10-15T23:59', gage_id: '02089000' });
+  });
+
+  it('leaves an already-timed value and non-date fields untouched', () => {
+    const out = expandEventDates({ start_dt: '2016-10-05T06:30', gage_id: '5' }, fields);
+    expect(out.start_dt).toBe('2016-10-05T06:30');
+    expect(out.gage_id).toBe('5');
   });
 });
 

@@ -15,7 +15,9 @@ import RasterPreview from './RasterPreview';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview from './TextPreview';
-import { STEP_FIELDS, coerceConfigNumbers, fieldVisible, type FieldSpec } from './stepFields';
+import {
+  STEP_FIELDS, coerceConfigNumbers, expandEventDates, fieldVisible, type FieldSpec,
+} from './stepFields';
 import { formatElapsed, phaseLabel } from './runProgress';
 import './StepPanel.css';
 
@@ -134,7 +136,8 @@ export default function StepPanel({
       const allowed = new Set([
         ...Object.keys(defaults), ...fields.map((f) => f.key), 'manning_mapping',
       ]);
-      const coerced = coerceConfigNumbers({ ...defaults, ...config }, fields);
+      const coerced = expandEventDates(
+        coerceConfigNumbers({ ...defaults, ...config }, fields), fields);
       const merged: Record<string, unknown> = Object.fromEntries(
         Object.entries(coerced)
           .filter(([k, v]) => allowed.has(k) && v !== null && v !== ''));
@@ -196,6 +199,13 @@ export default function StepPanel({
               <input
                 type="datetime-local"
                 value={String(value(f.key))}
+                onChange={(e) => setConfig({ ...config, [f.key]: e.target.value })}
+              />
+            ) : f.widget === 'date' ? (
+              <input
+                type="date"
+                // show only the date part even if a full datetime is stored
+                value={String(value(f.key)).slice(0, 10)}
                 onChange={(e) => setConfig({ ...config, [f.key]: e.target.value })}
               />
             ) : (

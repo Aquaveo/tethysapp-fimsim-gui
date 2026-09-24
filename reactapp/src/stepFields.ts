@@ -6,12 +6,34 @@ export interface Condition { key: string; value: unknown }
 export interface FieldSpec {
   key: string;
   label: string;
-  widget: 'select' | 'number' | 'text' | 'datetime';
+  widget: 'select' | 'number' | 'text' | 'datetime' | 'date';
   options?: { value: string | number; label: string }[];
   help?: string;
   /** only show when another field has this value; an array means ALL must hold */
   showIf?: Condition | Condition[];
   required?: boolean;
+  /** for a 'date' field: submit as end-of-day (23:59) rather than 00:00 */
+  endOfDay?: boolean;
+}
+
+/**
+ * Expand date-only event fields to a full datetime at submit: the start date
+ * to 00:00 and the end date to 23:59, so a chosen day is fully included. Bare
+ * "YYYY-MM-DD" only — an already-timed value or a non-date field is left as-is.
+ */
+export function expandEventDates(
+  config: Record<string, unknown>, fields: Pick<FieldSpec, 'key' | 'widget' | 'endOfDay'>[],
+): Record<string, unknown> {
+  const byKey = new Map(fields.map((f) => [f.key, f]));
+  const out: Record<string, unknown> = { ...config };
+  for (const k of Object.keys(out)) {
+    const f = byKey.get(k);
+    if (f?.widget === 'date' && typeof out[k] === 'string'
+        && /^\d{4}-\d{2}-\d{2}$/.test(out[k] as string)) {
+      out[k] = `${out[k]}${f.endOfDay ? 'T23:59' : 'T00:00'}`;
+    }
+  }
+  return out;
 }
 
 /** Whether a field's showIf is satisfied. `get(key)` returns the live value. */
@@ -147,8 +169,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'usgs', label: 'USGS gage' },
       ],
     },
-    { key: 'start_dt', label: 'Event start', widget: 'datetime', required: true },
-    { key: 'end_dt', label: 'Event end', widget: 'datetime', required: true },
+    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true },
+    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true },
     { key: 'interval_hours', label: 'Interval (hours)', widget: 'number' },
     {
       key: 'gage_id', label: 'USGS gage ID', widget: 'text',
@@ -243,8 +265,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'usgs', label: 'USGS gage' },
       ],
     },
-    { key: 'start_dt', label: 'Event start', widget: 'datetime', required: true },
-    { key: 'end_dt', label: 'Event end', widget: 'datetime', required: true },
+    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true },
+    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true },
     { key: 'interval_hours', label: 'Interval (hours)', widget: 'number' },
     {
       key: 'gage_id', label: 'USGS gage ID', widget: 'text',
