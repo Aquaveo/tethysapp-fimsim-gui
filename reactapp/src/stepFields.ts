@@ -88,24 +88,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         + 'resolution below) instead of downloading elevation.',
     },
     {
-      key: 'dem_source', label: 'Elevation source', widget: 'select',
-      showIf: { key: 'dem_input', value: 'download' },
-      options: [
-        { value: '3dep', label: 'USGS 3DEP (elevation)' },
-        { value: 'hand', label: 'TACC HAND (height above drainage)' },
-      ],
-    },
-    {
       key: 'dem_res_m', label: 'Resolution', widget: 'select',
       options: [
-        { value: 1, label: '1 m (largest downloads, slowest runs)' },
-        { value: 3, label: '3 m' },
-        { value: 10, label: '10 m — recommended baseline' },
-        { value: 30, label: '30 m (fast preview)' },
-        { value: 90, label: '90 m (fastest, coarse)' },
+        { value: 10, label: '10 m — default' },
+        { value: 30, label: '30 m (faster, coarser)' },
+        { value: 90, label: '90 m (fastest, coarsest)' },
       ],
-      help: 'Source: USGS 3DEP 1/3 arc-second DEM (~10 m) — other resolutions are '
-        + 'resampled from it. Finer grids increase simulation time substantially.',
+      help: '10 m is the default (USGS 3DEP). Coarser values run faster; the web '
+        + 'app does not go below 10 m — for finer grids use the desktop FIMsim.',
     },
   ],
   manning: [
@@ -189,7 +179,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       key: 'bdy_source', label: 'Flow data source', widget: 'select',
       options: [
         { value: 'nwm_retro', label: 'NWM retrospective (1979–2023)' },
-        { value: 'nwm_forecast', label: 'NWM forecast' },
+        { value: 'nwm_forecast', label: 'NWM forecast (2023 onwards)' },
         { value: 'usgs', label: 'USGS gage' },
       ],
     },
@@ -217,7 +207,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
     { key: 'sim_time', label: 'Simulation time (s)', widget: 'number',
       help: 'Leave blank to use the flow data’s full window.' },
-    { key: 'initial_tstep', label: 'Initial timestep (s)', widget: 'number' },
+    { key: 'initial_tstep', label: 'Computational timestep (s)', widget: 'number' },
     { key: 'saveint', label: 'Output interval (s)', widget: 'number',
       help: 'How often the flood state is written out, producing the depth '
         + 'time series (the per-step water-depth grids used for the animation '
@@ -237,13 +227,12 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'dem_res_m', label: 'Resolution', widget: 'select',
       options: [
-        { value: 1, label: '1 m (largest grids, slowest runs)' },
-        { value: 3, label: '3 m' },
-        { value: 10, label: '10 m — recommended baseline' },
-        { value: 30, label: '30 m (fast preview)' },
-        { value: 90, label: '90 m (fastest, coarse)' },
+        { value: 10, label: '10 m — default' },
+        { value: 30, label: '30 m (faster, coarser)' },
+        { value: 90, label: '90 m (fastest, coarsest)' },
       ],
-      help: 'Source: USGS 3DEP 1/3 arc-second DEM (~10 m) — other resolutions are resampled from it.',
+      help: '10 m is the default (USGS 3DEP). Coarser values run faster; the web '
+        + 'app does not go below 10 m — for finer grids use the desktop FIMsim.',
     },
   ],
   tfric: [
@@ -304,7 +293,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       key: 'bdy_source', label: 'Flow data source', widget: 'select',
       options: [
         { value: 'nwm_retro', label: 'NWM retrospective (1979–2023)' },
-        { value: 'nwm_forecast', label: 'NWM forecast' },
+        { value: 'nwm_forecast', label: 'NWM forecast (2023 onwards)' },
         { value: 'usgs', label: 'USGS gage' },
       ],
     },
