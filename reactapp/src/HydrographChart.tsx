@@ -80,14 +80,17 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
 
   const option = {
     animation: false,
-    grid: { left: 60, right: 24, top: 30, bottom: 42 },
+    grid: { left: 60, right: 24, top: 30, bottom: 64 },
+    legend: { bottom: 0, left: 'center', textStyle: { fontSize: 11 } },
     tooltip: {
       trigger: 'axis',
       valueFormatter: (v: number) => `${Number(v).toFixed(2)} ${unit}`,
     },
     xAxis: {
       type: startMs !== null ? 'time' : 'value',
-      name: startMs !== null ? '' : 'hours',
+      name: startMs !== null ? 'Date' : 'hours',
+      nameLocation: 'middle',
+      nameGap: 30,
       axisLabel: startMs === null
         ? { formatter: (v: number) => `${(v / 3.6e6).toFixed(0)} h` }
         : undefined,
