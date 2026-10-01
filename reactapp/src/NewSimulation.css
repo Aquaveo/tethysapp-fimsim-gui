@@ -179,3 +179,12 @@
   text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--color-text-muted);
 }
+
+/* FE48 — prominent active-model badge so the current model is never a surprise */
+.ns-model-badge {
+  display: inline-block; margin-right: 0.5rem; padding: 0.1rem 0.6rem;
+  border-radius: 999px; background: var(--color-primary); color: #fff;
+  font-weight: 700; font-size: 0.72rem; letter-spacing: 0.02em;
+  text-transform: uppercase; vertical-align: middle;
+}
+.ns-model-badge.is-deck { background: #7c5cff; }

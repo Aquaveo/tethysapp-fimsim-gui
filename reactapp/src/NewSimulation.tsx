@@ -137,6 +137,9 @@ export default function NewSimulation() {
 
       <section className="ns-card" aria-labelledby="ns-title">
         <p className="ns-eyebrow">
+          <span className={'ns-model-badge' + (MODELS[model].runsOnPortal ? '' : ' is-deck')}>
+            {MODELS[model].label}
+          </span>
           Step {idx + 1} of {STEPS.length}
           {project && <span className="ns-project-tag">{project.name}</span>}
           {def.produces && <span className="ns-produces">→ {def.produces}</span>}

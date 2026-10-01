@@ -122,6 +122,27 @@ export default function RasterPreview({ aoi, run, kind, defaultOpen }: {
               </span>
             </div>
           )}
+          {meta?.kind === 'lulc' && layer === 'manning' && (() => {
+            const ns = meta.classes
+              .map((c) => c.n).filter((n): n is number => n != null);
+            if (!ns.length) return null;
+            const lo = Math.min(...ns);
+            const hi = Math.max(...ns);
+            return (
+              <div className="rp-ramp" aria-label="Manning's n">
+                <span className="rp-ramp-bar" style={{
+                  // YlGnBu — matches the Manning overlay colormap
+                  background: 'linear-gradient(to right, '
+                    + '#ffffd9,#c7e9b4,#7fcdbb,#41b6c4,#2c7fb8,#253494)',
+                }} />
+                <span className="rp-ramp-ends">
+                  <span>{lo.toFixed(3)}</span>
+                  <span>Manning&apos;s n (roughness)</span>
+                  <span>{hi.toFixed(3)}</span>
+                </span>
+              </div>
+            );
+          })()}
           {meta?.kind === 'lulc' && (
             <div className="rp-tablewrap">
               <table className="rp-table">
