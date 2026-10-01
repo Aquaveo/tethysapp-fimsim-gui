@@ -15,9 +15,10 @@ genuinely new, Reshma-owned FIMsim tasks came out of this meeting.
   posting screenshots/spec on GitHub.
 - FIMSIM-SCOPE1 (FIMserve integration): prioritized next after FIMbench; goal is
   a unified app version; Nathan coordinates with Dan (BYU); ahead of FIMbox.
-- FIMSIM-BE15 (unclamp Manning's n): reframe the guidance band as a single
-  GLOBAL reasonable range (≈0.01–0.09) rather than per-category min/max. Pairs
-  with the new FE52 warning-flag UX below.
+- FIMSIM-BE15 (unclamp Manning's n): the per-class [min, max] stops being a
+  CLAMP. Replace BE15's wide sanity band (0.001–5) with a HARD global clamp of
+  [0.01, 0.09] — the only enforced limit. The per-class literature range becomes
+  a soft WARNING threshold (see FE52), not enforcement.
 
 —
 
@@ -45,31 +46,41 @@ Worst-case estimate: 1 h.
 
 —
 
-TASK: BYU CIROH: FIMsim GUI – Manning's n Literature-Range Warning Flags (FIMSIM-FE52)
+TASK: BYU CIROH: FIMsim GUI – Manning's n: Global Clamp + Per-Class Literature Warnings (FIMSIM-FE52)
 
-Description: Nathan's compromise in the 2026-10-01 review on Manning's n limits —
-rather than hard per-category clamps (which Sagy noted would block sensitivity
-analyses), show a non-blocking WARNING when an entered n falls outside a global
-reasonable range / literature value, while still letting the user confirm and
-proceed. Builds on BE15 (which removes the hard clamp); this adds the warning
-UX. Server keeps only a wide sanity band (BE15), so the warning is advisory.
+Description: Nathan's compromise in the 2026-10-01 review on Manning's n limits.
+TWO tiers, don't conflate them:
+  1. HARD CLAMP (absolute, global): every n is constrained to [0.01, 0.09]. The
+     field won't accept a value outside it and the server rejects outside it.
+     This is the only enforced limit and gives sensitivity-analysis headroom
+     (Sagy's wide band).
+  2. SOFT WARNING (per class, literature): each land-cover class already carries
+     its own recommended [min, max] in the Manning tables (fimcore
+     NLCD_MANNING / SENTINEL2_MANNING — e.g. a class whose recommended band is
+     [0.025, 0.035]). A value INSIDE [0.01, 0.09] but OUTSIDE that class's
+     recommended band flags a non-blocking warning; the user can confirm and
+     proceed. The recommended min / avg / max stay visible as guidance.
+So per-class values are back as WARNING thresholds, not clamps. Builds on BE15
+(which stops the per-class clamp); FE52 adds the hard global clamp + the warning.
 
-[   ]  Entering an n outside the global reasonable range (≈0.01–0.09) flags a visible, non-blocking warning on that field/row
-[   ]  The warning names the typical/literature range and does NOT prevent submission — the user can confirm and proceed
-[   ]  Applies to the editable Manning table rows AND the fixed-n fields (manning + tfric fpfric_val)
-[   ]  The reasonable range is a single shared constant (not per-category), easy to adjust
-[   ]  Tests cover: in-range = no warning; out-of-range = warning + still submittable
+[   ]  n is hard-clamped to [0.01, 0.09] — a value outside cannot be entered or submitted (field constraint + server rejection with a clear reason)
+[   ]  Within [0.01, 0.09], a value outside the row's per-class recommended [min, max] shows a visible, non-blocking warning naming the recommended range; submission still allowed (confirm + proceed)
+[   ]  The per-class recommended min / avg / max remain visible as guidance (BE15)
+[   ]  Fixed-n fields (manning + tfric fpfric_val): hard-clamped to [0.01, 0.09]; no per-class warning (no land-cover context) — confirm with Reshma whether a generic typical-range advisory is wanted there
+[   ]  Tests: in-band (within class range) = no warning; within clamp but outside class range = warning + still submittable; outside [0.01, 0.09] = rejected
 
 Implementation Tasks
-- Define a shared `[MIN, MAX]` reasonable-range constant (frontend; mirror any
-  server sanity band from BE15).
-- ManningTable / fixed-n fields: render a warning badge/text when a value is
-  outside the range; style as advisory, never disabled/blocked.
-- Keep submit enabled; the band is guidance only.
+- Constants: a shared HARD clamp [0.01, 0.09] (frontend input bounds + server band).
+- ManningTable: per-ROW recommended range read from the class table; warn when
+  the entered value is outside that row's range but inside the clamp. Style the
+  warning as advisory (badge/text), never disabled.
+- Server validation: tighten the Manning sanity band to [0.01, 0.09] (replaces
+  BE15's 0.001–5), same band for the fixed-n fields.
+- Keep submit enabled through warnings; only the hard clamp blocks.
 
 Out of Scope
-- Removing the hard clamp and loosening server validation (that is BE15).
-- Per-category min/max enforcement (explicitly rejected in the meeting).
+- Removing the per-class CLAMP (that is BE15; FE52 assumes it's gone).
+- Per-class min/max as an enforced limit (explicitly rejected — it's a warning).
 
 Worst-case estimate: 5 h.
 
