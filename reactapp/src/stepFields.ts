@@ -207,7 +207,11 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
     { key: 'sim_time', label: 'Simulation time (s)', widget: 'number',
       help: 'Leave blank to use the flow data’s full window.' },
-    { key: 'initial_tstep', label: 'Computational timestep (s)', widget: 'number' },
+    { key: 'initial_tstep', label: 'Computational timestep (s)', widget: 'number',
+      help: 'The starting computational time step, in seconds. LISFLOOD-FP uses '
+        + 'adaptive time stepping by default and adjusts the step during the run '
+        + 'for numerical stability; if adaptive stepping is turned off, this value '
+        + 'is used as a fixed step.' },
     { key: 'saveint', label: 'Output interval (s)', widget: 'number',
       help: 'How often the flood state is written out, producing the depth '
         + 'time series (the per-step water-depth grids used for the animation '

@@ -120,3 +120,44 @@ def test_wgs84_corners_are_the_four_reprojected_corners(tmp_path):
     for lon, lat in corners:
         assert bounds["west"] - 1e-6 <= lon <= bounds["east"] + 1e-6
         assert bounds["south"] - 1e-6 <= lat <= bounds["north"] + 1e-6
+
+
+def _png_rgb_at(png_path, row, col):
+    with rasterio.open(png_path) as png:
+        return tuple(int(png.read(b + 1)[row, col]) for b in range(3))
+
+
+def test_lulc_map_uses_official_source_palette(tmp_path):
+    # FIMSIM-FE/#5: the LULC map (not the Manning map) is coloured from the
+    # official source legend by class code — Esri Sentinel-2 here.
+    lulc = np.full((8, 8), 1, dtype="int32")   # Water
+    lulc[:, 4:] = 2                            # Trees
+    _write_tif(tmp_path / "LULC_Test_2023.tif", lulc)
+    n = np.where(lulc == 1, 0.030, 0.110).astype("float32")
+    _write_tif(tmp_path / "ManningN_Test.tif", n)
+    out = tmp_path / "outputs"
+    out.mkdir()
+
+    write_manning_preview(_ctx(tmp_path), out, lulc_source="esri")
+    classes = {c["code"]: c for c in
+               json.loads((out / "preview_lulc.json").read_text())["classes"]}
+    assert classes[1]["color"] == "#419bdf"   # Esri Water
+    assert classes[2]["color"] == "#397d49"   # Esri Trees
+    # the PNG pixels carry the same official colours
+    assert _png_rgb_at(out / "preview_lulc.png", 0, 0) == (0x41, 0x9b, 0xdf)
+    assert _png_rgb_at(out / "preview_lulc.png", 0, 7) == (0x39, 0x7d, 0x49)
+    # the Manning map is NOT the LULC palette — it keeps its own ramp
+    assert _png_rgb_at(out / "preview_manning.png", 0, 0) != (0x41, 0x9b, 0xdf)
+
+
+def test_lulc_map_uses_official_nlcd_palette(tmp_path):
+    lulc = np.full((5, 5), 11, dtype="int32")  # NLCD Open Water
+    lulc[:, 3:] = 42                            # Evergreen Forest
+    _write_tif(tmp_path / "LULC_Test_2021.tif", lulc)
+    out = tmp_path / "outputs"
+    out.mkdir()
+    write_manning_preview(_ctx(tmp_path), out, lulc_source="nlcd")
+    classes = {c["code"]: c for c in
+               json.loads((out / "preview_lulc.json").read_text())["classes"]}
+    assert classes[11]["color"] == "#466b9f"   # MRLC Open Water
+    assert classes[42]["color"] == "#1c5f2c"   # MRLC Evergreen Forest

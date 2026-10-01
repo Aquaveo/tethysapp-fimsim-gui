@@ -132,8 +132,13 @@ def write_manning_preview(ctx, outputs, lulc_source, manning_mapping=None,
     if lulc_tif is None:
         return None
 
-    from fimcore.nlcd import NLCD_MANNING, SENTINEL2_MANNING
-    table = NLCD_MANNING if "nlcd" in str(lulc_source).lower() else SENTINEL2_MANNING
+    from fimcore.nlcd import (
+        NLCD_MANNING, SENTINEL2_MANNING, NLCD_COLORS, SENTINEL2_COLORS)
+    is_nlcd = "nlcd" in str(lulc_source).lower()
+    table = NLCD_MANNING if is_nlcd else SENTINEL2_MANNING
+    # Official source palette for the LULC map (NLCD = MRLC legend, else Esri
+    # Sentinel-2). The Manning's-n map below keeps its own continuous ramp.
+    palette = NLCD_COLORS if is_nlcd else SENTINEL2_COLORS
 
     with rasterio.open(lulc_tif) as src:
         arr = _downsampled(src)
@@ -155,7 +160,9 @@ def write_manning_preview(ctx, outputs, lulc_source, manning_mapping=None,
         name, _mn, _mx, default_n = table.get(
             code, (f"Class {code}", None, None, None))
         n_val = (manning_mapping or {}).get(str(code), default_n)
-        color = _hex(tab20(rank % 20))
+        # Prefer the official source colour for this class; fall back to a
+        # distinct tab20 swatch for any code outside the legend.
+        color = palette.get(code) or _hex(tab20(rank % 20))
         code_color[code] = color
         classes.append({
             "code": code, "name": name, "color": color,
