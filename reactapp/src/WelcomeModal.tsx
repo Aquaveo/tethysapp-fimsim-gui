@@ -67,14 +67,22 @@ export default function WelcomeModal({ onClose }: Props) {
               </a>.
             </li>
             <li>
-              <strong>Elevation comes from the USGS 3DEP 1/3 arc-second DEM
-              (~{baseline}).</strong> Other resolutions are resampled from it;
-              finer grids increase simulation times substantially.
+              <strong>Define an area</strong> by uploading a shapefile (zipped
+              as <code>.zip</code>), a GeoPackage (<code>.gpkg</code>), or
+              GeoJSON — or draw a polygon on the map.
             </li>
             <li>
-              <strong>You can run several study areas at once</strong> — each
-              polygon in an upload (or each drawn area) becomes its own
-              simulation.
+              <strong>One study area at a time.</strong> The web app runs a
+              single area per project; for batch runs over many areas, use the{' '}
+              <a href="https://github.com/pnikrou/FIMsim" target="_blank" rel="noreferrer">
+                desktop FIMsim
+              </a>.
+            </li>
+            <li>
+              <strong>Elevation is the USGS 3DEP ~{baseline} DEM</strong> (or
+              upload your own). Coarser grids (30 m, 90 m) run faster; the web
+              app does not process finer than {baseline} — for 3 m or 1 m, use
+              the desktop FIMsim.
             </li>
             <li>
               <strong>Areas must be rectangular</strong> (a LISFLOOD-FP/TRITON
