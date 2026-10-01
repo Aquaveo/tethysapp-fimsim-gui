@@ -201,8 +201,16 @@ class RunSimJobType(StepJobType):
             dst.write(rgba)
 
         w, s, e, n = transform_bounds(crs, "EPSG:4326", *bounds)
+        # true 4-corner quad (TL,TR,BR,BL) so the overlay matches a rotated AOI
+        # instead of the flattened W/S/E/N envelope (FIMSIM-FE33)
+        from pyproj import Transformer
+        _tf = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+        _left, _bottom, _right, _top = bounds
+        corners = [list(_tf.transform(x, y)) for x, y in
+                   ((_left, _top), (_right, _top), (_right, _bottom), (_left, _bottom))]
         stats = {
             "bounds": {"west": w, "south": s, "east": e, "north": n},
+            "corners": corners,
             "max_depth_m": float(depth.max()),
             "wet_fraction": float(wet.mean()),
             "wet_area_km2": float(wet.sum() * abs(profile["transform"].a

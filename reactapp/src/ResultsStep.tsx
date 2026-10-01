@@ -130,13 +130,18 @@ export default function ResultsStep({ aois, hasRunStep = true, modelStepKeys }: 
                 const meta = await (await fetch(
                   fileProxyUrl(run.id, bounds.name))).json();
                 const b = meta.bounds;
+                // true 4-corner quad when present (FIMSIM-FE33), else the
+                // W/S/E/N envelope for older runs
+                const coordinates = (Array.isArray(meta.corners) && meta.corners.length === 4)
+                  ? meta.corners as MapOverlay['coordinates']
+                  : [
+                      [b.west, b.north], [b.east, b.north],
+                      [b.east, b.south], [b.west, b.south],
+                    ] as MapOverlay['coordinates'];
                 res.overlay = {
                   id: `flood-${aoi.id}`,
                   url: fileProxyUrl(run.id, png.name),
-                  coordinates: [
-                    [b.west, b.north], [b.east, b.north],
-                    [b.east, b.south], [b.west, b.south],
-                  ],
+                  coordinates,
                 };
                 res.stats = meta;
               } catch { /* overlay optional */ }

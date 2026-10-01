@@ -54,6 +54,18 @@ def _wgs84_bounds(src):
     return {"west": w, "south": s, "east": e, "north": n}
 
 
+def _wgs84_corners(src):
+    """The raster's four corners (TL, TR, BR, BL) as [lon, lat], each
+    reprojected individually. A W/S/E/N envelope flattens the UTM-grid rotation
+    (grid north ≠ true north) so the overlay drifts from the AOI outline; draping
+    the image on these true corners as a quad keeps it aligned (FIMSIM-FE33)."""
+    from pyproj import Transformer
+    left, bottom, right, top = src.bounds
+    tf = Transformer.from_crs(src.crs, "EPSG:4326", always_xy=True)
+    pts = [(left, top), (right, top), (right, bottom), (left, bottom)]
+    return [list(tf.transform(x, y)) for x, y in pts]
+
+
 def write_dem_preview(ctx, outputs, log_fn=lambda *_: None):
     """Terrain preview: colormapped elevation PNG (desktop's `terrain` ramp,
     nodata transparent) + bounds/stats/ramp JSON."""
@@ -71,6 +83,7 @@ def write_dem_preview(ctx, outputs, log_fn=lambda *_: None):
     with rasterio.open(tif) as src:
         arr = _downsampled(src)
         bounds = _wgs84_bounds(src)
+        corners = _wgs84_corners(src)
         res = float(abs(src.res[0]))
         size = (src.width, src.height)
         crs = str(src.crs)
@@ -89,7 +102,7 @@ def write_dem_preview(ctx, outputs, log_fn=lambda *_: None):
     _write_png(Path(outputs) / "preview_dem.png", rgba)
     ramp = [_hex(cmap(v)) for v in np.linspace(0, 1, 12)]
     (Path(outputs) / "preview_dem.json").write_text(json.dumps({
-        "kind": "dem", "bounds": bounds,
+        "kind": "dem", "bounds": bounds, "corners": corners,
         "stats": {"min_m": float(valid.min()), "max_m": float(valid.max()),
                   "mean_m": float(valid.mean()), "res_m": res,
                   "width_px": size[0], "height_px": size[1], "crs": crs},
@@ -125,6 +138,7 @@ def write_manning_preview(ctx, outputs, lulc_source, manning_mapping=None,
     with rasterio.open(lulc_tif) as src:
         arr = _downsampled(src)
         bounds = _wgs84_bounds(src)
+        corners = _wgs84_corners(src)
         # class stats from the FULL raster (counts must be exact, reads are
         # int codes — cheap even at full size)
         full = src.read(1, masked=True)
@@ -174,7 +188,7 @@ def write_manning_preview(ctx, outputs, lulc_source, manning_mapping=None,
             manning_ok = True
 
     (Path(outputs) / "preview_lulc.json").write_text(json.dumps({
-        "kind": "lulc", "bounds": bounds, "classes": classes,
+        "kind": "lulc", "bounds": bounds, "corners": corners, "classes": classes,
         "has_manning": manning_ok,
     }))
     log_fn(f"preview: land-cover map ({len(classes)} class(es))"

@@ -87,3 +87,36 @@ def test_nlcd_source_uses_the_nlcd_table(tmp_path):
     write_manning_preview(_ctx(tmp_path), out, lulc_source="nlcd")
     meta = json.loads((out / "preview_lulc.json").read_text())
     assert meta["classes"][0]["name"] == "Open Water"
+
+
+def test_wgs84_corners_are_the_four_reprojected_corners(tmp_path):
+    # FIMSIM-FE33: corners preserve the raster quad (TL,TR,BR,BL) vs the
+    # flattened W/S/E/N envelope.
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+    from pyproj import Transformer
+    from tethysapp.fimsim_gui.job_types.previews import _wgs84_corners, _wgs84_bounds
+
+    tif = tmp_path / "r.tif"
+    # UTM 15N raster: origin (west=200000, north=3300000), 10 m cells, 100x80
+    with rasterio.open(tif, "w", driver="GTiff", height=80, width=100, count=1,
+                       dtype="float32", crs="EPSG:26915",
+                       transform=from_origin(200000, 3300000, 10, 10)) as d:
+        d.write(np.ones((80, 100), dtype="float32"), 1)
+
+    with rasterio.open(tif) as src:
+        corners = _wgs84_corners(src)
+        bounds = _wgs84_bounds(src)
+        left, bottom, right, top = src.bounds
+
+    tf = Transformer.from_crs("EPSG:26915", "EPSG:4326", always_xy=True)
+    expect = [list(tf.transform(x, y)) for x, y in
+              ((left, top), (right, top), (right, bottom), (left, bottom))]
+    assert len(corners) == 4
+    for got, exp in zip(corners, expect):
+        assert abs(got[0] - exp[0]) < 1e-9 and abs(got[1] - exp[1]) < 1e-9
+    # order sanity: TL north == TR north's row, BL south, etc. (all within env)
+    for lon, lat in corners:
+        assert bounds["west"] - 1e-6 <= lon <= bounds["east"] + 1e-6
+        assert bounds["south"] - 1e-6 <= lat <= bounds["north"] + 1e-6

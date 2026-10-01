@@ -10,9 +10,14 @@ import type { ServerAoi, ServerStepRun } from './api';
 import { fileProxyUrl } from './outputsMeta';
 import './RasterPreview.css';
 
+/** Four reprojected corners (TL, TR, BR, BL), [lon, lat] — the true draping
+ *  quad that keeps the overlay aligned with a rotated AOI (FIMSIM-FE33). */
+type Corners = [number, number][];
+
 interface DemMeta {
   kind: 'dem';
   bounds: { west: number; south: number; east: number; north: number };
+  corners?: Corners;
   stats: { min_m: number; max_m: number; mean_m: number; res_m: number;
     width_px: number; height_px: number; crs: string };
   legend: { ramp: string[]; vmin: number; vmax: number; label: string };
@@ -21,6 +26,7 @@ interface DemMeta {
 interface LulcMeta {
   kind: 'lulc';
   bounds: { west: number; south: number; east: number; north: number };
+  corners?: Corners;
   classes: { code: number; name: string; color: string;
     area_km2: number; pct: number; n: number | null }[];
   has_manning: boolean;
@@ -31,6 +37,13 @@ type Meta = DemMeta | LulcMeta;
 const toCorners = (b: Meta['bounds']): MapOverlay['coordinates'] => [
   [b.west, b.north], [b.east, b.north], [b.east, b.south], [b.west, b.south],
 ];
+
+/** Prefer the true 4-corner quad; fall back to the W/S/E/N envelope for older
+ *  runs whose preview JSON predates `corners`. */
+const overlayCorners = (m: Meta): MapOverlay['coordinates'] =>
+  (m.corners && m.corners.length === 4
+    ? (m.corners as MapOverlay['coordinates'])
+    : toCorners(m.bounds));
 
 export default function RasterPreview({ aoi, run, kind, defaultOpen }: {
   aoi: ServerAoi;
@@ -62,7 +75,7 @@ export default function RasterPreview({ aoi, run, kind, defaultOpen }: {
   const overlay: MapOverlay[] = meta ? [{
     id: `rp-${run.id}-${png}`,
     url: fileProxyUrl(run.id, png),
-    coordinates: toCorners(meta.bounds),
+    coordinates: overlayCorners(meta),
   }] : [];
 
   return (
