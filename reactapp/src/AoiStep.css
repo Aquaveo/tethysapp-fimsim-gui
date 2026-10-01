@@ -114,3 +114,17 @@
 .as-picker-meta { color: var(--color-text-secondary); font-size: 0.8rem;
   font-variant-numeric: tabular-nums; }
 .as-picker-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+/* FE45 — AOI details box (#xxi) */
+.as-details {
+  margin: 0.5rem 0 0; padding: 0.5rem 0.7rem; font-size: 0.82rem;
+  background: var(--color-surface-alt); border-radius: var(--radius-md);
+  display: grid; gap: 0.15rem 0.8rem;
+}
+.as-details > div { display: flex; gap: 0.5rem; }
+.as-details dt { margin: 0; font-weight: 600; color: var(--color-text-muted);
+  min-width: 7.5rem; }
+.as-details dd { margin: 0; }
+.as-details .as-gage { margin-left: 1rem; }
+.as-details .as-gage dt { min-width: 6rem; font-weight: 500;
+  font-variant-numeric: tabular-nums; color: var(--color-text); }

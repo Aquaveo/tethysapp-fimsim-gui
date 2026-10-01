@@ -314,6 +314,29 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
               <button type="button" className="as-card-x" aria-label={`Remove ${a.name}`} onClick={() => void remove(a)}>
                 ✕
               </button>
+              {a.lookup_status === 'done' && (
+                <dl className="as-details">
+                  <div><dt>Area</dt>
+                    <dd>{a.area_km2 >= 1 ? a.area_km2.toFixed(1) : a.area_km2.toFixed(3)} km²</dd></div>
+                  <div><dt>CRS</dt>
+                    <dd>{a.working_crs_epsg ? `EPSG:${a.working_crs_epsg}` : '—'}</dd></div>
+                  <div><dt>State</dt>
+                    <dd>{a.states?.length ? a.states.map((s) => s.name).join(', ') : '—'}</dd></div>
+                  <div><dt>HUC6</dt>
+                    <dd>{a.huc6_codes?.length ? a.huc6_codes.join(', ') : '—'}</dd></div>
+                  <div><dt>HUC8</dt>
+                    <dd>{a.huc8_codes?.length ? a.huc8_codes.join(', ') : '—'}</dd></div>
+                  <div><dt>Main river</dt>
+                    <dd>{a.river_name ?? 'none detected'}</dd></div>
+                  <div><dt>USGS gages in AOI</dt>
+                    <dd>{a.lookup?.gages?.length ?? 0} found</dd></div>
+                  {(a.lookup?.gages ?? []).map((g) => (
+                    <div className="as-gage" key={g.site_no}>
+                      <dt>{g.site_no}</dt><dd>{g.station_nm}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </li>
           ))}
         </ul>
