@@ -198,3 +198,28 @@ describe('manningTableSource (bug-round #iv: Manning table on TRITON too)', asyn
     expect(manningTableSource('tfric', get({ fric_mode: 'varying' }))).toBe('esri');
   });
 });
+
+describe('LISFLOOD bed slope at outflow is clamped to real channel slopes', async () => {
+  const { STEP_FIELDS, rangeProblems } = await import('../stepFields');
+  const bci = STEP_FIELDS.bci;
+  const slope = bci.find((f) => f.key === 'downstream_slope')!;
+
+  it('cannot go negative: floor is 1e-5 (flatter than the lower Mississippi)', () => {
+    expect(slope.min).toBe(0.00001);
+  });
+
+  it('tops out at 0.1 (a 10 % cascade reach), not 145', () => {
+    expect(slope.max).toBe(0.1);
+  });
+
+  it('steps finely enough that the 0.0001 default sits on the grid', () => {
+    expect(slope.step).toBe(0.00001);
+    expect((0.0001 - slope.min!) / slope.step!).toBeCloseTo(Math.round((0.0001 - slope.min!) / slope.step!), 6);
+  });
+
+  it('rejects the values the spinner used to reach, keeps the default', () => {
+    expect(rangeProblems({ downstream_slope: -0.0001 }, bci)).toHaveLength(1);
+    expect(rangeProblems({ downstream_slope: 145.0001 }, bci)).toHaveLength(1);
+    expect(rangeProblems({ downstream_slope: 0.0001 }, bci)).toEqual([]);
+  });
+});

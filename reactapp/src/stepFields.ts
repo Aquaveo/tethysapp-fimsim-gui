@@ -244,11 +244,15 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'downstream_slope', label: 'Bed slope at outflow', widget: 'number',
       showIf: { key: 'downstream_type', value: 'FREE' },
-      help: 'The channel-bed slope at the downstream edge, used only for free '
-        + '(normal-depth) outflow. It sets how readily water drains out of the '
-        + 'domain. 0.0001 — a gentle 1-in-10,000 grade — is a safe default for '
-        + 'most lowland rivers: it lets flow leave without ponding at the '
-        + 'boundary. Use a steeper value for steeper terrain.',
+      // Real channel slopes: ~0.00002 (lower Amazon) up to ~0.1 where
+      // cascade reaches begin; the spinner used to run negative and to 145.
+      min: 0.00001, max: 0.1, step: 0.00001,
+      help: 'The channel-bed slope at the downstream edge (m/m), used only for '
+        + 'free (normal-depth) outflow. It sets how readily water drains out of '
+        + 'the domain. 0.0001 — a gentle 1-in-10,000 grade — is a safe default '
+        + 'for most lowland rivers: it lets flow leave without ponding at the '
+        + 'boundary. Use a steeper value for steeper terrain; mountain streams '
+        + 'run 0.01–0.05. Allowed range 0.00001 to 0.1.',
     },
     {
       key: 'downstream_hfix', label: 'Fixed level (m)', widget: 'number',
