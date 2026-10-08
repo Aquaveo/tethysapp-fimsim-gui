@@ -5,7 +5,7 @@
 // Collapsed by default on multi-AOI projects; the map mounts on first open.
 import { useEffect, useState } from 'react';
 import type { FeatureCollection } from 'geojson';
-import AoiMap from './AoiMap';
+import AoiMap, { GAGE_STYLE } from './AoiMap';
 import type { ServerAoi, ServerStepRun } from './api';
 import { fileProxyUrl } from './outputsMeta';
 import './BoundaryPreview.css';
@@ -52,6 +52,8 @@ export default function BoundaryPreview({ aoi, run, defaultOpen }: {
             <strong>downstream outflow</strong> where it <em>exits</em> — both
             at the domain edge. Misplaced boundaries are the most common cause
             of an empty flood map or water pooling against an artificial wall.
+            Numbered green dots are USGS gages (for the Flow Data step), not
+            boundaries.
           </p>
           <AoiMap
             aois={[aoi]}
@@ -64,6 +66,11 @@ export default function BoundaryPreview({ aoi, run, defaultOpen }: {
             <span><i className="bp-line" /> Main river</span>
             <span><i className="bp-dot bp-up" /> Upstream (inflow)</span>
             <span><i className="bp-dot bp-down" /> Downstream (outflow)</span>
+            <span>
+              <i className="bp-dot"
+                 style={{ background: GAGE_STYLE.fill, border: `2.5px solid ${GAGE_STYLE.stroke}` }} />
+              {' '}USGS gage (numbered)
+            </span>
           </div>
           {failed && <p className="bp-hint">The preview could not be loaded.</p>}
         </div>

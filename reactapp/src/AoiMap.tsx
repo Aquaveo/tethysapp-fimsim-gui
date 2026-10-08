@@ -50,6 +50,18 @@ export interface MapOverlay {
   coordinates: [[number, number], [number, number], [number, number], [number, number]];
 }
 
+/** Desktop boundary symbology, verbatim (gui/bci_preview.py; the server ships
+ *  the same values in the preview GeoJSON's `style`). */
+export const BOUNDARY_STYLE = {
+  main_river: { color: '#2b6cb0' },
+  upstream: { fill: '#f6ad55', ring: '#744210' },
+  downstream: { fill: '#f56565', ring: '#742a2a' },
+} as const;
+
+/** USGS gage dots (numbered). Green on purpose: the old yellow read as a
+ *  third boundary marker next to the orange inflow dot (bug-round #vii). */
+export const GAGE_STYLE = { fill: '#48BB78', stroke: '#1C4532' } as const;
+
 /** Vector preview layers (step previews): features carry a `kind` property —
  *  main_river | upstream | downstream — styled to the desktop's symbology. */
 export interface VectorOverlay {
@@ -162,8 +174,8 @@ export default function AoiMap({
             // USGS gages — click for details (desktop: numbered dots)
             id: 'gages', type: 'circle', source: 'gages',
             paint: {
-              'circle-radius': 8, 'circle-color': '#FFC107',
-              'circle-stroke-color': '#123458', 'circle-stroke-width': 2,
+              'circle-radius': 8, 'circle-color': GAGE_STYLE.fill,
+              'circle-stroke-color': GAGE_STYLE.stroke, 'circle-stroke-width': 2,
             },
           },
           {
@@ -172,7 +184,7 @@ export default function AoiMap({
               'text-field': ['get', 'num'], 'text-size': 10,
               'text-font': ['Noto Sans Bold'], 'text-allow-overlap': true,
             },
-            paint: { 'text-color': '#123458' },
+            paint: { 'text-color': '#ffffff' },
           },
           {
             // main-river name along the line (desktop: panel title = river name)
@@ -485,18 +497,25 @@ export default function AoiMap({
       map.addLayer({
         id: `${srcId}-river`, type: 'line', source: srcId,
         filter: ['==', ['get', 'kind'], 'main_river'],
-        paint: { 'line-color': '#2b6cb0', 'line-width': 2.5 },
+        paint: { 'line-color': BOUNDARY_STYLE.main_river.color, 'line-width': 2.5 },
       });
+      // added after the base layers → boundary markers sit ABOVE the gage
+      // dots; among themselves the downstream marker wins (bug-round #x)
       map.addLayer({
         id: `${srcId}-pts`, type: 'circle', source: srcId,
         filter: ['==', ['geometry-type'], 'Point'],
+        layout: {
+          'circle-sort-key': ['match', ['get', 'kind'], 'downstream', 2, 'upstream', 1, 0],
+        },
         paint: {
           'circle-radius': 8,
           'circle-color': ['match', ['get', 'kind'],
-            'upstream', '#f6ad55', 'downstream', '#f56565', '#888888'],
+            'upstream', BOUNDARY_STYLE.upstream.fill,
+            'downstream', BOUNDARY_STYLE.downstream.fill, '#888888'],
           'circle-stroke-width': 2.5,
           'circle-stroke-color': ['match', ['get', 'kind'],
-            'upstream', '#744210', 'downstream', '#742a2a', '#333333'],
+            'upstream', BOUNDARY_STYLE.upstream.ring,
+            'downstream', BOUNDARY_STYLE.downstream.ring, '#333333'],
         },
       });
     }

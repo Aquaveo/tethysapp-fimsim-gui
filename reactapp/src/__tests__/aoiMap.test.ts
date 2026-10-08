@@ -27,3 +27,18 @@ describe('bboxRing', () => {
     expect(bboxRing([[5, 6]])).toEqual([[5, 6], [5, 6], [5, 6], [5, 6], [5, 6]]);
   });
 });
+
+describe('marker palette (bug-round #vii: gage dot confused with the inflow marker)', async () => {
+  const { GAGE_STYLE, BOUNDARY_STYLE } = await import('../AoiMap');
+
+  it('keeps the USGS gage marker off the boundary markers’ warm palette', () => {
+    const warm = [BOUNDARY_STYLE.upstream.fill, BOUNDARY_STYLE.downstream.fill, '#FFC107']
+      .map((c) => c.toLowerCase());
+    expect(warm).not.toContain(GAGE_STYLE.fill.toLowerCase());
+  });
+
+  it('matches the desktop boundary symbology shipped by the server', () => {
+    expect(BOUNDARY_STYLE.upstream).toEqual({ fill: '#f6ad55', ring: '#744210' });
+    expect(BOUNDARY_STYLE.downstream).toEqual({ fill: '#f56565', ring: '#742a2a' });
+  });
+});
