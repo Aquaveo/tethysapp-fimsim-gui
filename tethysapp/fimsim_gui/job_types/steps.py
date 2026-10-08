@@ -155,6 +155,26 @@ class DEMStepJobType(StepJobType):
         )
 
 
+def _check_manning_mapping(config: dict, problems: list) -> None:
+    """The editable per-class table (manning_mapping): an object of
+    land-cover code → Manning's n, every n in [0.001, 1.0]. Shared by the
+    LISFLOOD and TRITON Roughness steps."""
+    mapping = config.get("manning_mapping")
+    if mapping is None:
+        return
+    if not isinstance(mapping, dict):
+        problems.append("'manning_mapping' must be an object of "
+                        "land-cover code → Manning's n")
+        return
+    bad = [k for k, v in mapping.items()
+           if isinstance(v, bool) or not isinstance(v, (int, float))
+           or not (0.001 <= v <= 1.0)]
+    if bad:
+        problems.append(
+            f"'manning_mapping' values must be numbers in "
+            f"[0.001, 1.0] — bad class(es): {', '.join(map(str, bad))}")
+
+
 class ManningStepJobType(UniformStepJobType):
     clean_patterns = ("lulc*.ascii", "lulc*.prj", "LULC_*.tif", "ManningN_*.tif")
     step_key = "manning"
@@ -198,19 +218,7 @@ class ManningStepJobType(UniformStepJobType):
         # Chow (1959) tables top out well below 1; 0 would zero out friction
         _check_number(config, "fpfric_val", 0.001, 1.0, problems)
         _check_lulc_years(config, problems)
-        mapping = config.get("manning_mapping")
-        if mapping is not None:
-            if not isinstance(mapping, dict):
-                problems.append("'manning_mapping' must be an object of "
-                                "land-cover code → Manning's n")
-            else:
-                bad = [k for k, v in mapping.items()
-                       if isinstance(v, bool) or not isinstance(v, (int, float))
-                       or not (0.001 <= v <= 1.0)]
-                if bad:
-                    problems.append(
-                        f"'manning_mapping' values must be numbers in "
-                        f"[0.001, 1.0] — bad class(es): {', '.join(map(str, bad))}")
+        _check_manning_mapping(config, problems)
         return problems
 
 

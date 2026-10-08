@@ -17,7 +17,7 @@ from tethysapp.fimsim_gui.job_types.registry import (
     UniformStepJobType, _check_choice, _check_number,
 )
 from tethysapp.fimsim_gui.job_types.steps import (
-    BDYStepJobType, DEMStepJobType, _check_lulc_years,
+    BDYStepJobType, DEMStepJobType, _check_lulc_years, _check_manning_mapping,
 )
 
 
@@ -118,13 +118,21 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
         _check_choice(config, "lulc_source", ("download", "download_nlcd"), problems)
         _check_number(config, "fpfric_val", 0.001, 1.0, problems)
         _check_lulc_years(config, problems)
+        _check_manning_mapping(config, problems)
         return problems
 
     def transform_config(self, cfg: dict, ctx) -> dict:
+        # The editable table arrives as manning_mapping (same key as the
+        # LISFLOOD step, so the frontend table is shared); the TRITON builder
+        # calls it lulc_class_to_n and the orchestrator splats the config, so
+        # the key MUST be renamed, not duplicated (bug-round #iv).
+        cfg = dict(cfg)
+        mapping = cfg.pop("manning_mapping", None)
+        if mapping is not None:
+            cfg["lulc_class_to_n"] = mapping
         if ctx is not None:
             ctx["_preview_lulc_source"] = cfg.get("lulc_source", "download")
-            ctx["_preview_manning_mapping"] = cfg.get("manning_mapping") \
-                or cfg.get("lulc_class_to_n")
+            ctx["_preview_manning_mapping"] = cfg.get("lulc_class_to_n")
         return cfg
 
     def collect(self, ctx, workdir) -> str:

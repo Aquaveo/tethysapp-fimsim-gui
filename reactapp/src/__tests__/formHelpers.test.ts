@@ -173,3 +173,28 @@ describe('rangeProblems', async () => {
     expect(rangeProblems({}, fields)).toEqual([]);
   });
 });
+
+describe('manningTableSource (bug-round #iv: Manning table on TRITON too)', async () => {
+  const { manningTableSource } = await import('../stepFields');
+  const get = (cfg: Record<string, unknown>) => (k: string) => cfg[k];
+
+  it('maps the LISFLOOD Roughness source names straight through', () => {
+    expect(manningTableSource('manning', get({ fric_mode: 'varying', lulc_download_source: 'esri' }))).toBe('esri');
+    expect(manningTableSource('manning', get({ fric_mode: 'varying', lulc_download_source: 'nlcd' }))).toBe('nlcd');
+  });
+
+  it('translates the TRITON source keys (download / download_nlcd) to the table keys', () => {
+    expect(manningTableSource('tfric', get({ fric_mode: 'varying', lulc_source: 'download' }))).toBe('esri');
+    expect(manningTableSource('tfric', get({ fric_mode: 'varying', lulc_source: 'download_nlcd' }))).toBe('nlcd');
+  });
+
+  it('shows no table for fixed friction or for steps that have no land cover', () => {
+    expect(manningTableSource('tfric', get({ fric_mode: 'fixed', lulc_source: 'download' }))).toBeNull();
+    expect(manningTableSource('manning', get({ fric_mode: 'fixed' }))).toBeNull();
+    expect(manningTableSource('dem', get({ fric_mode: 'varying' }))).toBeNull();
+  });
+
+  it('defaults to Esri when the source is still unset (server default)', () => {
+    expect(manningTableSource('tfric', get({ fric_mode: 'varying' }))).toBe('esri');
+  });
+});

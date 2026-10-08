@@ -17,7 +17,7 @@ import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
 import {
   STEP_FIELDS, applyLinkedDefaults, coerceConfigNumbers, expandEventDates, fieldVisible,
-  rangeProblems, type FieldSpec,
+  manningTableSource, rangeProblems, type FieldSpec,
 } from './stepFields';
 import { formatElapsed, phaseLabel } from './runProgress';
 import './StepPanel.css';
@@ -105,6 +105,8 @@ export default function StepPanel({
   const visible = (f: FieldSpec) => fieldVisible(f.showIf, value);
   const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
     && value('dem_input') === 'upload';
+  // the editable per-class table, on BOTH Roughness steps (bug-round #iv)
+  const tableSource = manningTableSource(stepKey, value);
 
   const uploadDemFor = async (aoiId: number, files: File[]) => {
     setDemBusy(aoiId);
@@ -271,10 +273,10 @@ export default function StepPanel({
             )}
           </label>
         ))}
-        {stepKey === 'manning' && value('fric_mode') === 'varying' && (
+        {tableSource && (
           <div className="sp-submit-row">
             <ManningTable
-              source={String(value('lulc_download_source') || 'esri')}
+              source={tableSource}
               value={config.manning_mapping as ManningMapping | undefined}
               onChange={(m) => setConfig({ ...config, manning_mapping: m })}
             />

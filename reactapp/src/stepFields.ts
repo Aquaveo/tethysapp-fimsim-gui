@@ -141,6 +141,23 @@ export const DEM_RES_HELP =
   + 'and run faster. The web app does not go below 10 m — for finer grids use '
   + 'the desktop FIMsim.';
 
+/**
+ * Which reference table the editable Manning's n table shows for a Roughness
+ * step, or null when no table applies (fixed friction, other steps). The
+ * LISFLOOD step keys its source as esri|nlcd; TRITON's is download|
+ * download_nlcd (fimcore's own names) — both map onto the table's keys.
+ */
+export function manningTableSource(
+  stepKey: string, get: (key: string) => unknown,
+): 'esri' | 'nlcd' | null {
+  if (stepKey !== 'manning' && stepKey !== 'tfric') return null;
+  if (get('fric_mode') !== 'varying') return null;
+  const src = stepKey === 'manning'
+    ? String(get('lulc_download_source') || 'esri')
+    : String(get('lulc_source') || 'download');
+  return src === 'nlcd' || src === 'download_nlcd' ? 'nlcd' : 'esri';
+}
+
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
     {
