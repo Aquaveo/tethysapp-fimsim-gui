@@ -7,16 +7,14 @@ tickets listed first. FIMsense / FIMbench / FIMeval items are tracked elsewhere.
 ## Updates to existing tickets
 - FIMSIM-FE49 (per-step downloads, #23): REAFFIRMED — asked for a second time;
   build next.
-- FIMSIM-FE50 / BE20 (remove the Time limit control): scope is ALL workflows,
-  not just LISFLOOD (it was seen on TRITON too — confirm where, the only
-  `solver_timeout_s` field is on the LISFLOOD Run step).
-- FIMSIM-FE52 (Manning bounds) REVISED by Reshma's note #4/#5: the absolute
-  clamp is ~[0.001, 1.0] (NOT Nathan's [0.01, 0.09] from 10-01 — matches what
-  the server already enforces); per-class literature [min,max] is a SOFT limit
-  for Esri Sentinel-2 AND NLCD on LISFLOOD AND TRITON. Out-of-range row turns
-  yellow with ⚠️ plus an info note: "outside the recommended range — this
-  will affect your results". BE15 (remove the per-class clamp) is the
-  prerequisite and is reaffirmed.
+- FIMSIM-FE52 (Manning bounds): Reshma's note #4/#5 confirms the design and
+  CORRECTS herself on the numbers — the hard clamp stays Nathan's [0.01, 0.09]
+  from 10-01. Per-class literature [min,max] is a SOFT limit for Esri
+  Sentinel-2 AND NLCD on LISFLOOD AND TRITON: an out-of-range row turns
+  yellow with ⚠️ plus an info note ("outside the recommended range — this will
+  affect your results"). BE15 (remove the per-class clamp) is the prerequisite.
+- FIMSIM-FE50 / BE20: the Time limit field exists only on the LISFLOOD Run
+  step (TRITON has no Run step) — remove it there.
 - FIMSIM-FE48: done (model stored on the project); follow-up FE58 below.
 - #xi / FE35 (single-AOI revert): REINFORCED — Sagy's position is the online
   app stays one case study at a time; multi-case INPUT preparation was left
