@@ -180,3 +180,74 @@ def test_cascade_delete(session):
     session.commit()
     assert session.execute(text("SELECT count(*) FROM aois")).scalar() == 0
     assert session.execute(text("SELECT count(*) FROM step_runs")).scalar() == 0
+
+
+# ── FIMSIM-FE48: the model is a property of the project ──────────────────────
+
+def test_normalize_model_accepts_known_models_and_defaults_blank():
+    from tethysapp.fimsim_gui.models import DEFAULT_MODEL, normalize_model
+    assert normalize_model("triton") == "triton"
+    assert normalize_model("lisflood-fp") == "lisflood-fp"
+    assert normalize_model(None) == DEFAULT_MODEL
+    assert normalize_model("") == DEFAULT_MODEL
+    assert normalize_model("hec-ras") is None   # caller turns None into a 400
+
+
+def test_project_model_defaults_to_lisflood_and_is_serialized(session):
+    p = _mk_project(session)
+    assert p.to_dict()["model"] == "lisflood-fp"
+    t = Project(username="reshma", name="Deck", model="triton")
+    session.add(t)
+    session.commit()
+    assert t.to_dict()["model"] == "triton"
+
+
+def _legacy_projects_table(engine):
+    """Drop the model column so the table looks like a pre-FE48 portal DB."""
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE projects DROP COLUMN IF EXISTS model"))
+
+
+def test_ensure_project_model_column_adds_and_backfills_from_step_runs(engine, session):
+    from sqlalchemy import text
+    from tethysapp.fimsim_gui.models import ensure_project_model_column
+    _legacy_projects_table(engine)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO projects (id, username, name, created) VALUES "
+            "(901, 'r', 'LegacyLisflood', now()), (902, 'r', 'LegacyTriton', now())"))
+        conn.execute(text(
+            "INSERT INTO aois (id, project_id, name, source, geometry, lookup_status) VALUES "
+            f"(801, 901, 'a', 'drawn', ST_GeomFromEWKT('{NEUSE_WKT}'), 'done'), "
+            f"(802, 902, 'b', 'drawn', ST_GeomFromEWKT('{NEUSE_WKT}'), 'done')"))
+        conn.execute(text(
+            "INSERT INTO step_runs (aoi_id, step_key, status, superseded, config, created) VALUES "
+            "(801, 'dem', 'succeeded', false, '{}', now()), "
+            "(802, 'tbc', 'succeeded', false, '{}', now())"))
+
+    added = ensure_project_model_column(engine)
+    assert added is True
+    models = dict(session.execute(text("SELECT id, model FROM projects")).all())
+    assert models == {901: "lisflood-fp", 902: "triton"}
+
+
+def test_ensure_project_model_column_is_idempotent_and_keeps_explicit_choices(engine, session):
+    from sqlalchemy import text
+    from tethysapp.fimsim_gui.models import ensure_project_model_column
+    _legacy_projects_table(engine)
+    assert ensure_project_model_column(engine) is True
+    # a project the user explicitly made LISFLOOD that happens to carry an
+    # old TRITON run must NOT be flipped by a later re-run of the sync
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO projects (id, username, name, created, model) VALUES "
+            "(903, 'r', 'Chosen', now(), 'lisflood-fp')"))
+        conn.execute(text(
+            "INSERT INTO aois (id, project_id, name, source, geometry, lookup_status) VALUES "
+            f"(803, 903, 'c', 'drawn', ST_GeomFromEWKT('{NEUSE_WKT}'), 'done')"))
+        conn.execute(text(
+            "INSERT INTO step_runs (aoi_id, step_key, status, superseded, config, created) VALUES "
+            "(803, 'tdem', 'succeeded', false, '{}', now())"))
+    assert ensure_project_model_column(engine) is False
+    assert session.execute(text("SELECT model FROM projects WHERE id=903")).scalar() == "lisflood-fp"

@@ -21,7 +21,9 @@ from tethys_sdk.routing import controller
 
 from tethysapp.fimsim_gui.app import App
 from tethysapp.fimsim_gui.ingest import IngestError, ingest_aoi_file, ingest_geojson_geometry
-from tethysapp.fimsim_gui.models import Aoi, Project, get_session_maker, sanitize_name
+from tethysapp.fimsim_gui.models import (
+    MODELS, Aoi, Project, get_session_maker, normalize_model, sanitize_name,
+)
 from tethysapp.fimsim_gui.services import resolve_aoi_context
 
 logger = logging.getLogger(__name__)
@@ -162,12 +164,17 @@ def api_projects(request, session):
             return JsonResponse(
                 {'error': 'Project name is required (letters, numbers, spaces).'},
                 status=400)
+        model = normalize_model(body.get('model'))
+        if model is None:
+            return JsonResponse(
+                {'error': f"Unknown model '{body.get('model')}' — "
+                          f"choose one of: {', '.join(MODELS)}."}, status=400)
         exists = (session.query(Project)
                   .filter_by(username=request.user.username, name=name).first())
         if exists:
             return JsonResponse(
                 {'error': f'You already have a project named "{name}".'}, status=409)
-        project = Project(username=request.user.username, name=name)
+        project = Project(username=request.user.username, name=name, model=model)
         session.add(project)
         session.commit()
         return JsonResponse(project.to_dict(), status=201)
