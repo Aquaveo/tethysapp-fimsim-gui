@@ -6,9 +6,10 @@
 // layer on top later — this gets the whole workflow demoable.
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ApiError, cancelStepRun, getStepRun, getStepRunOutputs, submitStep, uploadDem,
-  type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
+  ApiError, cancelStepRun, downloadSelectedZip, getStepRun, getStepRunOutputs, submitStep,
+  uploadDem, type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
 } from './api';
+import { fileProxyUrl, formatBytes, saveBlob, stepZipFiles, zipFilename } from './outputsMeta';
 import BoundaryPreview from './BoundaryPreview';
 import HydrographChart from './HydrographChart';
 import RasterPreview from './RasterPreview';
@@ -56,22 +57,51 @@ function ProgressBar({ run }: { run: ServerStepRun }) {
   );
 }
 
-function Outputs({ runId }: { runId: number }) {
+function Outputs({ runId, aoi, stepKey }: { runId: number; aoi: ServerAoi; stepKey: string }) {
   const [outputs, setOutputs] = useState<OutputEntry[] | null>(null);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipError, setZipError] = useState<string | null>(null);
   useEffect(() => {
     getStepRunOutputs(runId).then((r) => setOutputs(r.outputs)).catch(() => setOutputs([]));
   }, [runId]);
   if (!outputs) return <span className="sp-muted">loading outputs…</span>;
-  // Names only — downloads live on the Results step's outputs table.
+  if (!outputs.length) return null;
+  // FIMSIM-FE49: every step's outputs download right here — per file through
+  // the same-origin proxy, or all of them as one zip (same endpoint as the
+  // Results step's Download Selected).
+  const downloadAll = async () => {
+    setZipBusy(true);
+    setZipError(null);
+    try {
+      const blob = await downloadSelectedZip(aoi.id, stepZipFiles(runId, outputs));
+      saveBlob(blob, zipFilename(aoi.name, stepKey));
+    } catch (e) {
+      setZipError(e instanceof ApiError ? e.message : String((e as Error).message ?? e));
+    } finally {
+      setZipBusy(false);
+    }
+  };
+  const total = outputs.reduce((n, o) => n + o.bytes, 0);
   return (
-    <ul className="sp-outputs">
-      {outputs.map((o) => (
-        <li key={o.key}>
-          {o.name}
-          <span className="sp-muted"> ({(o.bytes / 1024).toFixed(0)} kB)</span>
-        </li>
-      ))}
-    </ul>
+    <div className="sp-outputs-wrap">
+      <ul className="sp-outputs">
+        {outputs.map((o) => (
+          <li key={o.key}>
+            <a href={fileProxyUrl(runId, o.name, true)} download={o.name}
+               title={`Download ${o.name}`}>⬇ {o.name}</a>
+            <span className="sp-muted"> ({formatBytes(o.bytes)})</span>
+          </li>
+        ))}
+      </ul>
+      <div className="sp-outputs-bar">
+        <button type="button" className="sp-outputs-zip" disabled={zipBusy}
+                onClick={() => void downloadAll()}>
+          {zipBusy ? 'Zipping…'
+            : `⬇ Download all (${outputs.length} file${outputs.length === 1 ? '' : 's'} · ${formatBytes(total)})`}
+        </button>
+        {zipError && <span className="sp-error" role="alert">{zipError}</span>}
+      </div>
+    </div>
   );
 }
 
@@ -372,7 +402,9 @@ export default function StepPanel({
                     <TextPreview run={run} stepKey={stepKey}
                                  defaultOpen={textPreviewDefaultOpen(stepKey, aois.length)} />
                   )}
-                  {run.status === 'succeeded' && <Outputs runId={run.id} />}
+                  {run.status === 'succeeded' && (
+                    <Outputs runId={run.id} aoi={a} stepKey={stepKey} />
+                  )}
                   {run.status === 'failed' && (
                     <details className="sp-fail">
                       <summary>failed — details</summary>

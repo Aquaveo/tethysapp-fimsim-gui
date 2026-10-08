@@ -124,3 +124,28 @@ export const fileProxyUrl = (runId: number, name: string, download = false) =>
 
 /** "Download all" zip of every stored output for one AOI. */
 export const aoiZipUrl = (aoiId: number) => `/apps/fimsim-gui/api/aois/${aoiId}/zip/`;
+
+/** The zip endpoint's selection for EVERY output of one step run (FE49). */
+export function stepZipFiles(
+  runId: number, outputs: { name: string }[],
+): { run_id: number; name: string }[] {
+  return outputs.map((o) => ({ run_id: runId, name: o.name }));
+}
+
+/** `<area>_<suffix>.zip`, filesystem-safe (no spaces/brackets, no dangling _). */
+export function zipFilename(aoiName: string, suffix: string): string {
+  const safe = aoiName.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return `${safe}_${suffix}.zip`;
+}
+
+/** Hand a Blob to the browser as a file download. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

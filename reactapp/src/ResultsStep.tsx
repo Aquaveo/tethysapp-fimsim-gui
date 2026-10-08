@@ -8,7 +8,7 @@ import AoiMap, { type MapOverlay } from './AoiMap';
 import HydrographChart from './HydrographChart';
 import { downloadSelectedZip, getStepRun, type ServerAoi, type ServerStepRun } from './api';
 import {
-  fileProxyUrl, formatBytes, keepModelSteps, outputMeta, summarizeSelection,
+  fileProxyUrl, formatBytes, keepModelSteps, outputMeta, saveBlob, summarizeSelection, zipFilename,
 } from './outputsMeta';
 import './StepPanel.css';
 import './ResultsStep.css';
@@ -75,14 +75,7 @@ export default function ResultsStep({ aois, hasRunStep = true, modelStepKeys }: 
     try {
       const blob = await downloadSelectedZip(
         aoi.id, picked.map((f) => ({ run_id: f.runId, name: f.name })));
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${aoi.name.replace(/[^\w.-]+/g, '_')}_selected.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, zipFilename(aoi.name, 'selected'));
     } catch (e) {
       setDlError(`${aoi.name}: ${(e as Error).message ?? 'download failed'}`);
     } finally {

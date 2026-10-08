@@ -78,7 +78,18 @@
 .sp-progress-label { font-size: 0.78rem; color: var(--color-text-secondary); }
 .sp-outputs { list-style: none; margin: 0.4rem 0 0; padding: 0; font-size: 0.85rem;
   display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; }
-.sp-outputs a { color: var(--color-link); }
+.sp-outputs a { color: var(--color-link); text-decoration: none; }
+.sp-outputs a:hover { text-decoration: underline; }
+/* FE49 — per-step zip */
+.sp-outputs-bar { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.45rem; }
+.sp-outputs-zip {
+  border: 1.5px solid var(--color-border); border-radius: 999px;
+  background: var(--color-surface); color: var(--color-primary-active);
+  padding: 0.2rem 0.8rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  font-family: inherit;
+}
+.sp-outputs-zip:hover:not(:disabled) { background: var(--color-surface-alt); }
+.sp-outputs-zip:disabled { opacity: 0.6; cursor: default; }
 .sp-fail summary { cursor: pointer; font-size: 0.85rem; color: var(--color-error); }
 .sp-fail pre {
   white-space: pre-wrap; font-size: 0.75rem; background: var(--color-surface-alt);

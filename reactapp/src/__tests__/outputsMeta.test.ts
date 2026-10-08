@@ -80,3 +80,22 @@ describe('summarizeSelection', () => {
     expect(summarizeSelection(rows, new Set())).toEqual({ count: 0, bytes: 0 });
   });
 });
+
+describe('per-step downloads (FIMSIM-FE49)', async () => {
+  const { stepZipFiles, zipFilename } = await import('../outputsMeta');
+
+  it('turns a step run\'s outputs into the zip endpoint\'s {run_id, name} list', () => {
+    const outputs = [
+      { key: 'u/1/1/dem/DEM_a.tif', name: 'DEM_a.tif', bytes: 10, content_type: 'image/tiff', url: null },
+      { key: 'u/1/1/dem/dem.ascii', name: 'dem.ascii', bytes: 5, content_type: 'text/plain', url: null },
+    ];
+    expect(stepZipFiles(42, outputs)).toEqual([
+      { run_id: 42, name: 'DEM_a.tif' }, { run_id: 42, name: 'dem.ascii' },
+    ]);
+  });
+
+  it('names the zip after the area and the step, filesystem-safe', () => {
+    expect(zipFilename('Neuse River (NC)', 'dem')).toBe('Neuse_River_NC_dem.zip');
+    expect(zipFilename('AOI_2-zipped', 'selected')).toBe('AOI_2-zipped_selected.zip');
+  });
+});
