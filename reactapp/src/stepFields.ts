@@ -76,6 +76,17 @@ export function coerceConfigNumbers(
   return out;
 }
 
+/**
+ * Shared by the LISFLOOD and TRITON Terrain steps (FIMSIM-FE51): the
+ * coarser options are resampled from the 10 m 3DEP source, not native
+ * 30 m / 90 m products — say so, or users assume a different dataset.
+ */
+export const DEM_RES_HELP =
+  '10 m is the default and the native USGS 3DEP resolution. The 30 m and '
+  + '90 m options are resampled from that 10 m source (not separate downloads) '
+  + 'and run faster. The web app does not go below 10 m — for finer grids use '
+  + 'the desktop FIMsim.';
+
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
     {
@@ -94,8 +105,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 30, label: '30 m (faster, coarser)' },
         { value: 90, label: '90 m (fastest, coarsest)' },
       ],
-      help: '10 m is the default (USGS 3DEP). Coarser values run faster; the web '
-        + 'app does not go below 10 m — for finer grids use the desktop FIMsim.',
+      help: DEM_RES_HELP,
     },
   ],
   manning: [
@@ -235,8 +245,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 30, label: '30 m (faster, coarser)' },
         { value: 90, label: '90 m (fastest, coarsest)' },
       ],
-      help: '10 m is the default (USGS 3DEP). Coarser values run faster; the web '
-        + 'app does not go below 10 m — for finer grids use the desktop FIMsim.',
+      help: DEM_RES_HELP,
     },
   ],
   tfric: [

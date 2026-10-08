@@ -74,3 +74,25 @@ describe('STEP_FIELDS consistency', () => {
     expect(bad).toEqual([]);
   });
 });
+
+describe('DEM resolution tooltip (FIMSIM-FE51)', () => {
+  const help = (step: string) =>
+    STEP_FIELDS[step].find((f) => f.key === 'dem_res_m')?.help ?? '';
+
+  it('says the coarser options are resampled from the 10 m 3DEP source', () => {
+    expect(help('dem')).toMatch(/resampled/i);
+    expect(help('dem')).toMatch(/10 m/);
+    expect(help('dem')).toMatch(/3DEP/);
+  });
+
+  it('keeps the existing guidance: default, faster, desktop for finer', () => {
+    expect(help('dem')).toMatch(/default/i);
+    expect(help('dem')).toMatch(/faster/i);
+    expect(help('dem')).toMatch(/desktop/i);
+  });
+
+  it('uses identical copy on the LISFLOOD and TRITON Terrain steps', () => {
+    expect(help('tdem')).toBe(help('dem'));
+    expect(help('dem').length).toBeGreaterThan(0);
+  });
+});
