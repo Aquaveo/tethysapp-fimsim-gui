@@ -223,3 +223,25 @@ describe('LISFLOOD bed slope at outflow is clamped to real channel slopes', asyn
     expect(rangeProblems({ downstream_slope: 0.0001 }, bci)).toEqual([]);
   });
 });
+
+describe('wizardPath / modelFromSlug (FIMSIM-FE48: the model lives on the project)', async () => {
+  const { wizardPath, modelFromSlug, DEFAULT_MODEL } = await import('../steps');
+
+  it('builds an unslugged link for the default model', () => {
+    expect(wizardPath({ id: 29, model: 'lisflood-fp' })).toBe('/new/29');
+  });
+
+  it('carries the TRITON slug so reopening a TRITON project never flips to LISFLOOD', () => {
+    expect(wizardPath({ id: 29, model: 'triton' })).toBe('/new/29/triton');
+  });
+
+  it('falls back to the default model when a project has no model yet', () => {
+    expect(wizardPath({ id: 7 })).toBe('/new/7');
+  });
+
+  it('reads a URL slug back to a model, defaulting unknown or missing slugs', () => {
+    expect(modelFromSlug('triton')).toBe('triton');
+    expect(modelFromSlug(undefined)).toBe(DEFAULT_MODEL);
+    expect(modelFromSlug('hec-ras')).toBe(DEFAULT_MODEL);
+  });
+});

@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { listProjects, type ServerProject } from './api';
+import { MODELS, modelFromSlug, wizardPath } from './steps';
 import './SimulationsList.css';
 
 export default function SimulationsList() {
@@ -42,11 +43,12 @@ export default function SimulationsList() {
               <button
                 type="button"
                 className={'sl-item' + (p.id === activeId ? ' is-active' : '')}
-                onClick={() => navigate(`/new/${p.id}`)}
+                onClick={() => navigate(wizardPath(p))}
               >
                 <span className="sl-item-name">{p.name}</span>
                 <span className="sl-item-meta">
-                  {p.aoi_count} {p.aoi_count === 1 ? 'area' : 'areas'}
+                  <span className="sl-model-tag">{MODELS[modelFromSlug(p.model)].label}</span>
+                  {' · '}{p.aoi_count} {p.aoi_count === 1 ? 'area' : 'areas'}
                 </span>
               </button>
             </li>

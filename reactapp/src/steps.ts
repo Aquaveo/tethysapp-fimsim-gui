@@ -153,6 +153,21 @@ export const MODELS: Record<ModelId, { label: string; steps: StepDef[]; runsOnPo
 
 export const DEFAULT_MODEL: ModelId = 'lisflood-fp';
 
+/** A URL slug (or nothing) → a model id; unknown slugs fall back to the default. */
+export function modelFromSlug(slug: string | null | undefined): ModelId {
+  return slug && slug in MODELS ? (slug as ModelId) : DEFAULT_MODEL;
+}
+
+/**
+ * The wizard link for a project (FIMSIM-FE48). The model is a property of
+ * the project, so EVERY link into the wizard is built here — an unslugged
+ * /new/<id> silently meant LISFLOOD, which is how TRITON projects "flipped".
+ */
+export function wizardPath(project: { id: number; model?: string | null }): string {
+  const model = modelFromSlug(project.model);
+  return model === DEFAULT_MODEL ? `/new/${project.id}` : `/new/${project.id}/${model}`;
+}
+
 /**
  * A step that is safe to render for the given model's step list.
  * Switching models can leave `step` pointing at a step the new model lacks

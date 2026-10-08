@@ -13,7 +13,7 @@ import AoiStep from './AoiStep';
 import ProjectStep from './ProjectStep';
 import ResultsStep from './ResultsStep';
 import StepPanel from './StepPanel';
-import { DEFAULT_MODEL, MODELS, resolveActiveStep, type ModelId, type StepId } from './steps';
+import { MODELS, modelFromSlug, resolveActiveStep, wizardPath, type ModelId, type StepId } from './steps';
 import './NewSimulation.css';
 
 const NON_JOB_STEPS = new Set(['project', 'aoi', 'results']);
@@ -22,10 +22,12 @@ export default function NewSimulation() {
   const navigate = useNavigate();
   const params = useParams<{ projectId?: string; model?: string }>();
   const projectId = params.projectId ? Number(params.projectId) : null;
-  // model comes from the URL slug (/new/<id>/triton) so links say which
-  // model they drive; unknown slugs fall back to the default
-  const model: ModelId = params.model && params.model in MODELS
-    ? (params.model as ModelId) : DEFAULT_MODEL;
+  const [project, setProject] = useState<ServerProject | null>(null);
+  // FE48: the model is a property of the PROJECT. The URL slug
+  // (/new/<id>/triton) only bridges the gap until the project has loaded —
+  // then the project wins and the URL is corrected to match (see below).
+  const model: ModelId = project && project.id === projectId
+    ? modelFromSlug(project.model) : modelFromSlug(params.model);
   const STEPS = MODELS[model].steps;
   const JOB_STEPS = new Set(
     STEPS.map((s) => s.id as string).filter((id) => !NON_JOB_STEPS.has(id)));
@@ -34,7 +36,6 @@ export default function NewSimulation() {
     .map((s) => ({ id: s.id as string, label: s.label }));
 
   const [step, setStep] = useState<StepId>(projectId ? 'aoi' : 'project');
-  const [project, setProject] = useState<ServerProject | null>(null);
   const [aois, setAoisState] = useState<ServerAoi[]>([]);
   const [schemas, setSchemas] = useState<Record<string, StepSchema> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -74,7 +75,16 @@ export default function NewSimulation() {
         })
         .catch((e) => setLoadError(String(e.message)));
     }
-  }, [projectId, model]);
+  }, [projectId]);
+
+  // Stale or hand-typed links (/new/<id> for a TRITON project) land on the
+  // project's real model; rewrite the URL so bookmarks/back-button agree.
+  useEffect(() => {
+    if (!project || project.id !== projectId) return;
+    const wanted = wizardPath(project);
+    if (window.location.pathname.replace(/\/$/, '').endsWith(wanted)) return;
+    navigate(wanted, { replace: true });
+  }, [project, projectId, navigate]);
 
   // A model switch can leave `step` pointing at a step the new model lacks
   // (LISFLOOD "run" → TRITON); render a shared step until the reset effect
@@ -95,22 +105,6 @@ export default function NewSimulation() {
   return (
     <div className="ns-wrap">
       <div className="ns-rail">
-        {/* Model switch: slugged URLs so users always know which model they drive */}
-        <div className="ns-models" role="group" aria-label="Model">
-          {(Object.keys(MODELS) as ModelId[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={'ns-model' + (m === model ? ' is-active' : '')}
-              onClick={() => navigate(projectId
-                ? `/new/${projectId}${m === DEFAULT_MODEL ? '' : `/${m}`}`
-                : '/new')}
-            >
-              {MODELS[m].label}
-              {!MODELS[m].runsOnPortal && <span className="ns-model-tag">deck only</span>}
-            </button>
-          ))}
-        </div>
       {/* The river stepper: dots are reaches; the line fills as flow moves downstream. */}
       <ol className="ns-stepper" aria-label="Simulation steps">
         {STEPS.map((s, i) => {

@@ -43,6 +43,8 @@ export interface ServerProject {
   name: string;
   created: string;
   aoi_count: number;
+  /** FE48: which wizard this project belongs to ('lisflood-fp' | 'triton') */
+  model?: string;
   aois?: ServerAoi[];
 }
 
@@ -114,8 +116,8 @@ const json = (data: unknown): RequestInit => ({
 export const listProjects = () =>
   request<{ projects: ServerProject[] }>('/projects/').then((r) => r.projects);
 
-export const createProject = (name: string) =>
-  request<ServerProject>('/projects/', json({ name }));
+export const createProject = (name: string, model: string) =>
+  request<ServerProject>('/projects/', json({ name, model }));
 
 export const getProject = (id: number) =>
   request<ServerProject>(`/projects/${id}/`);
