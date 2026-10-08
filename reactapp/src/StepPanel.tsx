@@ -14,7 +14,7 @@ import HydrographChart from './HydrographChart';
 import RasterPreview from './RasterPreview';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
-import TextPreview from './TextPreview';
+import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
 import {
   STEP_FIELDS, coerceConfigNumbers, expandEventDates, fieldVisible, type FieldSpec,
 } from './stepFields';
@@ -354,8 +354,7 @@ export default function StepPanel({
                   )}
                   {run.status === 'succeeded' && (
                     <TextPreview run={run} stepKey={stepKey}
-                                 defaultOpen={(stepKey === 'par' || stepKey === 'tcfg')
-                                   && aois.length === 1} />
+                                 defaultOpen={textPreviewDefaultOpen(stepKey, aois.length)} />
                   )}
                   {run.status === 'succeeded' && <Outputs runId={run.id} />}
                   {run.status === 'failed' && (

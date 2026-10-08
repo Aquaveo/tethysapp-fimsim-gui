@@ -101,3 +101,24 @@ describe('keepModelSteps', () => {
       .toEqual([['tdem', { id: 3 }]]);
   });
 });
+
+describe('textPreviewDefaultOpen (bug-round #ix: BC files shown by default)', async () => {
+  const { textPreviewDefaultOpen } = await import('../TextPreview');
+
+  it('opens the Boundaries text files by default, even on multi-AOI projects', () => {
+    expect(textPreviewDefaultOpen('bci', 1)).toBe(true);
+    expect(textPreviewDefaultOpen('tbc', 1)).toBe(true);
+    expect(textPreviewDefaultOpen('bci', 3)).toBe(true);
+    expect(textPreviewDefaultOpen('tbc', 3)).toBe(true);
+  });
+
+  it('keeps the Settings files open only on single-AOI projects (unchanged)', () => {
+    expect(textPreviewDefaultOpen('par', 1)).toBe(true);
+    expect(textPreviewDefaultOpen('tcfg', 1)).toBe(true);
+    expect(textPreviewDefaultOpen('par', 2)).toBe(false);
+  });
+
+  it('leaves steps without text previews collapsed', () => {
+    expect(textPreviewDefaultOpen('dem', 1)).toBe(false);
+  });
+});
