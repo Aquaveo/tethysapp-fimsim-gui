@@ -16,7 +16,8 @@ import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
 import {
-  STEP_FIELDS, coerceConfigNumbers, expandEventDates, fieldVisible, type FieldSpec,
+  STEP_FIELDS, applyLinkedDefaults, coerceConfigNumbers, expandEventDates, fieldVisible,
+  rangeProblems, type FieldSpec,
 } from './stepFields';
 import { formatElapsed, phaseLabel } from './runProgress';
 import './StepPanel.css';
@@ -161,6 +162,8 @@ export default function StepPanel({
       ]);
       const coerced = expandEventDates(
         coerceConfigNumbers({ ...defaults, ...config }, fields), fields);
+      const outOfRange = rangeProblems(coerced, fields);
+      if (outOfRange.length) throw new Error(outOfRange.join(' '));
       const merged: Record<string, unknown> = Object.fromEntries(
         Object.entries(coerced)
           .filter(([k, v]) => allowed.has(k) && v !== null && v !== ''));
@@ -230,7 +233,8 @@ export default function StepPanel({
                 value={String(value(f.key))}
                 onChange={(e) => {
                   const opt = f.options?.find((o) => String(o.value) === e.target.value);
-                  setConfig({ ...config, [f.key]: opt?.value ?? e.target.value });
+                  const v = opt?.value ?? e.target.value;
+                  setConfig(applyLinkedDefaults({ ...config, [f.key]: v }, fields, f.key, v));
                 }}
               >
                 {f.options?.map((o) => (
@@ -253,7 +257,9 @@ export default function StepPanel({
             ) : (
               <input
                 type={f.widget === 'number' ? 'number' : 'text'}
-                step="any"
+                step={f.step ?? 'any'}
+                min={f.min}
+                max={f.max}
                 value={String(value(f.key))}
                 onChange={(e) => setConfig({
                   // keep the raw string while typing — coercing mid-keystroke

@@ -122,3 +122,54 @@ describe('textPreviewDefaultOpen (bug-round #ix: BC files shown by default)', as
     expect(textPreviewDefaultOpen('dem', 1)).toBe(false);
   });
 });
+
+describe('TRITON boundary value field (bug-round #v/#vi)', async () => {
+  const { STEP_FIELDS, applyLinkedDefaults } = await import('../stepFields');
+  const tbc = STEP_FIELDS.tbc;
+  const value = tbc.find((f) => f.key === 'value')!;
+
+  it('cannot go negative or below 0.001, steps at the 0.001 level, has a ceiling', () => {
+    expect(value.min).toBe(0.001);
+    expect(value.step).toBe(0.001);
+    expect(typeof value.max).toBe('number');
+    expect(value.max!).toBeGreaterThan(0.001);
+  });
+
+  it('swaps in the per-type default when the boundary type changes', () => {
+    // slope → Froude: 0.001 is a nonsense Froude number, so the default follows
+    const froude = applyLinkedDefaults({ bc_type: 2, value: 0.001 }, tbc, 'bc_type', 3);
+    expect(froude.value).toBe(0.5);
+    const slope = applyLinkedDefaults({ bc_type: 3, value: 0.5 }, tbc, 'bc_type', 2);
+    expect(slope.value).toBe(0.001);
+  });
+
+  it('leaves unrelated fields alone when some other field changes', () => {
+    const out = applyLinkedDefaults({ bc_type: 2, value: 0.004 }, tbc, 'something', 'x');
+    expect(out).toEqual({ bc_type: 2, value: 0.004 });
+  });
+});
+
+describe('rangeProblems', async () => {
+  const { rangeProblems } = await import('../stepFields');
+  const fields = [
+    { key: 'v', label: 'Boundary value', widget: 'number' as const, min: 0.001, max: 2 },
+    { key: 'free', label: 'Free', widget: 'number' as const },
+  ];
+
+  it('reports a number below its minimum, naming the field and the bounds', () => {
+    const problems = rangeProblems({ v: -0.5 }, fields);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/Boundary value/);
+    expect(problems[0]).toMatch(/0\.001/);
+  });
+
+  it('reports a number above its maximum', () => {
+    expect(rangeProblems({ v: 5 }, fields)).toHaveLength(1);
+  });
+
+  it('accepts in-range values, blanks, and fields without bounds', () => {
+    expect(rangeProblems({ v: 0.001, free: -99 }, fields)).toEqual([]);
+    expect(rangeProblems({ v: null }, fields)).toEqual([]);
+    expect(rangeProblems({}, fields)).toEqual([]);
+  });
+});

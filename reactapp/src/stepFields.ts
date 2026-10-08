@@ -14,6 +14,60 @@ export interface FieldSpec {
   required?: boolean;
   /** for a 'date' field: submit as end-of-day (23:59) rather than 00:00 */
   endOfDay?: boolean;
+  /** number widget: HTML min/max/step + a submit-time range check */
+  min?: number;
+  max?: number;
+  step?: number;
+  /**
+   * When field `key` changes to a value listed in `values`, this field is
+   * reset to the matching entry — for inputs whose meaning depends on a
+   * sibling select (TRITON's boundary value: slope vs Froude number).
+   */
+  linkedDefault?: { key: string; values: Record<string, unknown> };
+}
+
+/**
+ * Apply linked defaults after `changedKey` was set to `newValue`: every field
+ * whose linkedDefault points at `changedKey` takes the default for the new
+ * value (if one is listed). Returns a new config; unrelated keys untouched.
+ */
+export function applyLinkedDefaults(
+  config: Record<string, unknown>, fields: Pick<FieldSpec, 'key' | 'linkedDefault'>[],
+  changedKey: string, newValue: unknown,
+): Record<string, unknown> {
+  const out = { ...config };
+  for (const f of fields) {
+    const ld = f.linkedDefault;
+    if (!ld || ld.key !== changedKey) continue;
+    const k = String(newValue);
+    if (k in ld.values) out[f.key] = ld.values[k];
+  }
+  return out;
+}
+
+/**
+ * Submit-time range check for number fields carrying min/max. Blank values
+ * are not a range problem (required-ness is checked separately). Returns one
+ * human message per violation.
+ */
+export function rangeProblems(
+  config: Record<string, unknown>,
+  fields: Pick<FieldSpec, 'key' | 'label' | 'widget' | 'min' | 'max'>[],
+): string[] {
+  const problems: string[] = [];
+  for (const f of fields) {
+    if (f.widget !== 'number' || (f.min === undefined && f.max === undefined)) continue;
+    const raw = config[f.key];
+    if (raw === null || raw === undefined || raw === '') continue;
+    const n = typeof raw === 'number' ? raw : Number(String(raw).trim());
+    if (!Number.isFinite(n)) continue; // left for the server's own validation
+    if ((f.min !== undefined && n < f.min) || (f.max !== undefined && n > f.max)) {
+      const lo = f.min !== undefined ? String(f.min) : '−∞';
+      const hi = f.max !== undefined ? String(f.max) : '∞';
+      problems.push(`"${f.label}" must be between ${lo} and ${hi}.`);
+    }
+  }
+  return problems;
 }
 
 /**
@@ -298,7 +352,13 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
     {
       key: 'value', label: 'Boundary value', widget: 'number',
-      help: 'Slope for the normal-slope type (default 0.001); Froude number for the Froude type; ignored for free flow.',
+      // bug-round #v/#vi: the default is visible in the field, follows the
+      // type, and the spinner can't go negative / below 0.001
+      min: 0.001, max: 2, step: 0.001,
+      linkedDefault: { key: 'bc_type', values: { '2': 0.001, '3': 0.5 } },
+      help: 'Bed slope for the normal-slope type (default 0.001, a gentle 1-in-1000 '
+        + 'grade) or the Froude number for the Froude type (default 0.5). Must be '
+        + 'between 0.001 and 2; ignored for free flow.',
     },
   ],
   thyg: [

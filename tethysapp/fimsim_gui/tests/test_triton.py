@@ -72,3 +72,9 @@ def test_triton_steps_point_at_the_triton_orchestrators():
         jt = REGISTRY[key]
         assert jt.orchestrator_module == "fimcore.triton_orchestrate", key
         assert jt.orchestrator.startswith("run_triton_"), key
+
+
+def test_tbc_default_config_carries_the_slope_value_so_the_form_shows_it():
+    # bug-round #v: the Boundary value must appear IN the field (0.001), not
+    # be silently assumed server-side
+    assert REGISTRY["tbc"].defaults()["value"] == 0.001

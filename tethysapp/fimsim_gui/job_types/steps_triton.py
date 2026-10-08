@@ -159,8 +159,11 @@ class TritonBCJobType(TritonDeckMixin, UniformStepJobType):
         return outputs
 
     def defaults(self) -> dict:
-        # desktop BC panel defaults: normal slope 0.001
-        return {"bc_type": 2}
+        # desktop BC panel defaults: normal slope 0.001. The value ships in the
+        # defaults so the form SHOWS it (bug-round #v); the frontend swaps in
+        # the Froude default (0.5) when the type changes, transform_config
+        # below is the server-side safety net for a blank value.
+        return {"bc_type": 2, "value": 0.001}
 
     def check_values(self, config: dict) -> list:
         problems = []
