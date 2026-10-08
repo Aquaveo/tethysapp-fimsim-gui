@@ -212,10 +212,24 @@ def test_unlisted_lulc_class_default_is_the_confirmed_value():
     assert DEFAULT_MANNING_MAP["default"] == 0.045
 
 
-def test_run_timeout_and_snapshots():
-    assert any("solver_timeout_s" in p
-               for p in _problems("run", {"solver_timeout_s": 999999}))
+def test_run_budget_is_server_side_and_long_enough_for_real_runs():
+    # FIMSIM-FE50/BE20: the user-facing Time limit is gone. A 200–300 km² AOI
+    # takes ~3–4 h on CPU (Parvaneh), so the server budget must cover that,
+    # and the job-level deadline must sit ABOVE it so the solver's own
+    # "exceeded its budget" message is the one users see.
+    from tethysapp.fimsim_gui import jobs
+    jt = REGISTRY["run"]
+    assert "solver_timeout_s" in jt.server_only_keys
+    assert jt.defaults()["solver_timeout_s"] >= 6 * 3600
+    assert jobs.DEFAULT_TIMEOUT_S > jt.defaults()["solver_timeout_s"]
     assert any("keep_snapshots" in p
                for p in _problems("run", {"keep_snapshots": "maybe"}))
-    assert _problems("run", {"solver_timeout_s": 1800,
-                             "keep_snapshots": "true"}) == []
+    assert _problems("run", {"keep_snapshots": "true"}) == []
+
+
+def test_run_budget_env_override(monkeypatch):
+    from tethysapp.fimsim_gui.job_types import run_sim
+    monkeypatch.setenv("FIMSIM_RUN_TIMEOUT_S", "4000")
+    assert run_sim.run_timeout_s() == 4000
+    monkeypatch.setenv("FIMSIM_RUN_TIMEOUT_S", "garbage")
+    assert run_sim.run_timeout_s() == run_sim.RUN_TIMEOUT_DEFAULT_S

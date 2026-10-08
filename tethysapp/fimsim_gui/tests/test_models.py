@@ -42,7 +42,9 @@ def test_run_config_projection_hides_solver_path():
     )
     for projection in (run.to_summary_dict(), run.to_dict()):
         assert "solver_path" not in projection["config"]
-        assert projection["config"]["solver_timeout_s"] == 3600  # non-secret kept
+        # FE50/BE20: the budget is server-side now, so it is hidden too
+        assert "solver_timeout_s" not in projection["config"]
+        assert projection["config"]["keep_snapshots"] is False  # non-secret kept
 
 
 # ── _PER_AOI_KEYS coverage: schema must account for every desktop ctx key ────

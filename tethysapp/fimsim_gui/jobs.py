@@ -25,7 +25,20 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_TIMEOUT_S = 2 * 3600  # BE10 formalizes per-step budgets
+# Job-level deadline. It used to be 2 h, which silently killed every 3–4 h
+# LISFLOOD run (bug-round 10-01 #1) regardless of the solver budget. Keep it
+# ABOVE run_sim's budget so the solver's own message is the one that fires.
+# Override with FIMSIM_JOB_TIMEOUT_S.
+def _job_timeout_s() -> int:
+    import os
+    try:
+        v = int(os.environ.get("FIMSIM_JOB_TIMEOUT_S", 7 * 3600))
+        return v if v >= 60 else 7 * 3600
+    except (TypeError, ValueError):
+        return 7 * 3600
+
+
+DEFAULT_TIMEOUT_S = _job_timeout_s()
 PROGRESS_EVENT_CAP = 200      # keep the JSON column bounded
 
 

@@ -429,8 +429,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       help: '0.05–1.0; lower is more stable, slower.' },
   ],
   run: [
-    { key: 'solver_timeout_s', label: 'Time limit (s)', widget: 'number',
-      help: 'The run is stopped if it exceeds this.' },
+    // No user time limit (FIMSIM-FE50): the budget is a server setting; the
+    // step shows a typical-runtime hint instead.
     {
       key: 'keep_snapshots', label: 'Depth time series', widget: 'select',
       options: [

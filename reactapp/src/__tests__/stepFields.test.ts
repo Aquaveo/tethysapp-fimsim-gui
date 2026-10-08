@@ -96,3 +96,11 @@ describe('DEM resolution tooltip (FIMSIM-FE51)', () => {
     expect(help('dem').length).toBeGreaterThan(0);
   });
 });
+
+describe('Run step has no user time limit (FIMSIM-FE50)', () => {
+  it('drops solver_timeout_s but keeps the depth time series choice', () => {
+    const keys = STEP_FIELDS.run.map((f) => f.key);
+    expect(keys).not.toContain('solver_timeout_s');
+    expect(keys).toContain('keep_snapshots');
+  });
+});

@@ -335,6 +335,14 @@ export default function StepPanel({
                   )}
                 </div>
               )}
+              {stepKey === 'run' && (
+                <p className="sp-field-help">
+                  Typical runtime: a 200–300 km² area at 10 m takes about 3–4
+                  hours on the portal&apos;s CPUs. You can leave this page and
+                  come back; the run continues. The portal stops a run that
+                  exceeds its budget (6 hours by default).
+                </p>
+              )}
               {(stepKey === 'bci' || stepKey === 'tbc') && (
                 <p className="sp-field-help">
                   Check the map on the Area of Interest step: the detected main

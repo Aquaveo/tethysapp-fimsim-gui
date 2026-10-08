@@ -20,6 +20,20 @@ _PAR_FILE_KEYS = ("DEMfile", "manningfile", "bcifile", "bdyfile", "SGCwidth",
                   "SGCbank", "SGCbed", "weirfile", "startfile", "loadcheck")
 
 
+#: solver budget per run (seconds). Override with FIMSIM_RUN_TIMEOUT_S; the
+#: job-level deadline (jobs.DEFAULT_TIMEOUT_S) must stay above it.
+RUN_TIMEOUT_DEFAULT_S = 6 * 3600
+
+
+def run_timeout_s() -> int:
+    import os
+    try:
+        v = int(os.environ.get("FIMSIM_RUN_TIMEOUT_S", RUN_TIMEOUT_DEFAULT_S))
+        return v if v >= 10 else RUN_TIMEOUT_DEFAULT_S
+    except (TypeError, ValueError):
+        return RUN_TIMEOUT_DEFAULT_S
+
+
 def _sanitize_deck(lf_dir: Path, log_fn) -> Path:
     """Rewrite model.par so every referenced filename is whitespace-free."""
     pars = sorted(lf_dir.glob("*.par"))
@@ -58,16 +72,18 @@ class RunSimJobType(StepJobType):
 
     # solver_path is injected from the lisflood_binary_path app setting at
     # submit time; accepting it from a client would execute an arbitrary
-    # binary on the worker
-    server_only_keys = ("solver_path",)
+    # binary on the worker. solver_timeout_s is server-side too (FE50/BE20):
+    # the user-facing "Time limit" is gone — a 200–300 km² AOI legitimately
+    # takes 3–4 h on CPU, so the budget is an admin setting, not a form field.
+    server_only_keys = ("solver_path", "solver_timeout_s")
 
     def defaults(self) -> dict:
-        return {"solver_path": None, "solver_timeout_s": 3600,
+        return {"solver_path": None, "solver_timeout_s": run_timeout_s(),
                 "keep_snapshots": False}
 
     def check_values(self, config: dict) -> list:
         problems = []
-        _check_number(config, "solver_timeout_s", 10, 6 * 3600, problems, " s")
+        _check_number(config, "solver_timeout_s", 10, 24 * 3600, problems, " s")
         if "keep_snapshots" in config and \
                 str(config["keep_snapshots"]).lower() not in ("true", "false"):
             problems.append("'keep_snapshots' must be true or false "
