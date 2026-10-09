@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { getStepRunOutputs, type ServerStepRun } from './api';
 import { parseBdy, parseDischargeCsv, parseHyg, type Series } from './bdy';
 import { fileProxyUrl } from './outputsMeta';
+import { dateAxisMinInterval, formatDateTick, formatDateTime } from './hydrographAxis';
 
 const ReactECharts = lazy(() => import('echarts-for-react'));
 
@@ -76,7 +77,8 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
 
   const s0 = series[0];
   const peak = s0.points.reduce((a, b) => (b[1] > a[1] ? b : a));
-  const durationH = (s0.points[s0.points.length - 1][0] - s0.points[0][0]) / 3.6e6;
+  const spanMs = s0.points[s0.points.length - 1][0] - s0.points[0][0];
+  const durationH = spanMs / 3.6e6;
 
   const option = {
     animation: false,
@@ -86,14 +88,30 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
       trigger: 'axis',
       valueFormatter: (v: number) => `${Number(v).toFixed(2)} ${unit}`,
     },
-    xAxis: {
-      type: startMs !== null ? 'time' : 'value',
-      name: startMs !== null ? 'Date' : 'hours',
+    xAxis: startMs === null ? {
+      type: 'value',
+      name: 'hours',
       nameLocation: 'middle',
       nameGap: 30,
-      axisLabel: startMs === null
-        ? { formatter: (v: number) => `${(v / 3.6e6).toFixed(0)} h` }
-        : undefined,
+      axisLabel: { formatter: (v: number) => `${(v / 3.6e6).toFixed(0)} h` },
+    } : {
+      // FE53: calendar dates on the ticks ("Oct 05"), thinned by echarts on
+      // long windows (hideOverlap) but the first/last always labelled; the
+      // tooltip header keeps the full date-time.
+      type: 'time',
+      name: 'Date (UTC)',
+      nameLocation: 'middle',
+      nameGap: 30,
+      minInterval: dateAxisMinInterval(spanMs),
+      axisLabel: {
+        formatter: (v: number) => formatDateTick(v, spanMs),
+        hideOverlap: true,
+        showMinLabel: true,
+        showMaxLabel: true,
+      },
+      axisPointer: {
+        label: { formatter: (p: { value: number }) => formatDateTime(Number(p.value)) },
+      },
     },
     yAxis: {
       type: 'value',
@@ -128,7 +146,7 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
       <span className="sp-muted">
         {sourceNote && <>{sourceNote} · </>}
         {s0.boundary} · peak {peak[1].toFixed(1)} {unit} · {durationH.toFixed(0)} h event
-        {startMs !== null && ` from ${new Date(s0.points[0][0]).toLocaleString()}`}
+        {startMs !== null && ` from ${formatDateTime(s0.points[0][0])}`}
         {unit === 'm³/s'
           ? ' — the solver receives this series scaled per metre of cell width.'
           : ' — LISFLOOD per-metre-width values (raw discharge ÷ DEM cell size).'}
