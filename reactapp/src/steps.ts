@@ -200,3 +200,20 @@ export function needsRunConfirm(
   if (fromIdx < 0 || toIdx <= fromIdx) return false;
   return !aois.some((a) => a.steps?.run?.status === 'succeeded');
 }
+
+/**
+ * FIMSIM-FE55 — a rail step is ✓ only when it REALLY completed, never by
+ * position, so a skipped step (e.g. Run) keeps its number. Project is done
+ * once a project exists, AOI once an area exists, a job step once its run
+ * succeeded for every AOI; Results is the end and is never "done".
+ */
+export function stepDone(
+  id: StepId,
+  aois: { steps?: Record<string, { status: string }> }[],
+  hasProject: boolean,
+): boolean {
+  if (id === 'project') return hasProject;
+  if (id === 'aoi') return aois.length > 0;
+  if (id === 'results') return false;
+  return aois.length > 0 && aois.every((a) => a.steps?.[id]?.status === 'succeeded');
+}

@@ -15,7 +15,8 @@ import ProjectStep from './ProjectStep';
 import ResultsStep from './ResultsStep';
 import StepPanel from './StepPanel';
 import {
-  MODELS, modelFromSlug, needsRunConfirm, resolveActiveStep, wizardPath, type ModelId, type StepId,
+  MODELS, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
+  type ModelId, type StepId,
 } from './steps';
 import './NewSimulation.css';
 
@@ -122,7 +123,9 @@ export default function NewSimulation() {
       {/* The river stepper: dots are reaches; the line fills as flow moves downstream. */}
       <ol className="ns-stepper" aria-label="Simulation steps">
         {STEPS.map((s, i) => {
-          const state = i < idx ? 'done' : i === idx ? 'active' : 'todo';
+          // ✓ means the step really completed (FE55), not merely "behind you"
+          const state = i === idx ? 'active'
+            : stepDone(s.id, aois, !!projectId) ? 'done' : 'todo';
           return (
             <li key={s.id} className="ns-step-wrap">
               {i > 0 && <span className={'ns-line' + (i <= idx ? ' done' : '')} aria-hidden="true" />}
