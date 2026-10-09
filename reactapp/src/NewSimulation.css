@@ -172,3 +172,7 @@
   text-transform: uppercase; vertical-align: middle;
 }
 .ns-model-badge.is-deck { background: #7c5cff; }
+
+/* FE56 — Run button sits beside Next in the footer */
+.ns-nav-right { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; }
+.ns-nav-slot:empty { display: none; }

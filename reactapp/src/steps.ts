@@ -183,3 +183,20 @@ export function resolveActiveStep(
 
 /** Back-compat export — the LISFLOOD wizard (existing imports/tests). */
 export const STEPS: StepDef[] = LISFLOOD_STEPS;
+
+/**
+ * FIMSIM-FE56 — simulations take 3–4 h, so users click Next past the Run
+ * step. Leaving Run FORWARD (Next, or a rail jump to a later step) with no
+ * AOI whose run succeeded must be confirmed first. Going back never asks;
+ * models without a Run step (TRITON) never ask.
+ */
+export function needsRunConfirm(
+  steps: StepDef[], from: StepId, to: StepId,
+  aois: { steps?: Record<string, { status: string }> }[],
+): boolean {
+  if (from !== 'run') return false;
+  const fromIdx = steps.findIndex((s) => s.id === from);
+  const toIdx = steps.findIndex((s) => s.id === to);
+  if (fromIdx < 0 || toIdx <= fromIdx) return false;
+  return !aois.some((a) => a.steps?.run?.status === 'succeeded');
+}

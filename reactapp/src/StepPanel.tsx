@@ -5,6 +5,7 @@
 // downloads. Bespoke upgrades (editable Manning table, hydrograph chart)
 // layer on top later — this gets the whole workflow demoable.
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ApiError, cancelStepRun, downloadSelectedZip, getStepRun, getStepRunOutputs, submitStep,
   uploadDem, type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
@@ -109,6 +110,9 @@ interface Props {
   projectId: number;
   stepKey: string;
   aois: ServerAoi[];
+  /** FE56: the wizard footer's slot beside Next — the Run step's submit
+   *  button renders there (via a portal) instead of inside the form */
+  submitSlot?: HTMLElement | null;
   schema: StepSchema | null;
   /** the active model's job steps in order — drives the FE17 overview strip */
   stepOrder?: { id: string; label: string }[];
@@ -117,7 +121,7 @@ interface Props {
 }
 
 export default function StepPanel({
-  projectId, stepKey, aois, schema, stepOrder = [], onSubmitted,
+  projectId, stepKey, aois, schema, stepOrder = [], onSubmitted, submitSlot = null,
 }: Props) {
   const fields: FieldSpec[] = STEP_FIELDS[stepKey] ?? [];
   const defaults = useMemo(
@@ -245,9 +249,25 @@ export default function StepPanel({
     return r && ACTIVE.includes(r.status);
   });
 
+  // FE56: the Run step's button lives in the wizard footer beside Next. The
+  // `form` attribute keeps it a real submit button for THIS form even though
+  // the portal moves it out of the form's DOM subtree.
+  const formId = `sp-form-${stepKey}`;
+  const inFooter = stepKey === 'run' && !!submitSlot;
+  const submitButton = (
+    <button type="submit" form={formId} className="button-primary"
+            disabled={busy || anyActive || aois.length === 0}>
+      {busy ? 'Submitting…'
+        : anyActive ? 'Running…'
+        : stepKey === 'run' ? `▶ Run simulation for ${aois.length} area(s)`
+        : `Run this step for ${aois.length} area(s)`}
+    </button>
+  );
+
   return (
     <div className="sp-wrap">
       <form
+        id={formId}
         className="sp-form"
         onSubmit={(e) => { e.preventDefault(); void submit(); }}
       >
@@ -312,15 +332,9 @@ export default function StepPanel({
             />
           </div>
         )}
-        <div className="sp-submit-row">
-          <button type="submit" className="button-primary"
-                  disabled={busy || anyActive || aois.length === 0}>
-            {busy ? 'Submitting…'
-              : anyActive ? 'Running…'
-              : stepKey === 'run' ? `Run simulation for ${aois.length} area(s)`
-              : `Run this step for ${aois.length} area(s)`}
-          </button>
-        </div>
+        {inFooter
+          ? createPortal(submitButton, submitSlot)
+          : <div className="sp-submit-row">{submitButton}</div>}
       </form>
 
       {error && <div className="sp-error" role="alert">{error}</div>}
