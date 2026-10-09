@@ -61,10 +61,7 @@ export default function WelcomeModal({ onClose }: Props) {
             <li>
               <strong>Study areas are capped at {cap}.</strong> Larger areas
               cost too much compute for a shared portal — for large-scale case
-              studies, use the{' '}
-              <a href="https://github.com/pnikrou/FIMsim" target="_blank" rel="noreferrer">
-                desktop FIMsim
-              </a>.
+              studies, use the desktop FIMsim.
             </li>
             <li>
               <strong>Define an area</strong> by uploading a shapefile (zipped
@@ -73,10 +70,7 @@ export default function WelcomeModal({ onClose }: Props) {
             </li>
             <li>
               <strong>One study area at a time.</strong> The web app runs a
-              single area per project; for batch runs over many areas, use the{' '}
-              <a href="https://github.com/pnikrou/FIMsim" target="_blank" rel="noreferrer">
-                desktop FIMsim
-              </a>.
+              single area per project; for batch runs over many areas, use the desktop FIMsim.
             </li>
             <li>
               <strong>Elevation is the USGS 3DEP ~{baseline} DEM</strong> (or
