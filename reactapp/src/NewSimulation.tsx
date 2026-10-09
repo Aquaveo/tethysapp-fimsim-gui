@@ -154,6 +154,7 @@ export default function NewSimulation() {
             aois={aois}
             hasRunStep={JOB_STEPS.has('run')}
             modelStepKeys={[...JOB_STEPS]}
+            onGoToRun={JOB_STEPS.has('run') ? () => goTo('run') : undefined}
           />
         ) : JOB_STEPS.has(activeStep) && projectId ? (
           <StepPanel

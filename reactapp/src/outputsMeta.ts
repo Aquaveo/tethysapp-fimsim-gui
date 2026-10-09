@@ -125,6 +125,27 @@ export const fileProxyUrl = (runId: number, name: string, download = false) =>
 /** "Download all" zip of every stored output for one AOI. */
 export const aoiZipUrl = (aoiId: number) => `/apps/fimsim-gui/api/aois/${aoiId}/zip/`;
 
+/**
+ * FIMSIM-FE59 — Results step tabs. Files the `run` step produced are
+ * "Results"; everything else (terrain, roughness, boundaries, flow, settings —
+ * and the whole TRITON deck, which has no run step) is "Input Data".
+ */
+export function splitResultFiles<T extends { step: string }>(
+  files: T[],
+): { inputs: T[]; results: T[] } {
+  const inputs: T[] = [];
+  const results: T[] = [];
+  for (const f of files) (f.step === 'run' ? results : inputs).push(f);
+  return { inputs, results };
+}
+
+/** The zip endpoint's selection for files that may span several step runs. */
+export function zipSelection(
+  files: { runId: number; name: string }[],
+): { run_id: number; name: string }[] {
+  return files.map((f) => ({ run_id: f.runId, name: f.name }));
+}
+
 /** The zip endpoint's selection for EVERY output of one step run (FE49). */
 export function stepZipFiles(
   runId: number, outputs: { name: string }[],

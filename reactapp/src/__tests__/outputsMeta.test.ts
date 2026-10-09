@@ -1,7 +1,9 @@
 // reactapp/src/__tests__/outputsMeta.test.ts — filename→description rules and
 // the proxy/zip URL shapes (trailing slashes are load-bearing for Django).
 import { describe, expect, it } from 'vitest';
-import { aoiZipUrl, fileProxyUrl, outputMeta } from '../outputsMeta';
+import {
+  aoiZipUrl, fileProxyUrl, outputMeta, splitResultFiles, zipSelection,
+} from '../outputsMeta';
 
 describe('outputMeta', () => {
   it('classifies the flood map GeoTIFF', () => {
@@ -97,5 +99,44 @@ describe('per-step downloads (FIMSIM-FE49)', async () => {
   it('names the zip after the area and the step, filesystem-safe', () => {
     expect(zipFilename('Neuse River (NC)', 'dem')).toBe('Neuse_River_NC_dem.zip');
     expect(zipFilename('AOI_2-zipped', 'selected')).toBe('AOI_2-zipped_selected.zip');
+  });
+});
+
+// FIMSIM-FE59 — the Results step's two tabs: "Input Data" (every input
+// step's files) vs "Results" (what the run step produced).
+describe('splitResultFiles', () => {
+  const files = [
+    { step: 'dem', runId: 1, name: 'dem.ascii', bytes: 10 },
+    { step: 'run', runId: 5, name: 'max_depth.tif', bytes: 30 },
+    { step: 'bdy', runId: 3, name: 'neuse.bdy', bytes: 20 },
+    { step: 'run', runId: 5, name: 'res.mass', bytes: 5 },
+  ];
+
+  it('sends run-step files to results and the rest to inputs, keeping order', () => {
+    const { inputs, results } = splitResultFiles(files);
+    expect(inputs.map((f) => f.name)).toEqual(['dem.ascii', 'neuse.bdy']);
+    expect(results.map((f) => f.name)).toEqual(['max_depth.tif', 'res.mass']);
+  });
+
+  it('puts every TRITON deck file under inputs (no run step)', () => {
+    const deck = [
+      { step: 'tdem', runId: 7, name: 'dem.asc', bytes: 1 },
+      { step: 'tcfg', runId: 9, name: 'aoi.cfg', bytes: 1 },
+    ];
+    const { inputs, results } = splitResultFiles(deck);
+    expect(inputs).toHaveLength(2);
+    expect(results).toEqual([]);
+  });
+
+  it('handles an empty list', () => {
+    expect(splitResultFiles([])).toEqual({ inputs: [], results: [] });
+  });
+});
+
+describe('zipSelection', () => {
+  it('maps files from several step runs to the zip endpoint selection', () => {
+    expect(zipSelection([
+      { runId: 1, name: 'dem.ascii' }, { runId: 9, name: 'aoi.cfg' },
+    ])).toEqual([{ run_id: 1, name: 'dem.ascii' }, { run_id: 9, name: 'aoi.cfg' }]);
   });
 });
