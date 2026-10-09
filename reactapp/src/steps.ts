@@ -217,3 +217,11 @@ export function stepDone(
   if (id === 'results') return false;
   return aois.length > 0 && aois.every((a) => a.steps?.[id]?.status === 'succeeded');
 }
+
+/**
+ * FIMSIM-FE58 — the header badge names the project's model, but only once a
+ * project is open (/new/<id>…); the bare Project step (/new) has no model yet.
+ */
+export function headerModel(projectId: number | null, model: ModelId): ModelId | null {
+  return projectId ? model : null;
+}

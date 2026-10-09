@@ -1,7 +1,7 @@
 // reactapp/src/__tests__/steps.test.ts — FIMSIM-FE56: leaving the Run step
 // forward with no successful run asks for confirmation.
 import { describe, expect, it } from 'vitest';
-import { MODELS, needsRunConfirm, stepDone } from '../steps';
+import { MODELS, headerModel, needsRunConfirm, stepDone } from '../steps';
 import type { ServerAoi } from '../api';
 
 const STEPS = MODELS['lisflood-fp'].steps;
@@ -60,5 +60,18 @@ describe('stepDone', () => {
 
   it('never marks Results done (there is nothing past it)', () => {
     expect(stepDone('results', [aoi('succeeded')], true)).toBe(false);
+  });
+});
+
+// FIMSIM-FE58 — the header badge shows the project's model only once a
+// project is open (/new/<id>…), never on /new itself.
+describe('headerModel', () => {
+  it('is null without a project (the /new Project step)', () => {
+    expect(headerModel(null, 'lisflood-fp')).toBeNull();
+  });
+
+  it('is the active model once a project is open', () => {
+    expect(headerModel(29, 'triton')).toBe('triton');
+    expect(headerModel(3, 'lisflood-fp')).toBe('lisflood-fp');
   });
 });

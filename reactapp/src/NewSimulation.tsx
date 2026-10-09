@@ -11,11 +11,12 @@ import {
 } from './api';
 import AoiStep from './AoiStep';
 import ConfirmDialog from './ConfirmDialog';
+import { useActiveModel } from './activeModel';
 import ProjectStep from './ProjectStep';
 import ResultsStep from './ResultsStep';
 import StepPanel from './StepPanel';
 import {
-  MODELS, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
+  MODELS, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
   type ModelId, type StepId,
 } from './steps';
 import './NewSimulation.css';
@@ -51,6 +52,13 @@ export default function NewSimulation() {
   useEffect(() => {
     getStepSchemas().then(setSchemas).catch(() => setSchemas({}));
   }, []);
+
+  // FE58: tell the header which model this project is (cleared on leave)
+  const { setModel: publishModel } = useActiveModel();
+  useEffect(() => {
+    publishModel(headerModel(projectId, model));
+    return () => publishModel(null);
+  }, [projectId, model, publishModel]);
 
   // Steady project-status poll while on a job step: keeps every AOI's
   // step summaries (and therefore panels' run tracking) fresh.
