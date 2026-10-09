@@ -114,8 +114,8 @@ const TRITON_STEPS: StepDef[] = [
   },
   {
     id: 'tfric',
-    label: 'Friction',
-    title: 'Friction (Manning’s n)',
+    label: 'Roughness',
+    title: "Roughness (Manning's n)",
     blurb: "Fetch land cover and build TRITON's friction grid — a headerless Manning's n matrix aligned to the terrain.",
     produces: 'friction.asc',
   },
@@ -128,8 +128,8 @@ const TRITON_STEPS: StepDef[] = [
   },
   {
     id: 'thyg',
-    label: 'Hydrograph',
-    title: 'Hydrograph',
+    label: 'Flow Data',
+    title: 'Flow Data',
     blurb: 'Pull the inflow discharge for your event window — National Water Model retrospective or forecast, or a USGS gage.',
     produces: '.hyg',
   },
@@ -153,6 +153,21 @@ export const MODELS: Record<ModelId, { label: string; steps: StepDef[]; runsOnPo
 
 export const DEFAULT_MODEL: ModelId = 'lisflood-fp';
 
+/** A URL slug (or nothing) → a model id; unknown slugs fall back to the default. */
+export function modelFromSlug(slug: string | null | undefined): ModelId {
+  return slug && slug in MODELS ? (slug as ModelId) : DEFAULT_MODEL;
+}
+
+/**
+ * The wizard link for a project (FIMSIM-FE48). The model is a property of
+ * the project, so EVERY link into the wizard is built here — an unslugged
+ * /new/<id> silently meant LISFLOOD, which is how TRITON projects "flipped".
+ */
+export function wizardPath(project: { id: number; model?: string | null }): string {
+  const model = modelFromSlug(project.model);
+  return model === DEFAULT_MODEL ? `/new/${project.id}` : `/new/${project.id}/${model}`;
+}
+
 /**
  * A step that is safe to render for the given model's step list.
  * Switching models can leave `step` pointing at a step the new model lacks
@@ -168,3 +183,45 @@ export function resolveActiveStep(
 
 /** Back-compat export — the LISFLOOD wizard (existing imports/tests). */
 export const STEPS: StepDef[] = LISFLOOD_STEPS;
+
+/**
+ * FIMSIM-FE56 — simulations take 3–4 h, so users click Next past the Run
+ * step. Leaving Run FORWARD (Next, or a rail jump to a later step) with no
+ * AOI whose run succeeded must be confirmed first. Going back never asks;
+ * models without a Run step (TRITON) never ask.
+ */
+export function needsRunConfirm(
+  steps: StepDef[], from: StepId, to: StepId,
+  aois: { steps?: Record<string, { status: string }> }[],
+): boolean {
+  if (from !== 'run') return false;
+  const fromIdx = steps.findIndex((s) => s.id === from);
+  const toIdx = steps.findIndex((s) => s.id === to);
+  if (fromIdx < 0 || toIdx <= fromIdx) return false;
+  return !aois.some((a) => a.steps?.run?.status === 'succeeded');
+}
+
+/**
+ * FIMSIM-FE55 — a rail step is ✓ only when it REALLY completed, never by
+ * position, so a skipped step (e.g. Run) keeps its number. Project is done
+ * once a project exists, AOI once an area exists, a job step once its run
+ * succeeded for every AOI; Results is the end and is never "done".
+ */
+export function stepDone(
+  id: StepId,
+  aois: { steps?: Record<string, { status: string }> }[],
+  hasProject: boolean,
+): boolean {
+  if (id === 'project') return hasProject;
+  if (id === 'aoi') return aois.length > 0;
+  if (id === 'results') return false;
+  return aois.length > 0 && aois.every((a) => a.steps?.[id]?.status === 'succeeded');
+}
+
+/**
+ * FIMSIM-FE58 — the header badge names the project's model, but only once a
+ * project is open (/new/<id>…); the bare Project step (/new) has no model yet.
+ */
+export function headerModel(projectId: number | null, model: ModelId): ModelId | null {
+  return projectId ? model : null;
+}

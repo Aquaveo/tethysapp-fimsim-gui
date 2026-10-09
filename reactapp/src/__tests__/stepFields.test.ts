@@ -42,12 +42,17 @@ describe('STEP_FIELDS consistency', () => {
     expect(bad).toEqual([]);
   });
 
+  const conds = (showIf: (typeof entries)[number][1][number]['showIf']) =>
+    (showIf ? (Array.isArray(showIf) ? showIf : [showIf]) : []);
+
   it('every showIf references a key defined in the same step', () => {
     const bad: string[] = [];
     for (const [step, fields] of entries) {
       const keys = new Set(fields.map((f) => f.key));
       for (const f of fields) {
-        if (f.showIf && !keys.has(f.showIf.key)) bad.push(`${step}.${f.key} → ${f.showIf.key}`);
+        for (const c of conds(f.showIf)) {
+          if (!keys.has(c.key)) bad.push(`${step}.${f.key} → ${c.key}`);
+        }
       }
     }
     expect(bad).toEqual([]);
@@ -57,14 +62,45 @@ describe('STEP_FIELDS consistency', () => {
     const bad: string[] = [];
     for (const [step, fields] of entries) {
       for (const f of fields) {
-        if (!f.showIf) continue;
-        const controller = fields.find((g) => g.key === f.showIf!.key);
-        const values = controller?.options?.map((o) => o.value) ?? [];
-        if (!values.includes(f.showIf.value as string | number)) {
-          bad.push(`${step}.${f.key} → ${f.showIf.key}=${String(f.showIf.value)}`);
+        for (const c of conds(f.showIf)) {
+          const controller = fields.find((g) => g.key === c.key);
+          const values = controller?.options?.map((o) => o.value) ?? [];
+          if (!values.includes(c.value as string | number)) {
+            bad.push(`${step}.${f.key} → ${c.key}=${String(c.value)}`);
+          }
         }
       }
     }
     expect(bad).toEqual([]);
+  });
+});
+
+describe('DEM resolution tooltip (FIMSIM-FE51)', () => {
+  const help = (step: string) =>
+    STEP_FIELDS[step].find((f) => f.key === 'dem_res_m')?.help ?? '';
+
+  it('says the coarser options are resampled from the 10 m 3DEP source', () => {
+    expect(help('dem')).toMatch(/resampled/i);
+    expect(help('dem')).toMatch(/10 m/);
+    expect(help('dem')).toMatch(/3DEP/);
+  });
+
+  it('keeps the existing guidance: default, faster, desktop for finer', () => {
+    expect(help('dem')).toMatch(/default/i);
+    expect(help('dem')).toMatch(/faster/i);
+    expect(help('dem')).toMatch(/desktop/i);
+  });
+
+  it('uses identical copy on the LISFLOOD and TRITON Terrain steps', () => {
+    expect(help('tdem')).toBe(help('dem'));
+    expect(help('dem').length).toBeGreaterThan(0);
+  });
+});
+
+describe('Run step has no user time limit (FIMSIM-FE50)', () => {
+  it('drops solver_timeout_s but keeps the depth time series choice', () => {
+    const keys = STEP_FIELDS.run.map((f) => f.key);
+    expect(keys).not.toContain('solver_timeout_s');
+    expect(keys).toContain('keep_snapshots');
   });
 });

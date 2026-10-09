@@ -96,3 +96,35 @@
   font-family: inherit;
 }
 .as-card-x:hover { color: var(--color-error); background: var(--color-surface-alt); }
+
+/* FE31 — multi-feature upload picker */
+.as-picker {
+  border: 1.5px solid var(--color-primary); border-radius: var(--radius-md);
+  padding: 0.7rem 0.9rem; margin-bottom: 0.6rem; background: var(--color-surface);
+}
+.as-picker-head { font-size: 0.9rem; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 0.5rem; }
+.as-picker-all { margin-left: auto; display: inline-flex; align-items: center;
+  gap: 0.3rem; font-size: 0.82rem; }
+.as-picker-list { list-style: none; margin: 0.5rem 0; padding: 0;
+  display: flex; flex-direction: column; gap: 0.25rem; }
+.as-picker-list label { display: flex; align-items: baseline; gap: 0.5rem;
+  cursor: pointer; }
+.as-picker-name { font-weight: 600; }
+.as-picker-meta { color: var(--color-text-secondary); font-size: 0.8rem;
+  font-variant-numeric: tabular-nums; }
+.as-picker-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+/* FE45 — AOI details box (#xxi) */
+.as-details {
+  margin: 0.5rem 0 0; padding: 0.5rem 0.7rem; font-size: 0.82rem;
+  background: var(--color-surface-alt); border-radius: var(--radius-md);
+  display: grid; gap: 0.15rem 0.8rem;
+}
+.as-details > div { display: flex; gap: 0.5rem; }
+.as-details dt { margin: 0; font-weight: 600; color: var(--color-text-muted);
+  min-width: 7.5rem; }
+.as-details dd { margin: 0; }
+.as-details .as-gage { margin-left: 1rem; }
+.as-details .as-gage dt { min-width: 6rem; font-weight: 500;
+  font-variant-numeric: tabular-nums; color: var(--color-text); }

@@ -16,7 +16,9 @@ from pathlib import Path
 from tethysapp.fimsim_gui.job_types.registry import (
     UniformStepJobType, _check_choice, _check_number,
 )
-from tethysapp.fimsim_gui.job_types.steps import BDYStepJobType, DEMStepJobType
+from tethysapp.fimsim_gui.job_types.steps import (
+    BDYStepJobType, DEMStepJobType, _check_lulc_years, _check_manning_mapping,
+)
 
 
 class TritonDeckMixin:
@@ -62,7 +64,7 @@ class TritonDEMJobType(TritonDeckMixin, DEMStepJobType):
     clean_patterns = ("dem*.asc", "dem*.ascii", "dem*.prj", "DEM_*.tif")
 
     def defaults(self) -> dict:
-        return {"dem_res_m": 30}
+        return {"dem_res_m": 30, "dem_input": "download"}
 
     def check_values(self, config: dict) -> list:
         problems = []
@@ -76,7 +78,8 @@ class TritonDEMJobType(TritonDeckMixin, DEMStepJobType):
         run_triton_dem_all(
             ctx_path, ctx,
             dem_res_m=float(cfg["dem_res_m"]),
-            has_dem=False,
+            has_dem=bool(cfg.get("user_dem_path")),   # BE17: staged by prestage_inputs
+            user_dem_path=cfg.get("user_dem_path"),
             log_fn=log_fn,
         )
 
@@ -114,14 +117,22 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
         _check_choice(config, "fric_mode", ("fixed", "varying"), problems)
         _check_choice(config, "lulc_source", ("download", "download_nlcd"), problems)
         _check_number(config, "fpfric_val", 0.001, 1.0, problems)
-        _check_number(config, "lulc_year", 1985, 2035, problems)
+        _check_lulc_years(config, problems)
+        _check_manning_mapping(config, problems)
         return problems
 
     def transform_config(self, cfg: dict, ctx) -> dict:
+        # The editable table arrives as manning_mapping (same key as the
+        # LISFLOOD step, so the frontend table is shared); the TRITON builder
+        # calls it lulc_class_to_n and the orchestrator splats the config, so
+        # the key MUST be renamed, not duplicated (bug-round #iv).
+        cfg = dict(cfg)
+        mapping = cfg.pop("manning_mapping", None)
+        if mapping is not None:
+            cfg["lulc_class_to_n"] = mapping
         if ctx is not None:
             ctx["_preview_lulc_source"] = cfg.get("lulc_source", "download")
-            ctx["_preview_manning_mapping"] = cfg.get("manning_mapping") \
-                or cfg.get("lulc_class_to_n")
+            ctx["_preview_manning_mapping"] = cfg.get("lulc_class_to_n")
         return cfg
 
     def collect(self, ctx, workdir) -> str:
@@ -156,8 +167,11 @@ class TritonBCJobType(TritonDeckMixin, UniformStepJobType):
         return outputs
 
     def defaults(self) -> dict:
-        # desktop BC panel defaults: normal slope 0.001
-        return {"bc_type": 2}
+        # desktop BC panel defaults: normal slope 0.001. The value ships in the
+        # defaults so the form SHOWS it (bug-round #v); the frontend swaps in
+        # the Froude default (0.5) when the type changes, transform_config
+        # below is the server-side safety net for a blank value.
+        return {"bc_type": 2, "value": 0.001}
 
     def check_values(self, config: dict) -> list:
         problems = []

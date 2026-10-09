@@ -47,3 +47,6 @@
 .sl-item-name { color: var(--chrome-text); font-size: 0.85rem; font-weight: 600;
   overflow-wrap: anywhere; }
 .sl-item-meta { color: var(--chrome-text-dim); font-size: 0.72rem; }
+
+/* FE48 — which wizard the project opens in */
+.sl-model-tag { font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.66rem; }

@@ -72,3 +72,37 @@ def test_triton_steps_point_at_the_triton_orchestrators():
         jt = REGISTRY[key]
         assert jt.orchestrator_module == "fimcore.triton_orchestrate", key
         assert jt.orchestrator.startswith("run_triton_"), key
+
+
+def test_tbc_default_config_carries_the_slope_value_so_the_form_shows_it():
+    # bug-round #v: the Boundary value must appear IN the field (0.001), not
+    # be silently assumed server-side
+    assert REGISTRY["tbc"].defaults()["value"] == 0.001
+
+
+def test_tfric_hands_the_manning_table_to_the_triton_builder_under_its_own_name():
+    # bug-round #iv: the editable table (manning_mapping) must reach
+    # prepare_triton_manning, whose kwarg is lulc_class_to_n — the orchestrator
+    # splats the config, so a leftover manning_mapping key would crash it.
+    mapping = {"default": 0.045, "1": 0.03, "2": 0.1}
+    cfg = REGISTRY["tfric"].transform_config(
+        {"fric_mode": "varying", "manning_mapping": mapping}, ctx=None)
+    assert cfg["lulc_class_to_n"] == mapping
+    assert "manning_mapping" not in cfg
+
+
+def test_tfric_without_a_table_leaves_the_builder_to_its_default_map():
+    cfg = REGISTRY["tfric"].transform_config({"fric_mode": "varying"}, ctx=None)
+    assert "lulc_class_to_n" not in cfg
+    assert "manning_mapping" not in cfg
+
+
+def test_tfric_validates_the_manning_table_like_the_lisflood_step():
+    ok = {"manning_mapping": {"11": 0.03, "42": 0.11}}
+    assert REGISTRY["tfric"].validate_config(ok) == []
+    bad_type = {"manning_mapping": [0.03]}
+    assert any("manning_mapping" in p
+               for p in REGISTRY["tfric"].validate_config(bad_type))
+    bad_value = {"manning_mapping": {"11": 3.0}}
+    assert any("manning_mapping" in p
+               for p in REGISTRY["tfric"].validate_config(bad_value))

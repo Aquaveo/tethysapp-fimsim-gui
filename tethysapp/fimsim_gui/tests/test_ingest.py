@@ -169,3 +169,28 @@ def test_no_crs_but_degree_coords_gets_assigned_4326(tmp_path):
     res = ingest_aoi_file(z, z.name, z.stat().st_size)
     assert res.features[0].in_conus
     assert res.warnings and "assumed WGS84" in res.warnings[0]
+
+
+# ── FE31: multi-feature preview + selection ──────────────────────────────────
+
+def _feat(name, area, rect=True):
+    from tethysapp.fimsim_gui.ingest import IngestedFeature
+    return IngestedFeature(name=name, geometry_geojson={"type": "Polygon", "coordinates": []},
+                           area_km2=area, working_crs_epsg=26917,
+                           is_rectangular=rect, in_conus=True)
+
+
+def test_feature_preview_shape():
+    from tethysapp.fimsim_gui.ingest import feature_preview
+    p = feature_preview(_feat("Reach A", 12.5), 2)
+    assert p["index"] == 2 and p["name"] == "Reach A" and p["area_km2"] == 12.5
+    assert p["is_rectangular"] is True and p["geometry"]["type"] == "Polygon"
+
+
+def test_select_features_keeps_chosen_indices_and_ignores_bad_ones():
+    from tethysapp.fimsim_gui.ingest import select_features
+    feats = [_feat("A", 1), _feat("B", 2), _feat("C", 3)]
+    assert [f.name for f in select_features(feats, [0, 2])] == ["A", "C"]
+    assert select_features(feats, None) == feats            # None = all
+    assert [f.name for f in select_features(feats, [99])] == []  # out of range
+    assert [f.name for f in select_features(feats, [1])] == ["B"]

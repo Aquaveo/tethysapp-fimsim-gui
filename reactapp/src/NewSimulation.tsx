@@ -3,17 +3,22 @@
 // /new shows the Project step (create/open); /new/<id> loads that project's
 // AOIs from the server and unlocks the rest of the steps. Refresh/resume
 // works because everything reloads from the API (FIMSIM-FE2 server cutover).
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   getProject, getProjectStatus, getStepSchemas,
   type ServerAoi, type ServerProject, type StepSchema,
 } from './api';
 import AoiStep from './AoiStep';
+import ConfirmDialog from './ConfirmDialog';
+import { useActiveModel } from './activeModel';
 import ProjectStep from './ProjectStep';
 import ResultsStep from './ResultsStep';
 import StepPanel from './StepPanel';
-import { DEFAULT_MODEL, MODELS, resolveActiveStep, type ModelId, type StepId } from './steps';
+import {
+  MODELS, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
+  type ModelId, type StepId,
+} from './steps';
 import './NewSimulation.css';
 
 const NON_JOB_STEPS = new Set(['project', 'aoi', 'results']);
@@ -22,10 +27,12 @@ export default function NewSimulation() {
   const navigate = useNavigate();
   const params = useParams<{ projectId?: string; model?: string }>();
   const projectId = params.projectId ? Number(params.projectId) : null;
-  // model comes from the URL slug (/new/<id>/triton) so links say which
-  // model they drive; unknown slugs fall back to the default
-  const model: ModelId = params.model && params.model in MODELS
-    ? (params.model as ModelId) : DEFAULT_MODEL;
+  const [project, setProject] = useState<ServerProject | null>(null);
+  // FE48: the model is a property of the PROJECT. The URL slug
+  // (/new/<id>/triton) only bridges the gap until the project has loaded —
+  // then the project wins and the URL is corrected to match (see below).
+  const model: ModelId = project && project.id === projectId
+    ? modelFromSlug(project.model) : modelFromSlug(params.model);
   const STEPS = MODELS[model].steps;
   const JOB_STEPS = new Set(
     STEPS.map((s) => s.id as string).filter((id) => !NON_JOB_STEPS.has(id)));
@@ -34,14 +41,24 @@ export default function NewSimulation() {
     .map((s) => ({ id: s.id as string, label: s.label }));
 
   const [step, setStep] = useState<StepId>(projectId ? 'aoi' : 'project');
-  const [project, setProject] = useState<ServerProject | null>(null);
   const [aois, setAoisState] = useState<ServerAoi[]>([]);
   const [schemas, setSchemas] = useState<Record<string, StepSchema> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // FE56: where the Run step's button renders (footer, beside Next), and the
+  // step a user asked to move to while no run has succeeded (awaiting confirm)
+  const [submitSlot, setSubmitSlot] = useState<HTMLElement | null>(null);
+  const [pendingStep, setPendingStep] = useState<StepId | null>(null);
 
   useEffect(() => {
     getStepSchemas().then(setSchemas).catch(() => setSchemas({}));
   }, []);
+
+  // FE58: tell the header which model this project is (cleared on leave)
+  const { setModel: publishModel } = useActiveModel();
+  useEffect(() => {
+    publishModel(headerModel(projectId, model));
+    return () => publishModel(null);
+  }, [projectId, model, publishModel]);
 
   // Steady project-status poll while on a job step: keeps every AOI's
   // step summaries (and therefore panels' run tracking) fresh.
@@ -74,7 +91,16 @@ export default function NewSimulation() {
         })
         .catch((e) => setLoadError(String(e.message)));
     }
-  }, [projectId, model]);
+  }, [projectId]);
+
+  // Stale or hand-typed links (/new/<id> for a TRITON project) land on the
+  // project's real model; rewrite the URL so bookmarks/back-button agree.
+  useEffect(() => {
+    if (!project || project.id !== projectId) return;
+    const wanted = wizardPath(project);
+    if (window.location.pathname.replace(/\/$/, '').endsWith(wanted)) return;
+    navigate(wanted, { replace: true });
+  }, [project, projectId, navigate]);
 
   // A model switch can leave `step` pointing at a step the new model lacks
   // (LISFLOOD "run" → TRITON); render a shared step until the reset effect
@@ -91,30 +117,23 @@ export default function NewSimulation() {
     if (!projectId) return; // later steps need a project first
     setStep(id);
   };
+  // every navigation goes through here: leaving Run forward with no
+  // successful run asks first (FE56)
+  const tryGoTo = (id: StepId) => {
+    if (needsRunConfirm(STEPS, activeStep, id, aois)) setPendingStep(id);
+    else goTo(id);
+  };
+  const stayAndRun = useCallback(() => setPendingStep(null), []);
 
   return (
     <div className="ns-wrap">
       <div className="ns-rail">
-        {/* Model switch: slugged URLs so users always know which model they drive */}
-        <div className="ns-models" role="group" aria-label="Model">
-          {(Object.keys(MODELS) as ModelId[]).map((m) => (
-            <button
-              key={m}
-              type="button"
-              className={'ns-model' + (m === model ? ' is-active' : '')}
-              onClick={() => navigate(projectId
-                ? `/new/${projectId}${m === DEFAULT_MODEL ? '' : `/${m}`}`
-                : '/new')}
-            >
-              {MODELS[m].label}
-              {!MODELS[m].runsOnPortal && <span className="ns-model-tag">deck only</span>}
-            </button>
-          ))}
-        </div>
       {/* The river stepper: dots are reaches; the line fills as flow moves downstream. */}
       <ol className="ns-stepper" aria-label="Simulation steps">
         {STEPS.map((s, i) => {
-          const state = i < idx ? 'done' : i === idx ? 'active' : 'todo';
+          // ✓ means the step really completed (FE55), not merely "behind you"
+          const state = i === idx ? 'active'
+            : stepDone(s.id, aois, !!projectId) ? 'done' : 'todo';
           return (
             <li key={s.id} className="ns-step-wrap">
               {i > 0 && <span className={'ns-line' + (i <= idx ? ' done' : '')} aria-hidden="true" />}
@@ -122,7 +141,7 @@ export default function NewSimulation() {
                 type="button"
                 className={`ns-step ${state}`}
                 aria-current={state === 'active' ? 'step' : undefined}
-                onClick={() => goTo(s.id)}
+                onClick={() => tryGoTo(s.id)}
               >
                 <span className="ns-dot" aria-hidden="true">
                   {state === 'done' ? '✓' : i + 1}
@@ -137,6 +156,9 @@ export default function NewSimulation() {
 
       <section className="ns-card" aria-labelledby="ns-title">
         <p className="ns-eyebrow">
+          <span className={'ns-model-badge' + (MODELS[model].runsOnPortal ? '' : ' is-deck')}>
+            {MODELS[model].label}
+          </span>
           Step {idx + 1} of {STEPS.length}
           {project && <span className="ns-project-tag">{project.name}</span>}
           {def.produces && <span className="ns-produces">→ {def.produces}</span>}
@@ -157,6 +179,7 @@ export default function NewSimulation() {
             aois={aois}
             hasRunStep={JOB_STEPS.has('run')}
             modelStepKeys={[...JOB_STEPS]}
+            onGoToRun={JOB_STEPS.has('run') ? () => goTo('run') : undefined}
           />
         ) : JOB_STEPS.has(activeStep) && projectId ? (
           <StepPanel
@@ -168,6 +191,7 @@ export default function NewSimulation() {
             schema={schemas?.[step] ?? null}
             onSubmitted={() =>
               getProjectStatus(projectId).then((r) => setAoisState(r.aois)).catch(() => undefined)}
+            submitSlot={activeStep === 'run' ? submitSlot : null}
           />
         ) : (
           <div className="ns-placeholder">Coming soon — this panel is being built.</div>
@@ -183,18 +207,39 @@ export default function NewSimulation() {
               ← Back
             </button>
           ) : <span aria-hidden="true" /> /* keeps Next right-aligned */}
-          {idx < STEPS.length - 1 && (
-            <button
-              type="button"
-              className="button-primary"
-              disabled={step === 'project' && !projectId}
-              onClick={() => goTo(STEPS[idx + 1].id)}
-            >
-              Next →
-            </button>
-          )}
+          <div className="ns-nav-right">
+            {/* FE56: the Run step's "Run simulation" button portals in here */}
+            <span className="ns-nav-slot" ref={setSubmitSlot} />
+            {idx < STEPS.length - 1 && (
+              <button
+                type="button"
+                className="button-primary"
+                disabled={step === 'project' && !projectId}
+                onClick={() => tryGoTo(STEPS[idx + 1].id)}
+              >
+                Next →
+              </button>
+            )}
+          </div>
         </div>
       </section>
+
+      {pendingStep && (
+        <ConfirmDialog
+          title="Proceed without running the model?"
+          confirmLabel="Proceed without running"
+          cancelLabel="Stay and run"
+          onConfirm={() => { const to = pendingStep; setPendingStep(null); goTo(to); }}
+          onCancel={stayAndRun}
+        >
+          <p>
+            No simulation has run successfully for this project yet. You are choosing
+            to continue without running the model — the Results step will have no
+            flood map, only the input files you built.
+          </p>
+          <p>Are you okay with that?</p>
+        </ConfirmDialog>
+      )}
     </div>
   );
 }

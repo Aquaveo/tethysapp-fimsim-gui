@@ -2,12 +2,14 @@
 // The workspace shell — same chrome as FIMeval/FIMbench: branded header +
 // footer, a slim left nav, a persistent Simulations list, and a detail pane
 // (<Outlet/>) that renders the active route (New Simulation wizard / docs).
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 import SimulationsList from './SimulationsList';
 import WelcomeModal from './WelcomeModal';
+import { ActiveModelContext } from './activeModel';
+import type { ModelId } from './steps';
 import './AppShell.css';
 
 export default function AppShell() {
@@ -23,7 +25,12 @@ export default function AppShell() {
     setShowWelcome(false);
   };
 
+  // FE58: the wizard publishes the open project's model; the header shows it
+  const [model, setModel] = useState<ModelId | null>(null);
+  const activeModel = useMemo(() => ({ model, setModel }), [model]);
+
   return (
+    <ActiveModelContext.Provider value={activeModel}>
     <div className="wk-app">
       <Header />
       <div className="wk-body">
@@ -48,5 +55,6 @@ export default function AppShell() {
       <Footer />
       {showWelcome && <WelcomeModal onClose={closeWelcome} />}
     </div>
+    </ActiveModelContext.Provider>
   );
 }

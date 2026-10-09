@@ -86,12 +86,52 @@ PER_AOI_KEY_HOMES = {
 STEP_KEYS = ("dem", "manning", "bci", "bdy", "par", "run",
              "tdem", "tfric", "tbc", "thyg", "tcfg")
 
+#: FIMSIM-FE48 — the model is a property of the PROJECT (chosen at creation,
+#: shown throughout), not a URL mode. Mirrors reactapp/src/steps.ts MODELS.
+MODELS = ("lisflood-fp", "triton")
+DEFAULT_MODEL = "lisflood-fp"
+#: step keys that only the TRITON wizard produces — used to backfill the
+#: model of projects created before the column existed
+TRITON_STEP_KEYS = tuple(k for k in STEP_KEYS if k.startswith("t"))
+
+
+def normalize_model(value):
+    """Client-supplied model → canonical id. Blank/None means the default;
+    an unknown name returns None so the API can reject it."""
+    if value is None or str(value).strip() == "":
+        return DEFAULT_MODEL
+    v = str(value).strip().lower()
+    return v if v in MODELS else None
+
+
 STEPRUN_STATUSES = (
     "pending", "queued", "running", "uploading",
     "succeeded", "failed", "cancelled",
 )
 
 LOOKUP_STATUSES = ("pending", "running", "done", "failed")
+
+
+def selected_manifest_entries(aoi, selection):
+    """(arcname, storage_key) pairs for a client's selected files.
+
+    `selection` is a list of {"run_id", "name"}. Only files from runs that
+    belong to *aoi* are returned (a run_id for another AOI is ignored, so a
+    client can't zip files it doesn't own), and each name is included once.
+    """
+    runs = {r.id: r for r in aoi.step_runs}
+    entries, seen = [], set()
+    for sel in selection or []:
+        run = runs.get(sel.get("run_id"))
+        name = sel.get("name")
+        if not run or not isinstance(run.manifest, list) or name in seen:
+            continue
+        for m in run.manifest:
+            if m.get("name") == name:
+                seen.add(name)
+                entries.append((f"{run.step_key}/{name}", m["key"]))
+                break
+    return entries
 
 
 def sanitize_name(name: str) -> str:
@@ -112,6 +152,9 @@ class Project(Base):
     username = Column(String(150), nullable=False, index=True)  # portal user
     name = Column(String(120), nullable=False)
     created = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    # FE48: which wizard this project belongs to (lisflood-fp | triton)
+    model = Column(String(20), nullable=False, default=DEFAULT_MODEL,
+                   server_default=DEFAULT_MODEL)
 
     aois = relationship("Aoi", back_populates="project",
                         cascade="all, delete-orphan", order_by="Aoi.id")
@@ -122,6 +165,7 @@ class Project(Base):
             "name": self.name,
             "created": self.created.isoformat() + "Z",
             "aoi_count": len(self.aois),
+            "model": self.model or DEFAULT_MODEL,
         }
         if with_aois:
             d["aois"] = [a.to_dict() for a in self.aois]
@@ -294,10 +338,37 @@ def get_session_maker(app_class):
     return sessionmaker(bind=engine)
 
 
+def ensure_project_model_column(engine):
+    """FE48 migration, idempotent: add projects.model to a store created
+    before the column existed and backfill it ONCE from the step runs (any
+    TRITON step run → triton, else the default). create_all never alters an
+    existing table, so this runs from the store initializer (syncstores).
+    Returns True when the column was added (and backfilled), False when it
+    was already there — a later sync never overrides an explicit choice."""
+    from sqlalchemy import text
+    keys = ", ".join(f"'{k}'" for k in TRITON_STEP_KEYS)
+    with engine.begin() as conn:  # one transaction; works on SQLAlchemy 1.x + 2.x
+        present = conn.execute(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'projects' AND column_name = 'model'")).first()
+        if present:
+            return False
+        conn.execute(text(
+            f"ALTER TABLE projects ADD COLUMN model VARCHAR(20) "
+            f"NOT NULL DEFAULT '{DEFAULT_MODEL}'"))
+        conn.execute(text(
+            "UPDATE projects SET model = 'triton' WHERE id IN ("
+            "  SELECT a.project_id FROM aois a "
+            "  JOIN step_runs r ON r.aoi_id = a.id "
+            f" WHERE r.step_key IN ({keys}))"))
+    return True
+
+
 def init_primary_db(engine, first_time):
     """Tethys persistent-store initializer: create tables; load reference
     layers on first run (idempotent — skips tables that already hold rows)."""
     Base.metadata.create_all(engine)
+    ensure_project_model_column(engine)
     if first_time:
         from tethysapp.fimsim_gui.reference_loader import load_reference_layers
         load_reference_layers(engine, log=print)

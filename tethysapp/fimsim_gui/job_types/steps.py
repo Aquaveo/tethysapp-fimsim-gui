@@ -13,15 +13,64 @@ from tethysapp.fimsim_gui.job_types.registry import (
     _check_safe_name,
 )
 
+# Land-cover years each source actually publishes (Parvaneh, verified against
+# the services 2026-09-23). An unpublished year isn't an error at the service —
+# ESRI/MRLC answer with an all-nodata raster — so the app must refuse it or the
+# Manning grid is built from a blank land cover.
+SENTINEL2_YEARS = tuple(range(2025, 2016, -1))          # 2017–2025 (ints)
+NLCD_YEARS = ("2021", "2019", "2016", "2013", "2011",   # MRLC L48 (strings)
+              "2008", "2006", "2004", "2001")
+
+
+def _check_lulc_years(config: dict, problems: list) -> None:
+    """Reject a land-cover year the chosen source doesn't publish. Keys mirror
+    fimcore: `lulc_year` (Esri Sentinel-2, int) and `nlcd_year` (NLCD, str)."""
+    yr = config.get("lulc_year")
+    if yr is not None:
+        try:
+            ok = int(yr) in SENTINEL2_YEARS
+        except (TypeError, ValueError):
+            ok = False
+        if not ok:
+            problems.append(
+                f"'lulc_year' {yr!r}: the ESRI Sentinel-2 land cover only "
+                f"covers {SENTINEL2_YEARS[-1]}–{SENTINEL2_YEARS[0]}")
+    ny = config.get("nlcd_year")
+    if ny is not None and str(ny) not in NLCD_YEARS:
+        problems.append(
+            f"'nlcd_year' {ny!r}: NLCD publishes {', '.join(NLCD_YEARS)}")
+
 
 class DEMStepJobType(StepJobType):
     # wildcards also sweep up "dem (1).ascii"-style versioned leftovers
     clean_patterns = ("dem*.ascii", "dem*.prj", "DEM_*.tif")
     step_key = "dem"
     requires = ()
+    # BE17: user_dem_keys are storage keys of uploaded GeoTIFF(s); the raw
+    # user_dem_path is SERVER-ONLY (a client must not name a worker path — it
+    # is set by prestage_inputs from the ownership-validated keys).
+    extra_config_keys = ("user_dem_keys",)
+    server_only_keys = ("user_dem_path",)
 
     def defaults(self) -> dict:
-        return {"dem_res_m": 30, "dem_source": "3dep"}
+        # dem_input is a UI toggle (download vs upload); the engine only cares
+        # whether user_dem_path was staged. Kept here so it's an allowed key.
+        return {"dem_res_m": 30, "dem_source": "3dep", "dem_input": "download"}
+
+    def prestage_inputs(self, storage, ctx, config, log_fn):
+        keys = config.get("user_dem_keys") or []
+        if not keys:
+            return
+        dem_dir = Path(ctx["aoi_features"][0]["folder_path"]) / "user_dem"
+        dem_dir.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for k in keys:
+            dest = dem_dir / Path(k).name
+            storage.download_to_path(k, dest)
+            paths.append(str(dest))
+        # execute() reads user_dem_path and derives has_dem from it
+        config["user_dem_path"] = paths
+        log_fn(f"staged {len(paths)} user-supplied DEM(s)")
 
     def check_values(self, config: dict) -> list:
         problems = []
@@ -106,6 +155,26 @@ class DEMStepJobType(StepJobType):
         )
 
 
+def _check_manning_mapping(config: dict, problems: list) -> None:
+    """The editable per-class table (manning_mapping): an object of
+    land-cover code → Manning's n, every n in [0.001, 1.0]. Shared by the
+    LISFLOOD and TRITON Roughness steps."""
+    mapping = config.get("manning_mapping")
+    if mapping is None:
+        return
+    if not isinstance(mapping, dict):
+        problems.append("'manning_mapping' must be an object of "
+                        "land-cover code → Manning's n")
+        return
+    bad = [k for k, v in mapping.items()
+           if isinstance(v, bool) or not isinstance(v, (int, float))
+           or not (0.001 <= v <= 1.0)]
+    if bad:
+        problems.append(
+            f"'manning_mapping' values must be numbers in "
+            f"[0.001, 1.0] — bad class(es): {', '.join(map(str, bad))}")
+
+
 class ManningStepJobType(UniformStepJobType):
     clean_patterns = ("lulc*.ascii", "lulc*.prj", "LULC_*.tif", "ManningN_*.tif")
     step_key = "manning"
@@ -148,20 +217,8 @@ class ManningStepJobType(UniformStepJobType):
         _check_choice(config, "lulc_download_source", ("esri", "nlcd"), problems)
         # Chow (1959) tables top out well below 1; 0 would zero out friction
         _check_number(config, "fpfric_val", 0.001, 1.0, problems)
-        _check_number(config, "lulc_year", 1985, 2035, problems)
-        mapping = config.get("manning_mapping")
-        if mapping is not None:
-            if not isinstance(mapping, dict):
-                problems.append("'manning_mapping' must be an object of "
-                                "land-cover code → Manning's n")
-            else:
-                bad = [k for k, v in mapping.items()
-                       if isinstance(v, bool) or not isinstance(v, (int, float))
-                       or not (0.001 <= v <= 1.0)]
-                if bad:
-                    problems.append(
-                        f"'manning_mapping' values must be numbers in "
-                        f"[0.001, 1.0] — bad class(es): {', '.join(map(str, bad))}")
+        _check_lulc_years(config, problems)
+        _check_manning_mapping(config, problems)
         return problems
 
 

@@ -5,26 +5,41 @@
 // downloads. Bespoke upgrades (editable Manning table, hydrograph chart)
 // layer on top later — this gets the whole workflow demoable.
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
-  ApiError, cancelStepRun, getStepRun, getStepRunOutputs, submitStep,
-  type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
+  ApiError, cancelStepRun, downloadSelectedZip, getStepRun, getStepRunOutputs, submitStep,
+  uploadDem, type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
 } from './api';
+import { fileProxyUrl, formatBytes, saveBlob, stepZipFiles, zipFilename } from './outputsMeta';
 import BoundaryPreview from './BoundaryPreview';
 import HydrographChart from './HydrographChart';
 import RasterPreview from './RasterPreview';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
-import TextPreview from './TextPreview';
-import { STEP_FIELDS, coerceConfigNumbers, type FieldSpec } from './stepFields';
+import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
+import {
+  STEP_FIELDS, applyLinkedDefaults, coerceConfigNumbers, expandEventDates, fieldVisible,
+  manningTableSource, rangeProblems, type FieldSpec,
+} from './stepFields';
+import { formatElapsed, phaseLabel } from './runProgress';
 import './StepPanel.css';
 
-const POLL_MS = 4000;
+const POLL_MS = 2500;
 const ACTIVE = ['pending', 'queued', 'running', 'uploading'];
 
 function ProgressBar({ run }: { run: ServerStepRun }) {
+  // tick once a second so the elapsed clock stays live between polls — this is
+  // what makes a queued/running job look alive instead of frozen (feedback #1)
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
   const last = [...(run.progress ?? [])].reverse()
     .find((e) => e.total > 0 && e.status !== 'failed');
   const pct = last ? Math.round(100 * last.current / last.total) : null;
+  const startMs = Date.parse(run.started ?? run.created);
+  const elapsed = Number.isFinite(startMs) ? now - startMs : NaN;
   return (
     <div className="sp-progress">
       <div className="sp-progress-track">
@@ -34,29 +49,60 @@ function ProgressBar({ run }: { run: ServerStepRun }) {
         />
       </div>
       <span className="sp-progress-label">
-        {run.status}{pct !== null ? ` · ${pct}%` : ''}
+        {/* phase name + % + live elapsed; the phase makes the post-100% "Saving
+            results" step visible instead of a stuck bar (feedback #2) */}
+        {phaseLabel(run.status)}{pct !== null ? ` · ${pct}%` : ''} · {formatElapsed(elapsed)}
         {last ? ` — ${last.message.slice(0, 60)}` : ''}
       </span>
     </div>
   );
 }
 
-function Outputs({ runId }: { runId: number }) {
+function Outputs({ runId, aoi, stepKey }: { runId: number; aoi: ServerAoi; stepKey: string }) {
   const [outputs, setOutputs] = useState<OutputEntry[] | null>(null);
+  const [zipBusy, setZipBusy] = useState(false);
+  const [zipError, setZipError] = useState<string | null>(null);
   useEffect(() => {
     getStepRunOutputs(runId).then((r) => setOutputs(r.outputs)).catch(() => setOutputs([]));
   }, [runId]);
   if (!outputs) return <span className="sp-muted">loading outputs…</span>;
-  // Names only — downloads live on the Results step's outputs table.
+  if (!outputs.length) return null;
+  // FIMSIM-FE49: every step's outputs download right here — per file through
+  // the same-origin proxy, or all of them as one zip (same endpoint as the
+  // Results step's Download Selected).
+  const downloadAll = async () => {
+    setZipBusy(true);
+    setZipError(null);
+    try {
+      const blob = await downloadSelectedZip(aoi.id, stepZipFiles(runId, outputs));
+      saveBlob(blob, zipFilename(aoi.name, stepKey));
+    } catch (e) {
+      setZipError(e instanceof ApiError ? e.message : String((e as Error).message ?? e));
+    } finally {
+      setZipBusy(false);
+    }
+  };
+  const total = outputs.reduce((n, o) => n + o.bytes, 0);
   return (
-    <ul className="sp-outputs">
-      {outputs.map((o) => (
-        <li key={o.key}>
-          {o.name}
-          <span className="sp-muted"> ({(o.bytes / 1024).toFixed(0)} kB)</span>
-        </li>
-      ))}
-    </ul>
+    <div className="sp-outputs-wrap">
+      <ul className="sp-outputs">
+        {outputs.map((o) => (
+          <li key={o.key}>
+            <a href={fileProxyUrl(runId, o.name, true)} download={o.name}
+               title={`Download ${o.name}`}>⬇ {o.name}</a>
+            <span className="sp-muted"> ({formatBytes(o.bytes)})</span>
+          </li>
+        ))}
+      </ul>
+      <div className="sp-outputs-bar">
+        <button type="button" className="sp-outputs-zip" disabled={zipBusy}
+                onClick={() => void downloadAll()}>
+          {zipBusy ? 'Zipping…'
+            : `⬇ Download all (${outputs.length} file${outputs.length === 1 ? '' : 's'} · ${formatBytes(total)})`}
+        </button>
+        {zipError && <span className="sp-error" role="alert">{zipError}</span>}
+      </div>
+    </div>
   );
 }
 
@@ -64,6 +110,9 @@ interface Props {
   projectId: number;
   stepKey: string;
   aois: ServerAoi[];
+  /** FE56: the wizard footer's slot beside Next — the Run step's submit
+   *  button renders there (via a portal) instead of inside the form */
+  submitSlot?: HTMLElement | null;
   schema: StepSchema | null;
   /** the active model's job steps in order — drives the FE17 overview strip */
   stepOrder?: { id: string; label: string }[];
@@ -72,7 +121,7 @@ interface Props {
 }
 
 export default function StepPanel({
-  projectId, stepKey, aois, schema, stepOrder = [], onSubmitted,
+  projectId, stepKey, aois, schema, stepOrder = [], onSubmitted, submitSlot = null,
 }: Props) {
   const fields: FieldSpec[] = STEP_FIELDS[stepKey] ?? [];
   const defaults = useMemo(
@@ -82,10 +131,34 @@ export default function StepPanel({
   const [submitNotes, setSubmitNotes] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // BE17: per-AOI uploaded DEMs (keys) for the "upload my DEM" path
+  const [demKeys, setDemKeys] = useState<Record<number, { key: string; name: string }[]>>({});
+  const [demBusy, setDemBusy] = useState<number | null>(null);
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
-  const visible = (f: FieldSpec) =>
-    !f.showIf || value(f.showIf.key) === f.showIf.value;
+  const visible = (f: FieldSpec) => fieldVisible(f.showIf, value);
+  const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
+    && value('dem_input') === 'upload';
+  // the editable per-class table, on BOTH Roughness steps (bug-round #iv)
+  const tableSource = manningTableSource(stepKey, value);
+
+  const uploadDemFor = async (aoiId: number, files: File[]) => {
+    setDemBusy(aoiId);
+    setError(null);
+    try {
+      const { dems } = await uploadDem(aoiId, files);
+      setDemKeys((prev) => ({
+        ...prev,
+        [aoiId]: [...(prev[aoiId] ?? []), ...dems.map((d) => ({ key: d.key, name: d.name }))],
+      }));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String((e as Error).message ?? e));
+    } finally {
+      setDemBusy(null);
+    }
+  };
+  const clearDem = (aoiId: number) =>
+    setDemKeys((prev) => ({ ...prev, [aoiId]: [] }));
 
   // seed run tracking from the AOIs' current step summaries
   useEffect(() => {
@@ -123,7 +196,10 @@ export default function StepPanel({
       const allowed = new Set([
         ...Object.keys(defaults), ...fields.map((f) => f.key), 'manning_mapping',
       ]);
-      const coerced = coerceConfigNumbers({ ...defaults, ...config }, fields);
+      const coerced = expandEventDates(
+        coerceConfigNumbers({ ...defaults, ...config }, fields), fields);
+      const outOfRange = rangeProblems(coerced, fields);
+      if (outOfRange.length) throw new Error(outOfRange.join(' '));
       const merged: Record<string, unknown> = Object.fromEntries(
         Object.entries(coerced)
           .filter(([k, v]) => allowed.has(k) && v !== null && v !== ''));
@@ -132,7 +208,20 @@ export default function StepPanel({
           throw new Error(`"${f.label}" is required.`);
         }
       }
-      const { results } = await submitStep(projectId, stepKey, merged);
+      // BE17: when uploading DEMs, each AOI needs its own file(s), carried as
+      // per-AOI overrides (user_dem_keys)
+      let aoiConfigs: Record<string, Record<string, unknown>> | undefined;
+      if (isDemUpload) {
+        const missing = aois.filter((a) => !(demKeys[a.id]?.length));
+        if (missing.length) {
+          throw new Error(`Upload a DEM for: ${missing.map((a) => a.name).join(', ')}`);
+        }
+        aoiConfigs = {};
+        for (const a of aois) {
+          aoiConfigs[String(a.id)] = { user_dem_keys: demKeys[a.id].map((d) => d.key) };
+        }
+      }
+      const { results } = await submitStep(projectId, stepKey, merged, aoiConfigs);
       const notes: Record<number, string> = {};
       for (const r of results) {
         if (!r.submitted) notes[r.aoi_id] = r.reason ?? 'not submitted';
@@ -160,21 +249,44 @@ export default function StepPanel({
     return r && ACTIVE.includes(r.status);
   });
 
+  // FE56: the Run step's button lives in the wizard footer beside Next. The
+  // `form` attribute keeps it a real submit button for THIS form even though
+  // the portal moves it out of the form's DOM subtree.
+  const formId = `sp-form-${stepKey}`;
+  const inFooter = stepKey === 'run' && !!submitSlot;
+  const submitButton = (
+    <button type="submit" form={formId} className="button-primary"
+            disabled={busy || anyActive || aois.length === 0}>
+      {busy ? 'Submitting…'
+        : anyActive ? 'Running…'
+        : stepKey === 'run' ? `▶ Run simulation for ${aois.length} area(s)`
+        : `Run this step for ${aois.length} area(s)`}
+    </button>
+  );
+
   return (
     <div className="sp-wrap">
       <form
+        id={formId}
         className="sp-form"
         onSubmit={(e) => { e.preventDefault(); void submit(); }}
       >
         {fields.filter(visible).map((f) => (
           <label key={f.key} className="sp-field">
-            <span className="sp-field-label">{f.label}</span>
+            <span className="sp-field-label">
+              {f.label}
+              {f.help && (
+                <span className="sp-info" tabIndex={0} role="note"
+                      aria-label={f.help} data-tip={f.help}>i</span>
+              )}
+            </span>
             {f.widget === 'select' ? (
               <select
                 value={String(value(f.key))}
                 onChange={(e) => {
                   const opt = f.options?.find((o) => String(o.value) === e.target.value);
-                  setConfig({ ...config, [f.key]: opt?.value ?? e.target.value });
+                  const v = opt?.value ?? e.target.value;
+                  setConfig(applyLinkedDefaults({ ...config, [f.key]: v }, fields, f.key, v));
                 }}
               >
                 {f.options?.map((o) => (
@@ -187,10 +299,19 @@ export default function StepPanel({
                 value={String(value(f.key))}
                 onChange={(e) => setConfig({ ...config, [f.key]: e.target.value })}
               />
+            ) : f.widget === 'date' ? (
+              <input
+                type="date"
+                // show only the date part even if a full datetime is stored
+                value={String(value(f.key)).slice(0, 10)}
+                onChange={(e) => setConfig({ ...config, [f.key]: e.target.value })}
+              />
             ) : (
               <input
                 type={f.widget === 'number' ? 'number' : 'text'}
-                step="any"
+                step={f.step ?? 'any'}
+                min={f.min}
+                max={f.max}
                 value={String(value(f.key))}
                 onChange={(e) => setConfig({
                   // keep the raw string while typing — coercing mid-keystroke
@@ -200,26 +321,20 @@ export default function StepPanel({
                 })}
               />
             )}
-            {f.help && <span className="sp-field-help">{f.help}</span>}
           </label>
         ))}
-        {stepKey === 'manning' && value('fric_mode') === 'varying' && (
+        {tableSource && (
           <div className="sp-submit-row">
             <ManningTable
-              source={String(value('lulc_download_source') || 'esri')}
+              source={tableSource}
               value={config.manning_mapping as ManningMapping | undefined}
               onChange={(m) => setConfig({ ...config, manning_mapping: m })}
             />
           </div>
         )}
-        <div className="sp-submit-row">
-          <button type="submit" className="button-primary"
-                  disabled={busy || anyActive || aois.length === 0}>
-            {anyActive ? 'Running…'
-              : stepKey === 'run' ? `Run simulation for ${aois.length} area(s)`
-              : `Run this step for ${aois.length} area(s)`}
-          </button>
-        </div>
+        {inFooter
+          ? createPortal(submitButton, submitSlot)
+          : <div className="sp-submit-row">{submitButton}</div>}
       </form>
 
       {error && <div className="sp-error" role="alert">{error}</div>}
@@ -241,6 +356,37 @@ export default function StepPanel({
                 )}
               </div>
               <StepOverview aoi={a} stepOrder={stepOrder} currentStep={stepKey} />
+              {isDemUpload && (
+                <div className="sp-dem-upload">
+                  <label className="sp-dem-btn">
+                    {demBusy === a.id ? 'Uploading…' : '⬆ Add DEM GeoTIFF(s)'}
+                    <input type="file" accept=".tif,.tiff" multiple hidden
+                           disabled={demBusy !== null}
+                           onChange={(e) => {
+                             const fs = Array.from(e.target.files ?? []);
+                             if (fs.length) void uploadDemFor(a.id, fs);
+                             e.target.value = '';
+                           }} />
+                  </label>
+                  {(demKeys[a.id]?.length ?? 0) > 0 ? (
+                    <span className="sp-dem-files">
+                      {demKeys[a.id].map((d) => d.name).join(', ')}
+                      <button type="button" className="sp-dem-clear"
+                              onClick={() => clearDem(a.id)}>clear</button>
+                    </span>
+                  ) : (
+                    <span className="sp-muted">no DEM uploaded yet</span>
+                  )}
+                </div>
+              )}
+              {stepKey === 'run' && (
+                <p className="sp-field-help">
+                  Typical runtime: a 200–300 km² area at 10 m takes about 3–4
+                  hours on the portal&apos;s CPUs. You can leave this page and
+                  come back; the run continues. The portal stops a run that
+                  exceeds its budget (6 hours by default).
+                </p>
+              )}
               {(stepKey === 'bci' || stepKey === 'tbc') && (
                 <p className="sp-field-help">
                   Check the map on the Area of Interest step: the detected main
@@ -252,7 +398,7 @@ export default function StepPanel({
               {run ? (
                 <>
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
-                  {run.status === 'succeeded' && stepKey === 'bdy' && (
+                  {run.status === 'succeeded' && (stepKey === 'bdy' || stepKey === 'thyg') && (
                     <HydrographChart run={run} />
                   )}
                   {run.status === 'succeeded' && (stepKey === 'bci' || stepKey === 'tbc') && (
@@ -268,10 +414,11 @@ export default function StepPanel({
                   )}
                   {run.status === 'succeeded' && (
                     <TextPreview run={run} stepKey={stepKey}
-                                 defaultOpen={(stepKey === 'par' || stepKey === 'tcfg')
-                                   && aois.length === 1} />
+                                 defaultOpen={textPreviewDefaultOpen(stepKey, aois.length)} />
                   )}
-                  {run.status === 'succeeded' && <Outputs runId={run.id} />}
+                  {run.status === 'succeeded' && (
+                    <Outputs runId={run.id} aoi={a} stepKey={stepKey} />
+                  )}
                   {run.status === 'failed' && (
                     <details className="sp-fail">
                       <summary>failed — details</summary>

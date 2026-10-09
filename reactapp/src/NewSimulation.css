@@ -164,18 +164,15 @@
 .as-card-resolving { color: var(--color-text-muted); font-style: italic; }
 
 /* ── Model switch (FE18 slice): slugged chips above the stepper ── */
-.ns-models { display: flex; gap: 0.4rem; margin: 0 0 0.9rem; }
-.ns-model {
-  border: 1.5px solid var(--color-border); border-radius: 999px;
-  background: var(--color-surface); color: var(--color-text-secondary);
-  padding: 0.25rem 0.9rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+/* FE48 — prominent active-model badge so the current model is never a surprise */
+.ns-model-badge {
+  display: inline-block; margin-right: 0.5rem; padding: 0.1rem 0.6rem;
+  border-radius: 999px; background: var(--color-primary); color: #fff;
+  font-weight: 700; font-size: 0.72rem; letter-spacing: 0.02em;
+  text-transform: uppercase; vertical-align: middle;
 }
-.ns-model.is-active {
-  border-color: var(--color-primary); color: var(--color-primary-active);
-  background: var(--color-surface-alt);
-}
-.ns-model-tag {
-  margin-left: 0.4rem; font-size: 0.65rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  color: var(--color-text-muted);
-}
+.ns-model-badge.is-deck { background: #7c5cff; }
+
+/* FE56 — Run button sits beside Next in the footer */
+.ns-nav-right { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; }
+.ns-nav-slot:empty { display: none; }

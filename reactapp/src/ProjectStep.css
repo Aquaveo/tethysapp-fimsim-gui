@@ -55,3 +55,26 @@
   color: var(--color-text-muted); cursor: pointer; font-family: inherit;
 }
 .ps-item-x:hover { color: var(--color-error); background: var(--color-surface-alt); }
+
+/* FE48 — explicit model choice at creation */
+.ps-models { border: none; margin: 0; padding: 0; display: flex; gap: 0.6rem; }
+.ps-models > legend { padding: 0; }
+.ps-model {
+  flex: 1; display: flex; flex-direction: column; gap: 0.15rem;
+  padding: 0.6rem 0.8rem; cursor: pointer;
+  border: 1.5px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+.ps-model:hover { background: var(--color-surface-alt); }
+.ps-model.is-selected { border-color: var(--color-primary); background: var(--color-surface-alt); }
+.ps-model input { position: absolute; opacity: 0; width: 0; height: 0; }
+.ps-model:focus-within { outline: 2px solid var(--color-primary); outline-offset: 1px; }
+.ps-model-name { font-weight: 700; font-size: 0.9rem; color: var(--color-text); }
+.ps-model-note { font-size: 0.78rem; color: var(--color-text-muted); line-height: 1.35; }
+.ps-model-tag {
+  display: inline-block; margin-left: 0.5rem; padding: 0.05rem 0.5rem;
+  border-radius: 999px; background: var(--color-primary); color: #fff;
+  font-size: 0.65rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; vertical-align: middle;
+}
+.ps-model-tag.is-deck { background: #7c5cff; }

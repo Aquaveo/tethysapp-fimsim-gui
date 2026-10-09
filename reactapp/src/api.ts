@@ -43,6 +43,8 @@ export interface ServerProject {
   name: string;
   created: string;
   aoi_count: number;
+  /** FE48: which wizard this project belongs to ('lisflood-fp' | 'triton') */
+  model?: string;
   aois?: ServerAoi[];
 }
 
@@ -114,8 +116,8 @@ const json = (data: unknown): RequestInit => ({
 export const listProjects = () =>
   request<{ projects: ServerProject[] }>('/projects/').then((r) => r.projects);
 
-export const createProject = (name: string) =>
-  request<ServerProject>('/projects/', json({ name }));
+export const createProject = (name: string, model: string) =>
+  request<ServerProject>('/projects/', json({ name, model }));
 
 export const getProject = (id: number) =>
   request<ServerProject>(`/projects/${id}/`);
@@ -125,10 +127,31 @@ export const deleteProject = (id: number) =>
 
 // ── AOIs ──────────────────────────────────────────────────────────────────────
 
-export const uploadAoiFile = async (projectId: number, file: File) => {
+export const uploadAoiFile = async (
+  projectId: number, file: File, featureIndices?: number[],
+) => {
   const form = new FormData();
   form.append('file', file);
+  if (featureIndices) form.append('feature_indices', JSON.stringify(featureIndices));
   return request<{ aois: ServerAoi[]; skipped_non_polygon: number }>(
+    `/projects/${projectId}/aois/`, { method: 'POST', body: form });
+};
+
+export interface PreviewFeature {
+  index: number;
+  name: string;
+  area_km2: number;
+  is_rectangular: boolean;
+  in_conus: boolean;
+  geometry: unknown;
+}
+
+/** Parse an upload and return its features WITHOUT creating AOIs (FE31). */
+export const previewAoiFile = async (projectId: number, file: File) => {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('preview', '1');
+  return request<{ preview: boolean; features: PreviewFeature[]; skipped_non_polygon: number }>(
     `/projects/${projectId}/aois/`, { method: 'POST', body: form });
 };
 
@@ -188,9 +211,19 @@ export const getStepSchemas = () =>
   request<Record<string, StepSchema>>('/steps/');
 
 export const submitStep = (projectId: number, stepKey: string,
-                           config: Record<string, unknown>) =>
+                           config: Record<string, unknown>,
+                           aoiConfigs?: Record<string, Record<string, unknown>>) =>
   request<{ results: SubmitResult[] }>(
-    `/projects/${projectId}/steps/${stepKey}/submit/`, json({ config }));
+    `/projects/${projectId}/steps/${stepKey}/submit/`,
+    json(aoiConfigs ? { config, aoi_configs: aoiConfigs } : { config }));
+
+/** Upload user DEM GeoTIFF(s) for an AOI (BE17); returns their storage keys. */
+export const uploadDem = async (aoiId: number, files: File[]) => {
+  const form = new FormData();
+  for (const f of files) form.append('file', f);
+  return request<{ dems: { key: string; name: string; bytes: number }[] }>(
+    `/aois/${aoiId}/dem/`, { method: 'POST', body: form });
+};
 
 export const getProjectStatus = (projectId: number) =>
   request<{ aois: ServerAoi[] }>(`/projects/${projectId}/status/`);
@@ -203,3 +236,21 @@ export const cancelStepRun = (id: number) =>
 
 export const getStepRunOutputs = (id: number) =>
   request<{ outputs: OutputEntry[] }>(`/stepruns/${id}/outputs/`);
+
+/** POST a selected {run_id, name} list, get back a zip of just those files. */
+export async function downloadSelectedZip(
+  aoiId: number, files: { run_id: number; name: string }[],
+): Promise<Blob> {
+  await ensureCsrf();
+  const res = await fetch(`${BASE}/aois/${aoiId}/zip/`, {
+    method: 'POST',
+    headers: { 'X-CSRFToken': csrfToken(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files }),
+  });
+  if (!res.ok) {
+    let msg = 'download failed';
+    try { msg = ((await res.json()) as { error?: string }).error ?? msg; } catch { /* non-JSON */ }
+    throw new ApiError(res.status, msg);
+  }
+  return res.blob();
+}

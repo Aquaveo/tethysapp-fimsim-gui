@@ -16,6 +16,18 @@ const STEP_TEXT_FILES: Record<string, RegExp[]> = {
   tbc: [/\.src$/i, /\.extbc$/i],
 };
 
+/**
+ * Whether a step's text preview starts expanded. The Boundaries files
+ * (.bci / .src + .extbc) are the step's whole point, so they're open by
+ * default and shown right below the map (bug-round #ix); the Settings
+ * files stay open only when there's a single AOI to avoid a wall of text.
+ */
+export function textPreviewDefaultOpen(stepKey: string, aoiCount: number): boolean {
+  if (stepKey === 'bci' || stepKey === 'tbc') return true;
+  if (stepKey === 'par' || stepKey === 'tcfg') return aoiCount === 1;
+  return false;
+}
+
 function FileText({ runId, name }: { runId: number; name: string }) {
   const [text, setText] = useState<string | null>(null);
   useEffect(() => {

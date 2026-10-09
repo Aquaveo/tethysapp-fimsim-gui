@@ -21,7 +21,9 @@ from tethys_sdk.routing import controller
 
 from tethysapp.fimsim_gui.app import App
 from tethysapp.fimsim_gui.ingest import IngestError, ingest_aoi_file, ingest_geojson_geometry
-from tethysapp.fimsim_gui.models import Aoi, Project, get_session_maker, sanitize_name
+from tethysapp.fimsim_gui.models import (
+    MODELS, Aoi, Project, get_session_maker, normalize_model, sanitize_name,
+)
 from tethysapp.fimsim_gui.services import resolve_aoi_context
 
 logger = logging.getLogger(__name__)
@@ -88,6 +90,17 @@ def max_aoi_area_km2() -> float:
     return _setting('max_aoi_area_km2', DEFAULT_MAX_AOI_AREA_KM2)
 
 
+def _parse_feature_indices(raw):
+    """A JSON array of feature indices from a form field, or None for 'all'."""
+    if not raw:
+        return None
+    try:
+        val = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return val if isinstance(val, list) else None
+
+
 def _create_aois(session, request, project, ingest_result, source, source_key=None):
     """Persist ingested features as AOI rows + resolve states/HUCs (PostGIS,
     sync) + submit the network lookup job per AOI."""
@@ -151,12 +164,17 @@ def api_projects(request, session):
             return JsonResponse(
                 {'error': 'Project name is required (letters, numbers, spaces).'},
                 status=400)
+        model = normalize_model(body.get('model'))
+        if model is None:
+            return JsonResponse(
+                {'error': f"Unknown model '{body.get('model')}' — "
+                          f"choose one of: {', '.join(MODELS)}."}, status=400)
         exists = (session.query(Project)
                   .filter_by(username=request.user.username, name=name).first())
         if exists:
             return JsonResponse(
                 {'error': f'You already have a project named "{name}".'}, status=409)
-        project = Project(username=request.user.username, name=name)
+        project = Project(username=request.user.username, name=name, model=model)
         session.add(project)
         session.commit()
         return JsonResponse(project.to_dict(), status=201)
@@ -212,6 +230,24 @@ def api_project_aois(request, session, project_id):
                 tmp_path = tmp.name
             try:
                 result = ingest_aoi_file(tmp_path, up.name, up.size)
+                # FE31: preview mode returns the parsed features so the user can
+                # pick which to use, WITHOUT creating AOIs or storing the file.
+                if str(request.POST.get('preview', '')).lower() in ('1', 'true'):
+                    from tethysapp.fimsim_gui.ingest import feature_preview
+                    return JsonResponse({
+                        'preview': True,
+                        'features': [feature_preview(f, i)
+                                     for i, f in enumerate(result.features)],
+                        'skipped_non_polygon': result.skipped_non_polygon,
+                        'warnings': result.warnings,
+                    })
+                # else create only the selected features (all when unspecified)
+                from tethysapp.fimsim_gui.ingest import select_features
+                indices = _parse_feature_indices(request.POST.get('feature_indices'))
+                result.features = select_features(result.features, indices)
+                if not result.features:
+                    return JsonResponse(
+                        {'error': 'no features selected to create'}, status=400)
                 source, source_key = 'upload', None
                 # keep the original upload for provenance (ctx: aoi_path)
                 from tethysapp.fimsim_gui.storage import build_key, get_storage
@@ -276,6 +312,49 @@ def api_aoi(request, session, aoi_id):
             logger.warning('storage cleanup for %s failed: %s', prefix, exc)
         return JsonResponse({'deleted': True, 'files_removed': n})
     return JsonResponse(aoi.to_dict())
+
+
+@controller(url='api/aois/{aoi_id}/dem', name='api_aoi_dem')
+@with_session
+def api_aoi_dem(request, session, aoi_id):
+    """FIMSIM-BE17: upload user DEM GeoTIFF(s) for an AOI.
+
+    POST one or more `file`s → validate each is a GeoTIFF with a CRS → store
+    under the AOI's `user_dem` prefix → return their storage keys. The Terrain
+    step passes these keys back as `user_dem_keys`; the DEM job stages them.
+    """
+    aoi, err = _owned_aoi(session, request, aoi_id)
+    if err:
+        return err
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    ups = request.FILES.getlist('file')
+    if not ups:
+        return JsonResponse({'error': 'attach at least one GeoTIFF'}, status=400)
+
+    from tethysapp.fimsim_gui.dem_upload import validate_dem_geotiff
+    from tethysapp.fimsim_gui.storage import build_key, get_storage
+    storage = get_storage()
+    dems = []
+    for up in ups:
+        with tempfile.NamedTemporaryFile(
+                suffix=Path(up.name).suffix or '.tif', delete=False) as tmp:
+            for chunk in up.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+        try:
+            reason = validate_dem_geotiff(tmp_path)
+            if reason:
+                return JsonResponse(
+                    {'error': f"'{up.name}': {reason}"}, status=400)
+            key = build_key(request.user.username, aoi.project_id, aoi.id,
+                            'user_dem', up.name)
+            with open(tmp_path, 'rb') as fh:
+                storage.save(key, fh)
+            dems.append({'key': key, 'name': up.name, 'bytes': up.size})
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+    return JsonResponse({'dems': dems})
 
 
 @controller(url='api/aois/{aoi_id}/lookup', name='api_aoi_lookup')
@@ -442,6 +521,18 @@ def api_step_submit(request, session, project_id, step_key):
         # per-AOI resource prechecks BEFORE anything is superseded or created
         guard_reason = None
         if step_key in ('dem', 'tdem'):
+            # BE17: uploaded-DEM keys must belong to THIS AOI (no cross-AOI refs)
+            dem_keys = merged_config.get('user_dem_keys')
+            if dem_keys:
+                from tethysapp.fimsim_gui.dem_upload import rejected_dem_keys
+                from tethysapp.fimsim_gui.storage import build_key
+                prefix = build_key(request.user.username, aoi.project_id,
+                                   aoi.id, 'user_dem') + '/'
+                if rejected_dem_keys(dem_keys, prefix):
+                    results.append({'aoi_id': aoi.id, 'submitted': False,
+                                    'reason': 'an uploaded DEM does not belong '
+                                              'to this area'})
+                    continue
             guard_reason = guards.check_dem_submit(
                 aoi, jt.merged(merged_config),
                 _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS))
@@ -584,7 +675,11 @@ def api_steprun_file(request, session, steprun_id, name):
 @controller(url='api/aois/{aoi_id}/zip', name='api_aoi_zip')
 @with_session
 def api_aoi_zip(request, session, aoi_id):
-    """Everything the AOI's current runs produced, one zip, foldered by step."""
+    """Zip the AOI's outputs, foldered by step.
+
+    GET: everything the AOI's current runs produced. POST {"files": [{run_id,
+    name}, ...]}: only those selected files (the "Download Selected" button).
+    """
     import io
     import zipfile
 
@@ -593,29 +688,47 @@ def api_aoi_zip(request, session, aoi_id):
     aoi, err = _owned_aoi(session, request, aoi_id)
     if err:
         return err
-    from tethysapp.fimsim_gui.models import STEP_KEYS
+    from tethysapp.fimsim_gui.models import STEP_KEYS, selected_manifest_entries
     from tethysapp.fimsim_gui.storage import get_storage
     storage = get_storage()
+
+    entries = None       # list of (arcname, key); None → the everything path
+    if request.method == 'POST':
+        try:
+            selection = (json.loads(request.body or '{}') or {}).get('files')
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'invalid JSON'}, status=400)
+        if not isinstance(selection, list) or not selection:
+            return JsonResponse({'error': 'no files selected'}, status=400)
+        entries = selected_manifest_entries(aoi, selection)
 
     buf = io.BytesIO()
     n = 0
     seen = set()  # manifests are cumulative — ship each file once, under the
     #               step that first produced it
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for step in STEP_KEYS:
-            run = aoi.current_step_run(step)
-            if not run or not isinstance(run.manifest, list):
-                continue
-            for m in run.manifest:
-                if m['name'] in seen or not storage.exists(m['key']):
+        if entries is not None:
+            for arcname, key in entries:
+                if storage.exists(key):
+                    with storage.open(key) as fh:
+                        zf.writestr(arcname, fh.read())
+                        n += 1
+        else:
+            for step in STEP_KEYS:
+                run = aoi.current_step_run(step)
+                if not run or not isinstance(run.manifest, list):
                     continue
-                seen.add(m['name'])
-                with storage.open(m['key']) as fh:
-                    zf.writestr(f"{step}/{m['name']}", fh.read())
-                    n += 1
+                for m in run.manifest:
+                    if m['name'] in seen or not storage.exists(m['key']):
+                        continue
+                    seen.add(m['name'])
+                    with storage.open(m['key']) as fh:
+                        zf.writestr(f"{step}/{m['name']}", fh.read())
+                        n += 1
     if not n:
         return JsonResponse({'error': 'no stored outputs for this area yet'}, status=404)
     buf.seek(0)
-    fname = sanitize_name(f"{aoi.project.name}_{aoi.name}") + '.zip'
+    suffix = '_selected' if entries is not None else ''
+    fname = sanitize_name(f"{aoi.project.name}_{aoi.name}") + suffix + '.zip'
     return FileResponse(buf, as_attachment=True, filename=fname,
                         content_type='application/zip')

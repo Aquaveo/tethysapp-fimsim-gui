@@ -6,6 +6,25 @@ export interface OutputMeta {
   description: string;
 }
 
+/** Bytes → a short "12.3 MB" / "48 kB" label (matches the Results table). */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 kB';
+  return bytes >= 1e6 ? `${(bytes / 1e6).toFixed(1)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} kB`;
+}
+
+/** Count + total bytes of the rows whose key is in `selected`. */
+export function summarizeSelection(
+  rows: { key: string; bytes: number }[], selected: ReadonlySet<string>,
+): { count: number; bytes: number } {
+  let count = 0;
+  let bytes = 0;
+  for (const r of rows) {
+    if (selected.has(r.key)) { count += 1; bytes += r.bytes; }
+  }
+  return { count, bytes };
+}
+
 /**
  * Keep only the step entries that belong to the active model. The Results view
  * for a deck-only model (TRITON) must not pick up a LISFLOOD `run` overlay or
@@ -105,3 +124,49 @@ export const fileProxyUrl = (runId: number, name: string, download = false) =>
 
 /** "Download all" zip of every stored output for one AOI. */
 export const aoiZipUrl = (aoiId: number) => `/apps/fimsim-gui/api/aois/${aoiId}/zip/`;
+
+/**
+ * FIMSIM-FE59 — Results step tabs. Files the `run` step produced are
+ * "Results"; everything else (terrain, roughness, boundaries, flow, settings —
+ * and the whole TRITON deck, which has no run step) is "Input Data".
+ */
+export function splitResultFiles<T extends { step: string }>(
+  files: T[],
+): { inputs: T[]; results: T[] } {
+  const inputs: T[] = [];
+  const results: T[] = [];
+  for (const f of files) (f.step === 'run' ? results : inputs).push(f);
+  return { inputs, results };
+}
+
+/** The zip endpoint's selection for files that may span several step runs. */
+export function zipSelection(
+  files: { runId: number; name: string }[],
+): { run_id: number; name: string }[] {
+  return files.map((f) => ({ run_id: f.runId, name: f.name }));
+}
+
+/** The zip endpoint's selection for EVERY output of one step run (FE49). */
+export function stepZipFiles(
+  runId: number, outputs: { name: string }[],
+): { run_id: number; name: string }[] {
+  return outputs.map((o) => ({ run_id: runId, name: o.name }));
+}
+
+/** `<area>_<suffix>.zip`, filesystem-safe (no spaces/brackets, no dangling _). */
+export function zipFilename(aoiName: string, suffix: string): string {
+  const safe = aoiName.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return `${safe}_${suffix}.zip`;
+}
+
+/** Hand a Blob to the browser as a file download. */
+export function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

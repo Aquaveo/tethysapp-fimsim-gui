@@ -62,6 +62,28 @@ def test_manning_bounds():
                for p in _problems("manning", {"lulc_year": 1802}))
 
 
+def test_manning_year_must_be_a_year_the_source_actually_publishes():
+    # Parvaneh (2026-09-23): the ESRI/MRLC services answer an unpublished year
+    # with a blank raster, not an error — so the app must refuse them. Esri
+    # Sentinel-2 = 2017–2025; NLCD = 2001,2004,2006,2008,2011,2013,2016,2019,2021.
+    assert _problems("manning", {"lulc_year": 2023}) == []          # published
+    assert any("lulc_year" in p for p in _problems("manning", {"lulc_year": 2026}))
+    assert any("lulc_year" in p for p in _problems("manning", {"lulc_year": 2016}))  # pre-Sentinel2
+    assert _problems("manning", {"lulc_download_source": "nlcd",
+                                 "nlcd_year": "2019"}) == []          # published
+    assert any("nlcd_year" in p for p in _problems(
+        "manning", {"lulc_download_source": "nlcd", "nlcd_year": "2020"}))  # gap year
+
+
+def test_tfric_year_validation_mirrors_manning():
+    assert _problems("tfric", {"lulc_year": 2020}) == []
+    assert any("lulc_year" in p for p in _problems("tfric", {"lulc_year": 2016}))
+    assert _problems("tfric", {"lulc_source": "download_nlcd",
+                               "nlcd_year": "2016"}) == []
+    assert any("nlcd_year" in p for p in _problems(
+        "tfric", {"lulc_source": "download_nlcd", "nlcd_year": "2005"}))
+
+
 def test_manning_mapping_shape():
     ok = {"manning_mapping": {"11": 0.03, "42": 0.11}}
     assert _problems("manning", ok) == []
@@ -190,10 +212,24 @@ def test_unlisted_lulc_class_default_is_the_confirmed_value():
     assert DEFAULT_MANNING_MAP["default"] == 0.045
 
 
-def test_run_timeout_and_snapshots():
-    assert any("solver_timeout_s" in p
-               for p in _problems("run", {"solver_timeout_s": 999999}))
+def test_run_budget_is_server_side_and_long_enough_for_real_runs():
+    # FIMSIM-FE50/BE20: the user-facing Time limit is gone. A 200–300 km² AOI
+    # takes ~3–4 h on CPU (Parvaneh), so the server budget must cover that,
+    # and the job-level deadline must sit ABOVE it so the solver's own
+    # "exceeded its budget" message is the one users see.
+    from tethysapp.fimsim_gui import jobs
+    jt = REGISTRY["run"]
+    assert "solver_timeout_s" in jt.server_only_keys
+    assert jt.defaults()["solver_timeout_s"] >= 6 * 3600
+    assert jobs.DEFAULT_TIMEOUT_S > jt.defaults()["solver_timeout_s"]
     assert any("keep_snapshots" in p
                for p in _problems("run", {"keep_snapshots": "maybe"}))
-    assert _problems("run", {"solver_timeout_s": 1800,
-                             "keep_snapshots": "true"}) == []
+    assert _problems("run", {"keep_snapshots": "true"}) == []
+
+
+def test_run_budget_env_override(monkeypatch):
+    from tethysapp.fimsim_gui.job_types import run_sim
+    monkeypatch.setenv("FIMSIM_RUN_TIMEOUT_S", "4000")
+    assert run_sim.run_timeout_s() == 4000
+    monkeypatch.setenv("FIMSIM_RUN_TIMEOUT_S", "garbage")
+    assert run_sim.run_timeout_s() == run_sim.RUN_TIMEOUT_DEFAULT_S

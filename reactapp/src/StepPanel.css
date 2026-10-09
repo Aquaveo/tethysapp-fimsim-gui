@@ -8,7 +8,27 @@
   align-items: start;
 }
 .sp-field { display: flex; flex-direction: column; gap: 0.25rem; }
-.sp-field-label { font-size: 0.82rem; font-weight: 600; }
+.sp-field-label { font-size: 0.82rem; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 0.35rem; }
+
+/* FE32 — ⓘ info tooltip on non-obvious fields */
+.sp-info {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1rem; height: 1rem; flex: none; border-radius: 50%;
+  border: 1px solid var(--color-primary); color: var(--color-primary-active);
+  font-size: 0.7rem; font-style: italic; font-weight: 700; line-height: 1;
+  font-family: Georgia, 'Times New Roman', serif; cursor: help;
+  user-select: none; position: relative;
+}
+.sp-info:hover, .sp-info:focus { background: var(--color-primary); color: #fff; outline: none; }
+.sp-info:hover::after, .sp-info:focus::after {
+  content: attr(data-tip);
+  position: absolute; left: 0; bottom: calc(100% + 6px);
+  width: max-content; max-width: 17rem; white-space: normal; text-align: left;
+  background: #1f2733; color: #fff; font: 400 0.75rem/1.4 inherit; font-style: normal;
+  padding: 0.45rem 0.6rem; border-radius: var(--radius-md); z-index: 30;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28); pointer-events: none;
+}
 .sp-field select, .sp-field input {
   padding: 0.45rem 0.6rem;
   border: 1.5px solid var(--color-border);
@@ -58,7 +78,18 @@
 .sp-progress-label { font-size: 0.78rem; color: var(--color-text-secondary); }
 .sp-outputs { list-style: none; margin: 0.4rem 0 0; padding: 0; font-size: 0.85rem;
   display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; }
-.sp-outputs a { color: var(--color-link); }
+.sp-outputs a { color: var(--color-link); text-decoration: none; }
+.sp-outputs a:hover { text-decoration: underline; }
+/* FE49 — per-step zip */
+.sp-outputs-bar { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.45rem; }
+.sp-outputs-zip {
+  border: 1.5px solid var(--color-border); border-radius: 999px;
+  background: var(--color-surface); color: var(--color-primary-active);
+  padding: 0.2rem 0.8rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  font-family: inherit;
+}
+.sp-outputs-zip:hover:not(:disabled) { background: var(--color-surface-alt); }
+.sp-outputs-zip:disabled { opacity: 0.6; cursor: default; }
 .sp-fail summary { cursor: pointer; font-size: 0.85rem; color: var(--color-error); }
 .sp-fail pre {
   white-space: pre-wrap; font-size: 0.75rem; background: var(--color-surface-alt);
@@ -69,3 +100,14 @@
 .hg-wrap { display: flex; flex-direction: column; gap: 0.2rem; margin-top: 0.5rem;
   border: 1px solid var(--color-surface-alt); border-radius: var(--radius-md);
   padding: 0.4rem 0.6rem 0.6rem; background: var(--color-surface); }
+
+/* BE17 — user DEM upload (Terrain step, per AOI) */
+.sp-dem-upload { display: flex; flex-wrap: wrap; align-items: center;
+  gap: 0.5rem; margin: 0.3rem 0; font-size: 0.85rem; }
+.sp-dem-btn { display: inline-block; padding: 0.2rem 0.7rem; border-radius: 999px;
+  border: 1.5px solid var(--color-primary); color: var(--color-primary-active);
+  cursor: pointer; font-weight: 600; }
+.sp-dem-btn:hover { background: var(--color-surface-alt); }
+.sp-dem-files { font-variant-numeric: tabular-nums; }
+.sp-dem-clear { margin-left: 0.4rem; border: none; background: none;
+  color: var(--color-error); cursor: pointer; font-size: 0.8rem; text-decoration: underline; }
