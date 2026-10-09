@@ -25,6 +25,7 @@ import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 
+
 # Job-level deadline. It used to be 2 h, which silently killed every 3–4 h
 # LISFLOOD run (bug-round 10-01 #1) regardless of the solver budget. Keep it
 # ABOVE run_sim's budget so the solver's own message is the one that fires.

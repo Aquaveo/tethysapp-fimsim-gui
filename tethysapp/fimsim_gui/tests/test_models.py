@@ -252,4 +252,5 @@ def test_ensure_project_model_column_is_idempotent_and_keeps_explicit_choices(en
             "INSERT INTO step_runs (aoi_id, step_key, status, superseded, config, created) VALUES "
             "(803, 'tdem', 'succeeded', false, '{}', now())"))
     assert ensure_project_model_column(engine) is False
-    assert session.execute(text("SELECT model FROM projects WHERE id=903")).scalar() == "lisflood-fp"
+    model = session.execute(text("SELECT model FROM projects WHERE id=903")).scalar()
+    assert model == "lisflood-fp"
