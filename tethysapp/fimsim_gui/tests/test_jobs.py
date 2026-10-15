@@ -125,3 +125,14 @@ def test_adapter_cancel_latches():
         a("orchestrator kept going")
     with pytest.raises(JobCancelled):
         a("and going")
+
+
+def test_nhd_comids_reads_whichever_id_column_the_service_returned():
+    # FIMSIM-BE25: the main river's NHDPlus COMIDs are the NWM feature IDs the
+    # Streamflow tool prefills (same column search as fimcore.flowline_mode)
+    pd = pytest.importorskip("pandas")
+    from tethysapp.fimsim_gui.jobs import nhd_comids
+    assert nhd_comids(pd.DataFrame({"COMID": [8781135, 8781135, 8781137.0]})) == [8781135, 8781137]
+    assert nhd_comids(pd.DataFrame({"nhdplusid": ["5", "x", None]})) == [5]
+    assert nhd_comids(pd.DataFrame({"geometry": [1]})) == []
+    assert nhd_comids(None) == [] and nhd_comids(pd.DataFrame()) == []

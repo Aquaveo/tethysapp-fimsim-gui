@@ -438,6 +438,31 @@ def submit_step(step_run, user, *, timeout_s: int = DEFAULT_TIMEOUT_S):
     return job
 
 
+#: NHD ID columns, in the order fimcore.flowline_mode searches them
+_NHD_ID_COLUMNS = ("COMID", "comid", "FEATUREID", "featureid",
+                   "NHDPlusID", "nhdplusid", "ID", "id")
+
+
+def nhd_comids(gdf) -> list:
+    """Unique NHDPlus COMIDs (= NWM feature IDs) of a flowline table, as
+    ints in row order; [] without a usable ID column (FIMSIM-BE25: the
+    Streamflow tool prefills its ID field from the main river's reaches)."""
+    if gdf is None or len(gdf) == 0:
+        return []
+    col = next((c for c in _NHD_ID_COLUMNS if c in gdf.columns), None)
+    if col is None:
+        return []
+    out = []
+    for value in gdf[col].tolist():
+        try:
+            comid = int(value)
+        except (TypeError, ValueError):
+            continue
+        if comid not in out:
+            out.append(comid)
+    return out
+
+
 # ── AOI context lookup (BE6): river + gages, network-bound → background job ──
 
 def run_aoi_lookup(db_url: str, aoi_id: int) -> dict:
@@ -493,6 +518,8 @@ def run_aoi_lookup(db_url: str, aoi_id: int) -> dict:
             "gages": gages or [],
             "flowlines": _as_geojson(flowlines_gdf),
             "main_river": _as_geojson(main_river_gdf, tolerance=0.0001),
+            # FIMSIM-BE25: the main river's NWM feature IDs (Streamflow prefill)
+            "reach_ids": nhd_comids(main_river_gdf),
         }
         aoi.lookup_status = "done"
         aoi.lookup_error = None
