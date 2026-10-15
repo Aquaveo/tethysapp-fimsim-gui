@@ -254,3 +254,18 @@ def test_ensure_project_model_column_is_idempotent_and_keeps_explicit_choices(en
     assert ensure_project_model_column(engine) is False
     model = session.execute(text("SELECT model FROM projects WHERE id=903")).scalar()
     assert model == "lisflood-fp"
+
+
+def test_input_data_tools_are_project_models_with_one_job_step_each():
+    # FIMSIM-BE25: each Preparing Input Data tool is its own project mode
+    # (desktop landing page parity) whose wizard has exactly one job step
+    from tethysapp.fimsim_gui.models import (
+        MODELS, STEP_KEYS, TOOL_MODELS, TOOL_STEP_FOR_MODEL, normalize_model,
+    )
+    assert TOOL_MODELS == ("dem-tool", "lulc-tool", "flowline-tool", "flow-tool")
+    for slug in TOOL_MODELS:
+        assert slug in MODELS
+        assert normalize_model(slug) == slug
+        assert TOOL_STEP_FOR_MODEL[slug] in STEP_KEYS
+    assert normalize_model(" DEM-Tool ") == "dem-tool"   # same normalisation as triton
+    assert normalize_model("dem_tool") is None            # the STEP key is not a model
