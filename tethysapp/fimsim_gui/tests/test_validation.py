@@ -261,3 +261,45 @@ def test_manning_hard_band_matches_the_frontend_constant():
     m = re.search(r"HARD_N\s*=\s*\{\s*min:\s*([\d.]+),\s*max:\s*([\d.]+)", ts)
     assert m, "HARD_N literal not found in manningRules.ts"
     assert (float(m.group(1)), float(m.group(2))) == (MANNING_N_MIN, MANNING_N_MAX)
+
+
+# ── shared helpers the tools reuse (FIMSIM-BE25) ─────────────────────────────
+
+def test_check_bool_accepts_only_real_booleans():
+    from tethysapp.fimsim_gui.job_types.registry import _check_bool
+    problems = []
+    _check_bool({"flag": True}, "flag", problems)
+    _check_bool({}, "flag", problems)                       # missing is fine
+    assert problems == []
+    _check_bool({"flag": "true"}, "flag", problems)        # JSON string, not bool
+    _check_bool({"flag": 1}, "flag", problems)
+    assert len(problems) == 2 and all("'flag' must be true or false" in p for p in problems)
+
+
+def test_check_window_is_the_bdy_rule_set():
+    from tethysapp.fimsim_gui.job_types.steps import _check_window
+    ok = {"start_dt": "2016-10-01T00:00", "end_dt": "2016-10-19T23:59"}
+    problems = []
+    _check_window(ok, problems, nwm_retro=True)
+    assert problems == []
+    problems = []
+    _check_window({"start_dt": "2024-01-01", "end_dt": "2024-01-05"}, problems, nwm_retro=True)
+    assert any("1979-02-01 to 2023-01-31" in p for p in problems)   # outside the retro
+    problems = []
+    _check_window({"start_dt": "2024-01-01", "end_dt": "2024-01-05"}, problems, nwm_retro=False)
+    assert problems == []                                            # USGS/forecast: fine
+    problems = []
+    _check_window({"start_dt": "2016-10-05", "end_dt": "2016-10-01"}, problems, nwm_retro=False)
+    assert any("empty" in p for p in problems)
+    problems = []
+    _check_window({"end_dt": "2016-10-01"}, problems, nwm_retro=False)
+    assert any("'start_dt' is required" in p for p in problems)
+
+
+def test_lulc_years_can_read_the_tools_sentinel2_key():
+    from tethysapp.fimsim_gui.job_types.steps import _check_lulc_years
+    problems = []
+    _check_lulc_years({"sentinel2_year": 2023}, problems, s2_key="sentinel2_year")
+    assert problems == []
+    _check_lulc_years({"sentinel2_year": 2016}, problems, s2_key="sentinel2_year")
+    assert len(problems) == 1 and "'sentinel2_year'" in problems[0]
