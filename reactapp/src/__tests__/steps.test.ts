@@ -1,7 +1,10 @@
 // reactapp/src/__tests__/steps.test.ts — FIMSIM-FE56: leaving the Run step
 // forward with no successful run asks for confirmation.
 import { describe, expect, it } from 'vitest';
-import { MODELS, headerModel, needsRunConfirm, stepDone } from '../steps';
+import {
+  CATEGORIES, MODELS, headerModel, isToolModel, modelBadgeClass, modelFromSlug,
+  modelsInCategory, needsRunConfirm, stepDone, wizardPath,
+} from '../steps';
 import type { ServerAoi } from '../api';
 
 const STEPS = MODELS['lisflood-fp'].steps;
@@ -73,5 +76,46 @@ describe('headerModel', () => {
   it('is the active model once a project is open', () => {
     expect(headerModel(29, 'triton')).toBe('triton');
     expect(headerModel(3, 'lisflood-fp')).toBe('lisflood-fp');
+  });
+});
+
+// FIMSIM-FE60 — the desktop landing page's two categories, as project modes.
+describe('MODELS categories', () => {
+  it('splits the six modes into the two desktop categories, input data first', () => {
+    expect(CATEGORIES.map((c) => c.id)).toEqual(['input-data', 'flood-mapping']);
+    expect(modelsInCategory('flood-mapping')).toEqual(['lisflood-fp', 'triton']);
+    expect(modelsInCategory('input-data'))
+      .toEqual(['dem-tool', 'lulc-tool', 'flowline-tool', 'flow-tool']);
+    expect(CATEGORIES[0].description)
+      .toBe('Download and process the geospatial data needed to configure a flood model.');
+  });
+
+  it('round-trips every tool slug through wizardPath / modelFromSlug', () => {
+    for (const m of modelsInCategory('input-data')) {
+      expect(modelFromSlug(m)).toBe(m);
+      expect(wizardPath({ id: 7, model: m })).toBe(`/new/7/${m}`);
+    }
+    expect(modelFromSlug('dem_tool')).toBe('lisflood-fp');   // a STEP key is not a slug
+  });
+
+  it('gives every tool a four-step wizard whose job step is the backend step key', () => {
+    const expected: Record<string, string> = {
+      'dem-tool': 'dem_tool', 'lulc-tool': 'lulc_tool',
+      'flowline-tool': 'flowline_tool', 'flow-tool': 'flow_tool',
+    };
+    for (const m of modelsInCategory('input-data')) {
+      const ids = MODELS[m].steps.map((s) => s.id);
+      expect(ids).toEqual(['project', 'aoi', expected[m], 'results']);
+      expect(MODELS[m].steps[3].label).toBe('Downloads');
+      expect(MODELS[m].runsOnPortal).toBe(true);
+      expect(isToolModel(m)).toBe(true);
+    }
+    expect(isToolModel('triton')).toBe(false);
+  });
+
+  it('colours badges by category: cyan runs-here, purple deck, green tool', () => {
+    expect(modelBadgeClass('lisflood-fp')).toBe('');
+    expect(modelBadgeClass('triton')).toBe(' is-deck');
+    expect(modelBadgeClass('flow-tool')).toBe(' is-tool');
   });
 });

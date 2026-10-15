@@ -5,7 +5,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ApiError, createProject, deleteProject, listProjects, type ServerProject } from './api';
-import { DEFAULT_MODEL, MODELS, modelFromSlug, wizardPath, type ModelId } from './steps';
+import {
+  CATEGORIES, DEFAULT_MODEL, MODELS, modelBadgeClass, modelFromSlug, modelsInCategory, wizardPath,
+  type ModelId,
+} from './steps';
 import './ProjectStep.css';
 
 export default function ProjectStep() {
@@ -57,19 +60,23 @@ export default function ProjectStep() {
         }}
       >
         <fieldset className="ps-models">
-          <legend className="ps-label">Model</legend>
-          {(Object.keys(MODELS) as ModelId[]).map((m) => (
-            <label key={m} className={'ps-model' + (m === model ? ' is-selected' : '')}>
-              <input type="radio" name="ps-model" value={m} checked={m === model}
-                     onChange={() => setModel(m)} />
-              <span className="ps-model-name">{MODELS[m].label}</span>
-              <span className="ps-model-note">
-                {MODELS[m].runsOnPortal
-                  ? 'Runs on the portal — results and flood maps here.'
-                  : 'Deck only — builds the input files to run on your own GPU/HPC.'}
-              </span>
-            </label>
-          ))}
+          <legend className="ps-label">What do you want to make?</legend>
+          <div className="ps-cats">
+            {CATEGORIES.map((c) => (
+              <div key={c.id} className={`ps-cat is-${c.id}`}>
+                <h4 className="ps-cat-title">{c.title}</h4>
+                <p className="ps-cat-desc">{c.description}</p>
+                {modelsInCategory(c.id).map((m) => (
+                  <label key={m} className={'ps-model' + (m === model ? ' is-selected' : '')}>
+                    <input type="radio" name="ps-model" value={m} checked={m === model}
+                           onChange={() => setModel(m)} />
+                    <span className="ps-model-name">{MODELS[m].label}</span>
+                    <span className="ps-model-note">{MODELS[m].note}</span>
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
         </fieldset>
         <label className="ps-label" htmlFor="ps-name">New project name</label>
         <div className="ps-create-row">
@@ -87,8 +94,8 @@ export default function ProjectStep() {
         </div>
         <p className="ps-hint">
           Everything the simulation needs — study areas, inputs, model files,
-          results — is stored under the project. The model is fixed per
-          project; start another project to use the other model.
+          results — is stored under the project. The mode is fixed per
+          project; start another project for a different model or tool.
         </p>
       </form>
 
@@ -106,7 +113,7 @@ export default function ProjectStep() {
               <button type="button" className="ps-item-main" onClick={() => navigate(wizardPath(p))}>
                 <span className="ps-item-name">
                   {p.name}
-                  <span className={'ps-model-tag' + (MODELS[modelFromSlug(p.model)].runsOnPortal ? '' : ' is-deck')}>
+                  <span className={'ps-model-tag' + modelBadgeClass(modelFromSlug(p.model))}>
                     {MODELS[modelFromSlug(p.model)].label}
                   </span>
                 </span>

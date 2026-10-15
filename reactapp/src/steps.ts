@@ -18,6 +18,10 @@ export type StepId =
   | 'tbc'
   | 'thyg'
   | 'tcfg'
+  | 'dem_tool'
+  | 'lulc_tool'
+  | 'flowline_tool'
+  | 'flow_tool'
   | 'results';
 
 export interface StepDef {
@@ -32,7 +36,22 @@ export interface StepDef {
   produces?: string;
 }
 
-export type ModelId = 'lisflood-fp' | 'triton';
+export type ModelId =
+  | 'lisflood-fp' | 'triton'
+  | 'dem-tool' | 'lulc-tool' | 'flowline-tool' | 'flow-tool';
+
+/** The desktop landing page's two categories (FIMSIM-FE60). */
+export type CategoryId = 'flood-mapping' | 'input-data';
+
+export interface ModelDef {
+  label: string;
+  steps: StepDef[];
+  /** true = the job steps run here and show results here */
+  runsOnPortal: boolean;
+  category: CategoryId;
+  /** one-line note under the name on the Project step card */
+  note: string;
+}
 
 const PROJECT_STEP: StepDef = {
   id: 'project',
@@ -146,10 +165,105 @@ const TRITON_STEPS: StepDef[] = [
   },
 ];
 
-export const MODELS: Record<ModelId, { label: string; steps: StepDef[]; runsOnPortal: boolean }> = {
-  'lisflood-fp': { label: 'LISFLOOD-FP', steps: LISFLOOD_STEPS, runsOnPortal: true },
-  triton: { label: 'TRITON', steps: TRITON_STEPS, runsOnPortal: false },
+// ── Preparing Input Data (desktop Track A, FIMSIM-FE60): each tool is one
+// job step between Area and Downloads; the step id IS the backend step key.
+const DOWNLOADS_STEP: StepDef = {
+  id: 'results',
+  label: 'Downloads',
+  title: 'Downloads',
+  blurb: 'Download the files this tool produced. Re-run the previous step with other options to replace them.',
 };
+
+const toolSteps = (options: StepDef): StepDef[] => [PROJECT_STEP, AOI_STEP, options, DOWNLOADS_STEP];
+
+const DEM_TOOL_STEPS = toolSteps({
+  id: 'dem_tool',
+  label: 'DEM',
+  title: 'DEM (elevation)',
+  blurb: 'Download USGS 3DEP or HAND elevation clipped to the study area, at the cell size and file format you choose.',
+  produces: 'DEM_<source>_<area>',
+});
+const LULC_TOOL_STEPS = toolSteps({
+  id: 'lulc_tool',
+  label: 'LULC & Manning',
+  title: "Land Cover & Manning's n",
+  blurb: "Download NLCD or Esri Sentinel-2 land cover for the area and, optionally, build the Manning's n roughness grid from the editable class table.",
+  produces: 'LULC_<area> + ManningN_<area>',
+});
+const FLOWLINE_TOOL_STEPS = toolSteps({
+  id: 'flowline_tool',
+  label: 'Flowline',
+  title: 'Flowline (NHD rivers & USGS gages)',
+  blurb: 'Save the main river and the full NHD reach network crossing the area, the USGS gages inside it, and the NWM feature IDs.',
+  produces: 'main_river_<area> …',
+});
+const FLOW_TOOL_STEPS = toolSteps({
+  id: 'flow_tool',
+  label: 'Streamflow',
+  title: 'Streamflow Data',
+  blurb: 'Download a discharge time series for NWM reaches or USGS gages — retrospective, forecast or observed — one CSV per ID.',
+  produces: 'one discharge CSV per ID',
+});
+
+export const MODELS: Record<ModelId, ModelDef> = {
+  'lisflood-fp': {
+    label: 'LISFLOOD-FP', category: 'flood-mapping', steps: LISFLOOD_STEPS, runsOnPortal: true,
+    note: 'Runs on the portal — results and flood maps here.',
+  },
+  triton: {
+    label: 'TRITON', category: 'flood-mapping', steps: TRITON_STEPS, runsOnPortal: false,
+    note: 'Deck only — builds the input files to run on your own GPU/HPC.',
+  },
+  'dem-tool': {
+    label: 'DEM', category: 'input-data', steps: DEM_TOOL_STEPS, runsOnPortal: true,
+    note: '3DEP · HAND · TIF / GPKG / ASC',
+  },
+  'lulc-tool': {
+    label: "LULC & Manning's n", category: 'input-data', steps: LULC_TOOL_STEPS, runsOnPortal: true,
+    note: 'NLCD · Sentinel-2 · Manning table',
+  },
+  'flowline-tool': {
+    label: 'Flowline', category: 'input-data', steps: FLOWLINE_TOOL_STEPS, runsOnPortal: true,
+    note: 'NHD flowlines · USGS gages',
+  },
+  'flow-tool': {
+    label: 'Streamflow Data', category: 'input-data', steps: FLOW_TOOL_STEPS, runsOnPortal: true,
+    note: 'NWM Retro / Forecast · USGS',
+  },
+};
+
+/** The two cards on the Project step — the desktop's copy, input data first. */
+export const CATEGORIES: { id: CategoryId; title: string; description: string }[] = [
+  {
+    id: 'input-data',
+    title: 'Preparing Input Data',
+    description: 'Download and process the geospatial data needed to configure a flood model.',
+  },
+  {
+    id: 'flood-mapping',
+    title: 'Flood Mapping',
+    description: 'Build a complete input package for a supported 2D flood simulation model.',
+  },
+];
+
+export function modelsInCategory(category: CategoryId): ModelId[] {
+  return (Object.keys(MODELS) as ModelId[]).filter((m) => MODELS[m].category === category);
+}
+
+export function isToolModel(model: ModelId): boolean {
+  return MODELS[model].category === 'input-data';
+}
+
+/**
+ * The CSS modifier for a model's badge / tag everywhere it appears (header,
+ * step card, project list): '' = cyan (runs here), ' is-deck' = purple
+ * (TRITON deck), ' is-tool' = green (Preparing Input Data, the desktop's
+ * card accent).
+ */
+export function modelBadgeClass(model: ModelId): '' | ' is-deck' | ' is-tool' {
+  if (isToolModel(model)) return ' is-tool';
+  return MODELS[model].runsOnPortal ? '' : ' is-deck';
+}
 
 export const DEFAULT_MODEL: ModelId = 'lisflood-fp';
 

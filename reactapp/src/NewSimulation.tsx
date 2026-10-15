@@ -18,6 +18,7 @@ import StepPanel from './StepPanel';
 import {
   MODELS, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
   type ModelId, type StepId,
+  modelBadgeClass,
 } from './steps';
 import './NewSimulation.css';
 
@@ -156,7 +157,7 @@ export default function NewSimulation() {
 
       <section className="ns-card" aria-labelledby="ns-title">
         <p className="ns-eyebrow">
-          <span className={'ns-model-badge' + (MODELS[model].runsOnPortal ? '' : ' is-deck')}>
+          <span className={'ns-model-badge' + modelBadgeClass(model)}>
             {MODELS[model].label}
           </span>
           Step {idx + 1} of {STEPS.length}
