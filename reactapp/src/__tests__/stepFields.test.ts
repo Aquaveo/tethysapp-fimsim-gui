@@ -64,6 +64,11 @@ describe('STEP_FIELDS consistency', () => {
       for (const f of fields) {
         for (const c of conds(f.showIf)) {
           const controller = fields.find((g) => g.key === c.key);
+          if (controller?.widget === 'checkbox') {
+            // a checkbox's value is a real boolean (FE62)
+            if (typeof c.value !== 'boolean') bad.push(`${step}.${f.key} → ${c.key}=${String(c.value)}`);
+            continue;
+          }
           const values = controller?.options?.map((o) => o.value) ?? [];
           if (!values.includes(c.value as string | number)) {
             bad.push(`${step}.${f.key} → ${c.key}=${String(c.value)}`);
@@ -126,5 +131,27 @@ describe('dem_tool fields (FIMSIM-FE61)', () => {
     expect(byKey.dem_res_m.widget).toBe('number');
     expect(byKey.dem_res_m.min).toBe(10);
     expect(byKey.out_format.options?.map((o) => o.value)).toEqual(['tif', 'gpkg', 'asc']);
+  });
+});
+
+describe('lulc_tool fields (FIMSIM-FE62)', () => {
+  const fields = STEP_FIELDS.lulc_tool;
+  const byKey = Object.fromEntries(fields.map((f) => [f.key, f]));
+  it('uses fimcore\'s source names and shows the matching year list', () => {
+    expect(byKey.lulc_source.options?.map((o) => o.value)).toEqual(['nlcd', 'sentinel2']);
+    expect(byKey.nlcd_year.showIf).toEqual({ key: 'lulc_source', value: 'nlcd' });
+    expect(byKey.sentinel2_year.showIf).toEqual({ key: 'lulc_source', value: 'sentinel2' });
+    expect(byKey.sentinel2_year.options?.map((o) => o.value)).toContain(2023);
+  });
+  it('snaps the cell size to the source\'s native resolution when the source changes', () => {
+    expect(byKey.cell_size_m.linkedDefault).toEqual(
+      { key: 'lulc_source', values: { nlcd: 30, sentinel2: 10 } });
+    expect(byKey.cell_size_m.min).toBe(10);
+  });
+  it('makes Manning optional with its own (shapefile-capable) format', () => {
+    expect(byKey.do_manning.widget).toBe('checkbox');
+    expect(byKey.manning_format.showIf).toEqual({ key: 'do_manning', value: true });
+    expect(byKey.manning_format.options?.map((o) => o.value)).toEqual(['tif', 'gpkg', 'asc', 'shp']);
+    expect(byKey.lulc_format.options?.map((o) => o.value)).toEqual(['tif', 'gpkg', 'asc']);
   });
 });

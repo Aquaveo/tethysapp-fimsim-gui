@@ -8,7 +8,7 @@ export interface Condition { key: string; value: unknown }
 export interface FieldSpec {
   key: string;
   label: string;
-  widget: 'select' | 'number' | 'text' | 'datetime' | 'date';
+  widget: 'select' | 'number' | 'text' | 'datetime' | 'date' | 'checkbox';
   options?: { value: string | number; label: string }[];
   help?: string;
   /** only show when another field has this value; an array means ALL must hold */
@@ -183,6 +183,12 @@ export function previewKind(stepKey: string): PreviewKind | null {
 export function manningTableSource(
   stepKey: string, get: (key: string) => unknown,
 ): 'esri' | 'nlcd' | null {
+  if (stepKey === 'lulc_tool') {
+    // FE62: the standalone tool keys the table off its do_manning checkbox
+    // and fimcore's own source names (nlcd | sentinel2)
+    if (get('do_manning') !== true) return null;
+    return String(get('lulc_source') || 'nlcd') === 'nlcd' ? 'nlcd' : 'esri';
+  }
   if (stepKey !== 'manning' && stepKey !== 'tfric') return null;
   if (get('fric_mode') !== 'varying') return null;
   const src = stepKey === 'manning'
@@ -498,5 +504,41 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       min: 10, max: 1000, step: 1, help: TOOL_CELL_HELP,
     },
     { key: 'out_format', label: 'File format', widget: 'select', options: RASTER_FORMAT_OPTIONS },
+  ],
+  lulc_tool: [
+    {
+      key: 'lulc_source', label: 'Land cover source', widget: 'select',
+      options: [
+        { value: 'nlcd', label: 'NLCD (USGS, 30 m, USA)' },
+        { value: 'sentinel2', label: 'Esri Sentinel-2 (10 m, global)' },
+      ],
+    },
+    {
+      key: 'nlcd_year', label: 'NLCD year', widget: 'select', options: NLCD_YEAR_OPTIONS,
+      showIf: { key: 'lulc_source', value: 'nlcd' },
+    },
+    {
+      key: 'sentinel2_year', label: 'Sentinel-2 year', widget: 'select',
+      options: SENTINEL2_YEAR_OPTIONS, showIf: { key: 'lulc_source', value: 'sentinel2' },
+    },
+    {
+      key: 'cell_size_m', label: 'Cell size (m)', widget: 'number',
+      min: 10, max: 1000, step: 1,
+      // desktop aoi_lulc_card: the source's native size when the source changes
+      linkedDefault: { key: 'lulc_source', values: { nlcd: 30, sentinel2: 10 } },
+      help: 'NLCD is published at 30 m and Sentinel-2 at 10 m; any other size is '
+        + 'resampled. ' + TOOL_CELL_HELP,
+    },
+    { key: 'lulc_format', label: 'Land cover format', widget: 'select', options: RASTER_FORMAT_OPTIONS },
+    {
+      key: 'do_manning', label: "Also build the Manning's n grid", widget: 'checkbox',
+      help: "Assigns a roughness value to every land-cover class from the table "
+        + 'below and writes it as a second file.',
+    },
+    {
+      key: 'manning_format', label: "Manning's n format", widget: 'select',
+      showIf: { key: 'do_manning', value: true },
+      options: [...RASTER_FORMAT_OPTIONS, { value: 'shp', label: 'Shapefile (.shp, polygonized)' }],
+    },
   ],
 };

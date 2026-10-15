@@ -204,7 +204,7 @@ export default function StepPanel({
       const merged: Record<string, unknown> = Object.fromEntries(
         Object.entries(coerced)
           .filter(([k, v]) => allowed.has(k) && v !== null && v !== ''));
-      for (const f of fields) {
+      for (const f of fields.filter(visible)) {
         if (f.required && !merged[f.key]) {
           throw new Error(`"${f.label}" is required.`);
         }
@@ -306,6 +306,14 @@ export default function StepPanel({
                 // show only the date part even if a full datetime is stored
                 value={String(value(f.key)).slice(0, 10)}
                 onChange={(e) => setConfig({ ...config, [f.key]: e.target.value })}
+              />
+            ) : f.widget === 'checkbox' ? (
+              <input
+                type="checkbox"
+                className="sp-checkbox"
+                checked={value(f.key) === true}
+                onChange={(e) => setConfig(applyLinkedDefaults(
+                  { ...config, [f.key]: e.target.checked }, fields, f.key, e.target.checked))}
               />
             ) : (
               <input

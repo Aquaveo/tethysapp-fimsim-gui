@@ -148,3 +148,13 @@ describe('outputMeta for the DEM tool (FIMSIM-FE61)', () => {
     expect(outputMeta('DEM_3DEP_Lumber.tif').label).toBe('Elevation model (GeoTIFF)');
   });
 });
+
+describe('outputMeta for the LULC & Manning tool (FIMSIM-FE62)', () => {
+  it('describes the non-GeoTIFF land-cover and roughness exports', () => {
+    expect(outputMeta('LULC_Lumber.gpkg').label).toBe('Land cover (GeoPackage)');
+    expect(outputMeta('LULC_Lumber.asc').label).toBe('Land cover (ASCII grid)');
+    expect(outputMeta('ManningN_Lumber.shp').label).toBe("Manning's n (shapefile)");
+    expect(outputMeta('ManningN_Lumber.asc').label).toBe("Manning's n (ASCII grid)");
+    expect(outputMeta('ManningN_Lumber.dbf').label).toBe('Shapefile component');
+  });
+});
