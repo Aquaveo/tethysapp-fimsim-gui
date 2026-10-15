@@ -158,3 +158,14 @@ describe('outputMeta for the LULC & Manning tool (FIMSIM-FE62)', () => {
     expect(outputMeta('ManningN_Lumber.dbf').label).toBe('Shapefile component');
   });
 });
+
+describe('outputMeta for the Flowline tool (FIMSIM-FE63)', () => {
+  it('names each product the tool can save', () => {
+    expect(outputMeta('main_river_Lumber.shp').label).toBe('Main river');
+    expect(outputMeta('main_river_Lumber.tif').label).toBe('Main river');
+    expect(outputMeta('all_flowlines_Lumber.gpkg').label).toBe('All flowlines');
+    expect(outputMeta('usgs_gages_Lumber.csv').label).toBe('USGS gages (CSV)');
+    expect(outputMeta('feature_ids_Lumber.csv').label).toBe('NWM feature IDs (CSV)');
+    expect(outputMeta('preview_features.geojson').label).toBe('Map preview (GeoJSON)');
+  });
+});

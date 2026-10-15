@@ -411,7 +411,10 @@ export default function StepPanel({
                     <HydrographChart run={run} />
                   )}
                   {run.status === 'succeeded' && preview === 'boundary' && (
-                    <BoundaryPreview aoi={a} run={run} defaultOpen={aois.length === 1} />
+                    <BoundaryPreview
+                      aoi={a} run={run} defaultOpen={aois.length === 1}
+                      variant={stepKey === 'flowline_tool' ? 'flowlines' : 'boundaries'}
+                    />
                   )}
                   {run.status === 'succeeded' && preview === 'dem' && (
                     <RasterPreview aoi={a} run={run} kind="dem"

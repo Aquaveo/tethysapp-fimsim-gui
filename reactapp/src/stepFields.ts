@@ -155,6 +155,14 @@ export const RASTER_FORMAT_OPTIONS = [
   { value: 'asc', label: 'ASCII grid (.asc)' },
 ];
 
+/** fimcore.flowline_mode per-output formats (desktop aoi_flowline_card). */
+export const FLOWLINE_FORMAT_OPTIONS = [
+  { value: 'shp', label: 'Shapefile (.shp)' },
+  { value: 'gpkg', label: 'GeoPackage (.gpkg)' },
+  { value: 'tif', label: 'TIF raster (.tif)' },
+  { value: 'csv', label: 'CSV with WKT geometry (.csv)' },
+];
+
 /**
  * Which preview a succeeded run of a step shows (StepPanel keys its preview
  * components off this, so the tools (FE61–FE64) reuse the LISFLOOD/TRITON
@@ -539,6 +547,32 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       key: 'manning_format', label: "Manning's n format", widget: 'select',
       showIf: { key: 'do_manning', value: true },
       options: [...RASTER_FORMAT_OPTIONS, { value: 'shp', label: 'Shapefile (.shp, polygonized)' }],
+    },
+  ],
+  flowline_tool: [
+    { key: 'save_main_river', label: 'Main river (NHD highest stream order)', widget: 'checkbox' },
+    {
+      key: 'main_format', label: 'Main river format', widget: 'select',
+      showIf: { key: 'save_main_river', value: true }, options: FLOWLINE_FORMAT_OPTIONS,
+    },
+    { key: 'save_all_flowlines', label: 'All flowlines (full NHD reach set)', widget: 'checkbox' },
+    {
+      key: 'all_format', label: 'Flowlines format', widget: 'select',
+      showIf: { key: 'save_all_flowlines', value: true }, options: FLOWLINE_FORMAT_OPTIONS,
+    },
+    {
+      key: 'cell_size_m', label: 'Cell size for TIF (m)', widget: 'number',
+      min: 10, max: 10000, step: 1,
+      help: 'Only used when a TIF raster is chosen: the lines are burned into a '
+        + '1 / 0 grid at this cell size.',
+    },
+    {
+      key: 'save_gages_csv', label: 'USGS gages as CSV', widget: 'checkbox',
+      help: 'Site number, name, coordinates and drainage area of every gage inside the area.',
+    },
+    {
+      key: 'save_feature_ids', label: 'NWM feature IDs as CSV', widget: 'checkbox',
+      help: 'The NHDPlus COMID of every reach \u2014 paste them into the Streamflow Data tool.',
     },
   ],
 };

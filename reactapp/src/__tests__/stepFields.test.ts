@@ -155,3 +155,16 @@ describe('lulc_tool fields (FIMSIM-FE62)', () => {
     expect(byKey.lulc_format.options?.map((o) => o.value)).toEqual(['tif', 'gpkg', 'asc']);
   });
 });
+
+describe('flowline_tool fields (FIMSIM-FE63)', () => {
+  const byKey = Object.fromEntries(STEP_FIELDS.flowline_tool.map((f) => [f.key, f]));
+  it('has an on/off box per output and a format next to each line output', () => {
+    for (const k of ['save_main_river', 'save_all_flowlines', 'save_gages_csv', 'save_feature_ids']) {
+      expect(byKey[k].widget).toBe('checkbox');
+    }
+    expect(byKey.main_format.showIf).toEqual({ key: 'save_main_river', value: true });
+    expect(byKey.all_format.showIf).toEqual({ key: 'save_all_flowlines', value: true });
+    expect(byKey.main_format.options?.map((o) => o.value)).toEqual(['shp', 'gpkg', 'tif', 'csv']);
+    expect(byKey.cell_size_m.min).toBe(10);
+  });
+});
