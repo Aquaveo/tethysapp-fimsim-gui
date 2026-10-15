@@ -133,10 +133,67 @@ def test_lulc_tool_passes_the_desktop_dict_and_stashes_the_preview_source(tmp_pa
     (_, features, kw), = calls
     cfg, = kw["per_aoi_configs"]
     assert cfg["lulc_source"] == "sentinel2" and cfg["do_manning"] is True   # default kept
-    assert cfg["manning_mapping"] == {"2": 0.1}
+    assert cfg["manning_mapping"]["2"] == 0.1
     assert cfg["cell_size_m"] == 30 and cfg["lulc_format"] == "tif"
     assert ctx["_preview_lulc_source"] == "sentinel2"
-    assert ctx["_preview_manning_mapping"] == {"2": 0.1}
+    assert ctx["_preview_manning_mapping"] == cfg["manning_mapping"]
+
+
+def _lulc_mapping_sent_to_fimcore(tmp_path, monkeypatch, config):
+    import fimcore.orchestrate as orch
+    calls = []
+    monkeypatch.setattr(orch, "run_lulc_mode",
+                        lambda project_dir, features, **kw: calls.append(kw))
+    jt = REGISTRY["lulc_tool"]
+    ctx_path, ctx = jt.prepare(tmp_path, _square_aoi_geojson(tmp_path), lambda *_: None)
+    jt.execute(ctx_path, ctx, config, lambda *_: None)
+    (kw,) = calls
+    (cfg,) = kw["per_aoi_configs"]
+    return cfg["manning_mapping"], ctx
+
+
+def test_lulc_tool_sends_every_class_default_when_the_table_was_not_edited(
+        tmp_path, monkeypatch):
+    # C2: fimcore stamps only the listed classes over a flat 0.045 — the tool
+    # must send the full table, not nothing
+    from fimcore.nlcd import NLCD_MANNING
+    mapping, ctx = _lulc_mapping_sent_to_fimcore(tmp_path, monkeypatch, {})
+    expected = {str(code): vals[3] for code, vals in NLCD_MANNING.items()}
+    expected["default"] = 0.045
+    assert mapping == expected
+    assert ctx["_preview_manning_mapping"] == mapping
+
+
+def test_lulc_tool_overlays_a_partial_edit_on_the_class_defaults(tmp_path, monkeypatch):
+    from fimcore.nlcd import NLCD_MANNING
+    submitted = {"default": 0.045, "41": 0.12}
+    mapping, ctx = _lulc_mapping_sent_to_fimcore(
+        tmp_path, monkeypatch, {"manning_mapping": submitted})
+    assert mapping["41"] == 0.12
+    for code, (_name, _lo, _hi, dflt) in NLCD_MANNING.items():
+        if code != 41:
+            assert mapping[str(code)] == dflt
+    assert mapping["default"] == 0.045
+    assert ctx["_preview_manning_mapping"] == mapping
+    assert submitted == {"default": 0.045, "41": 0.12}     # caller's dict untouched
+
+
+def test_lulc_tool_sentinel2_defaults_skip_classes_without_a_value(tmp_path, monkeypatch):
+    from fimcore.nlcd import SENTINEL2_MANNING
+    mapping, _ = _lulc_mapping_sent_to_fimcore(
+        tmp_path, monkeypatch, {"lulc_source": "sentinel2"})
+    assert "10" not in mapping                                # Clouds: no n
+    assert mapping["2"] == SENTINEL2_MANNING[2][3]
+    assert set(mapping) == {str(c) for c, v in SENTINEL2_MANNING.items()
+                            if v[3] is not None} | {"default"}
+
+
+def test_lulc_tool_transform_returns_a_copy():
+    jt = REGISTRY["lulc_tool"]
+    cfg = jt.merged({"manning_mapping": {"41": 0.12}})
+    before = json.loads(json.dumps(cfg))
+    out = jt.transform_config(cfg, {})
+    assert out is not cfg and cfg == before
 
 
 # ── Flowline tool ────────────────────────────────────────────────────────────
@@ -232,6 +289,16 @@ def test_flow_tool_validation_retro_and_usgs():
     assert any("8–15 digits" in p for p in _problems("flow_tool", {**usgs, "ids": "2134170"}))
     assert any("'ids' is required" in p for p in _problems("flow_tool", {"source": "usgs"}))
     assert any("interval_hours" in p for p in _problems("flow_tool", {**usgs, "interval_hours": 2}))
+
+
+def test_flow_tool_rejects_sub_hourly_intervals_for_the_hourly_retrospective():
+    # M2: NWM retrospective is hourly; 15/30 min apply to USGS gages only
+    retro = {"source": "nwm_retro", "ids": "8781135",
+             "start_dt": "2016-10-01T00:00", "end_dt": "2016-10-19T23:59"}
+    for sub in (0.25, 0.5):
+        assert any("hourly" in p
+                   for p in _problems("flow_tool", {**retro, "interval_hours": sub}))
+    assert _problems("flow_tool", {**retro, "interval_hours": 1}) == []
 
 
 def test_flow_tool_rejects_non_numeric_ids():

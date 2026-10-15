@@ -109,6 +109,23 @@ class DemToolJobType(ToolMixin, DEMStepJobType):
         return outputs
 
 
+#: create_manning_from_lulc's fill for pixels no class covers
+MANNING_FALLBACK_N = 0.045
+
+
+def full_manning_mapping(lulc_source, submitted=None) -> dict:
+    """Every class default of the source's Manning table plus the fallback,
+    with the user's (possibly partial) edits overlaid — the ManningTable
+    only submits a mapping after an edit, and only what was edited."""
+    from fimcore.nlcd import NLCD_MANNING, SENTINEL2_MANNING
+    table = NLCD_MANNING if lulc_source == "nlcd" else SENTINEL2_MANNING
+    mapping = {str(code): dflt for code, (_name, _lo, _hi, dflt) in table.items()
+               if dflt is not None}
+    mapping["default"] = MANNING_FALLBACK_N
+    mapping.update({str(k): v for k, v in (submitted or {}).items()})
+    return mapping
+
+
 class LulcToolJobType(ToolMixin, StepJobType):
     """LULC & Manning's n tool: NLCD or Esri Sentinel-2 land cover in the
     chosen format, optionally the Manning's n grid from the editable table
@@ -142,12 +159,17 @@ class LulcToolJobType(ToolMixin, StepJobType):
         return problems
 
     def transform_config(self, cfg: dict, ctx) -> dict:
-        """The desktop card's per-AOI dict, verbatim (run_lulc_mode keys);
-        stash what the preview needs (collect() doesn't see the config)."""
+        """The desktop card's per-AOI dict (run_lulc_mode keys) as a copy,
+        with the FULL Manning mapping (fimcore stamps only the listed
+        classes over a flat 0.045); stash what the preview needs
+        (collect() doesn't see the config)."""
+        out = dict(cfg)
+        out["manning_mapping"] = full_manning_mapping(
+            cfg.get("lulc_source", "nlcd"), cfg.get("manning_mapping"))
         if ctx is not None:
-            ctx["_preview_lulc_source"] = cfg.get("lulc_source", "nlcd")
-            ctx["_preview_manning_mapping"] = cfg.get("manning_mapping")
-        return cfg
+            ctx["_preview_lulc_source"] = out.get("lulc_source", "nlcd")
+            ctx["_preview_manning_mapping"] = dict(out["manning_mapping"])
+        return out
 
     def execute(self, ctx_path, ctx, config, log_fn):
         from fimcore.orchestrate import run_lulc_mode
@@ -277,6 +299,13 @@ class FlowToolJobType(ToolMixin, StepJobType):
         _check_choice(config, "forecast_range", FORECAST_RANGES, problems)
         _check_choice(config, "forecast_hour", FORECAST_CYCLES, problems)
         source = config.get("source", "nwm_retro")
+        try:
+            sub_hourly = float(config.get("interval_hours", 1)) < 1
+        except (TypeError, ValueError):
+            sub_hourly = False   # _check_choice already reported it
+        if source == "nwm_retro" and sub_hourly:
+            problems.append("'interval_hours' must be 1 hour or more for the NWM "
+                            "retrospective (it is hourly; 15/30 min apply to USGS gages)")
 
         ids = split_ids(config.get("ids"))
         if not ids:

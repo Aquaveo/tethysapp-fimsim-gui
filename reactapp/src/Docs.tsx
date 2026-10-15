@@ -281,8 +281,8 @@ export default function Docs() {
           <p>
             USGS 3DEP (1/3 arc-second, ≈ 10 m) or HAND (height above nearest
             drainage, UT Austin, by HUC6) clipped to the area, at any cell size
-            from 10 m up, as GeoTIFF, GeoPackage or ESRI ASCII grid. Output:
-            <code>DEM_3DEP_&lt;area&gt;.&lt;ext&gt;</code> or
+            from 10 m up, as GeoTIFF, GeoPackage or ESRI ASCII grid. Output:{' '}
+            <code>DEM_3DEP_&lt;area&gt;.&lt;ext&gt;</code> or{' '}
             <code>DEM_HAND_…</code>, with the terrain preview.
           </p>
           <h3>LULC &amp; Manning&apos;s n</h3>
@@ -291,7 +291,7 @@ export default function Docs() {
             published year, in GeoTIFF / GeoPackage / ASCII, and optionally the
             Manning&apos;s n grid built from the editable class table (same
             rules as the Roughness step: one hard band 0.01–0.15, per-class
-            ranges are guidance). Outputs: <code>LULC_&lt;area&gt;</code> and
+            ranges are guidance). Outputs: <code>LULC_&lt;area&gt;</code> and{' '}
             <code>ManningN_&lt;area&gt;</code> (the latter also as a
             polygonized shapefile), with the land-cover and roughness previews
             and the class breakdown.
@@ -308,12 +308,13 @@ export default function Docs() {
           <h3>Streamflow Data</h3>
           <p>
             A discharge time series per ID: NWM retrospective (1979-02 to
-            2023-01, hourly, any interval from 30 min), NWM forecast (archived
+            2023-01, hourly, any interval from 1 h), NWM forecast (archived
             from 2018-09-17; short / medium / long range, issue date, cycle),
             or a USGS gage (15-minute observations, any interval from 15 min).
             The Area step stays so the lookup can prefill the IDs — the gage
-            numbers for USGS, the main river&apos;s reach IDs for NWM — and
-            you can type or paste any others. Output: one
+            numbers for USGS, the main river&apos;s inflow reach for NWM (the
+            Flowline tool&apos;s feature-ID CSV lists every reach) — and you
+            can type or paste any others. Output: one{' '}
             <code>&lt;source&gt;_&lt;id&gt;.csv</code> per ID
             (<code>time_hours</code>, <code>discharge_cms</code>), plotted on
             the step.

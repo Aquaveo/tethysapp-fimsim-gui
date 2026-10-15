@@ -590,8 +590,9 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'ids', label: 'IDs', widget: 'text', required: true,
       help: 'NWM feature IDs (NHDPlus COMIDs) or USGS gage numbers, comma or space '
-        + 'separated. Prefilled from the area lookup when known — edit freely. '
-        + 'One CSV is written per ID.',
+        + 'separated. Prefilled from the area lookup when known — the gages for '
+        + "USGS, the main river's inflow reach for NWM (every reach is in the "
+        + "Flowline tool's feature-ID CSV) — edit freely. One CSV is written per ID.",
     },
     {
       key: 'start_dt', label: 'Start (date)', widget: 'date', required: true,
@@ -609,8 +610,9 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 1, label: '1 h' }, { value: 3, label: '3 h' }, { value: 6, label: '6 h' },
         { value: 12, label: '12 h' }, { value: 24, label: '24 h' },
       ],
-      help: 'The NWM retrospective is hourly; USGS gages report every 15 minutes. '
-        + 'Coarser intervals average the readings.',
+      help: 'The NWM retrospective is hourly, so pick 1 h or more for it; 15 and 30 '
+        + 'min apply to USGS gages, which report every 15 minutes. Coarser '
+        + 'intervals average the readings.',
     },
     {
       key: 'forecast_range', label: 'Forecast range', widget: 'select',

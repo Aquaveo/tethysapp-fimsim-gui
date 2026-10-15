@@ -7,12 +7,15 @@ import type { ServerAoi } from './api';
 
 export type FlowSource = 'nwm_retro' | 'nwm_forecast' | 'usgs';
 
-/** Gage numbers for USGS, the main river's NWM reach IDs otherwise; '' when
- *  the lookup has none (AOIs looked up before BE25 have no reach_ids). */
+/** Gage numbers for USGS; for NWM only the main river's inflow reach —
+ *  reach_ids run upstream → downstream, so the first one (what the Flow Data
+ *  step resolves). '' when the lookup has none (AOIs looked up before BE25
+ *  have no reach_ids). */
 export function prefillIds(aoi: Pick<ServerAoi, 'lookup'>, source: FlowSource): string {
   const lookup = aoi.lookup ?? {};
   if (source === 'usgs') return (lookup.gages ?? []).map((g) => g.site_no).join(', ');
-  return (lookup.reach_ids ?? []).map(String).join(', ');
+  const inflow = (lookup.reach_ids ?? [])[0];
+  return inflow === undefined ? '' : String(inflow);
 }
 
 /** Re-seed only an untouched field or one still holding the previous seed —

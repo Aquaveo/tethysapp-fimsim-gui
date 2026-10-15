@@ -12,10 +12,12 @@ const aoi = {
 };
 
 describe('prefillIds', () => {
-  it('suggests the gage numbers for USGS and the main-river reaches for NWM', () => {
+  it('suggests the gage numbers for USGS and only the inflow reach for NWM', () => {
     expect(prefillIds(aoi, 'usgs')).toBe('02134170, 02134500');
-    expect(prefillIds(aoi, 'nwm_retro')).toBe('8781135, 8781137');
-    expect(prefillIds(aoi, 'nwm_forecast')).toBe('8781135, 8781137');
+    // reach_ids run upstream → downstream; NWM seeds the first (the inflow
+    // reach the Flow Data step resolves), more come from the Flowline tool
+    expect(prefillIds(aoi, 'nwm_retro')).toBe('8781135');
+    expect(prefillIds(aoi, 'nwm_forecast')).toBe('8781135');
   });
   it('is empty when the lookup has nothing (older AOIs lack reach_ids)', () => {
     expect(prefillIds({ lookup: { gages: [] } }, 'nwm_retro')).toBe('');
