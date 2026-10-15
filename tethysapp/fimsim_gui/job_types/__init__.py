@@ -7,6 +7,9 @@ from tethysapp.fimsim_gui.job_types.steps_triton import (
     TritonBCJobType, TritonCfgJobType, TritonDEMJobType,
     TritonFrictionJobType, TritonHydroJobType,
 )
+from tethysapp.fimsim_gui.job_types.steps_tools import (
+    DemToolJobType, FlowToolJobType, FlowlineToolJobType, LulcToolJobType,
+)
 
 REGISTRY = {
     jt.step_key: jt
@@ -17,5 +20,7 @@ REGISTRY = {
         # TRITON (deck generation only — desktop parity)
         TritonDEMJobType(), TritonFrictionJobType(), TritonBCJobType(),
         TritonHydroJobType(), TritonCfgJobType(),
+        # Preparing Input Data tools (desktop Track A — FIMSIM-BE25)
+        DemToolJobType(), LulcToolJobType(), FlowlineToolJobType(), FlowToolJobType(),
     )
 }

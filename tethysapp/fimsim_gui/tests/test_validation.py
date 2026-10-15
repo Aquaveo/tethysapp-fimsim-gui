@@ -15,6 +15,9 @@ def _problems(step, config):
 REQUIRED_INPUT = {
     "bdy": {"start_dt": "2016-10-05T00:00", "end_dt": "2016-10-15T00:00"},
     "thyg": {"start_dt": "2016-10-05T00:00", "end_dt": "2016-10-15T00:00"},
+    # the Streamflow tool has no sensible default ID list / window either
+    "flow_tool": {"ids": "02134170", "start_dt": "2016-10-01T00:00",
+                  "end_dt": "2016-10-19T23:59"},
 }
 
 

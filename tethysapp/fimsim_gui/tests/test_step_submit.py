@@ -9,8 +9,7 @@ from tethysapp.fimsim_gui.models import STEP_KEYS
 
 
 def test_registry_covers_the_wizard_steps():
-    assert set(REGISTRY) == {"dem", "manning", "bci", "bdy", "par", "run",
-                             "tdem", "tfric", "tbc", "thyg", "tcfg"}
+    assert set(REGISTRY) == set(STEP_KEYS)
     # TRITON DAG
     assert REGISTRY["tdem"].requires == ()
     assert REGISTRY["tfric"].requires == ("tdem",)
