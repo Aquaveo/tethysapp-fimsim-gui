@@ -77,7 +77,10 @@ def write_dem_preview(ctx, outputs, log_fn=lambda *_: None):
     ensure_proj_data()
 
     folder = Path(ctx["aoi_features"][0]["folder_path"])
-    tif = next(iter(sorted(folder.glob("DEM_*.tif"))), None)
+    # the DEM tool (BE25) may leave only a GeoPackage or ASCII grid behind
+    # (fimcore deletes its intermediate GeoTIFF after the export)
+    tif = next((p for pat in ("DEM_*.tif", "DEM_*.asc", "DEM_*.gpkg")
+                for p in sorted(folder.glob(pat))), None)
     if tif is None:
         return None
     with rasterio.open(tif) as src:
@@ -284,4 +287,49 @@ def write_boundary_preview(ctx, outputs, log_fn=lambda *_: None):
         "features": features,
     }))
     log_fn(f"preview: boundary map ({len(features)} feature(s))")
+    return out
+
+
+def write_flowline_preview(main_river_gdf, flowlines_gdf, gages, out_path,
+                           log_fn=lambda *_: None):
+    """preview_features.geojson for the Flowline tool (FIMSIM-BE25): the
+    saved main river (kind main_river), the saved NHD reaches (kind flowline)
+    and the USGS gages (kind gage, numbered like the Area step's map), all
+    WGS84. Returns the path, or None when there is nothing to draw."""
+    from shapely.geometry import mapping
+
+    features = []
+
+    def _lines(gdf, kind, tolerance):
+        if gdf is None or len(gdf) == 0:
+            return
+        g = gdf.to_crs(4326) if gdf.crs and gdf.crs.to_epsg() != 4326 else gdf
+        for geom in g.geometry:
+            if geom is None or geom.is_empty:
+                continue
+            features.append({
+                "type": "Feature", "properties": {"kind": kind},
+                "geometry": mapping(geom.simplify(tolerance)),
+            })
+
+    _lines(flowlines_gdf, "flowline", 0.0002)
+    _lines(main_river_gdf, "main_river", 0.0001)
+    for i, g in enumerate(gages or [], 1):
+        lat, lon = g.get("lat"), g.get("lon")
+        if lat is None or lon is None:
+            continue
+        features.append({
+            "type": "Feature",
+            "properties": {"kind": "gage", "num": str(i),
+                           "site_no": str(g.get("site_no", "")),
+                           "name": str(g.get("station_nm", ""))},
+            "geometry": {"type": "Point", "coordinates": [float(lon), float(lat)]},
+        })
+    if not features:
+        return None
+    out = Path(out_path)
+    out.write_text(json.dumps({
+        "type": "FeatureCollection", "style": BOUNDARY_STYLE, "features": features,
+    }))
+    log_fn(f"preview: flowline map ({len(features)} feature(s))")
     return out
