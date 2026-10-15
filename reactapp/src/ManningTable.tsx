@@ -4,14 +4,10 @@
 // server (fimcore's own tables) so UI and rasterization can't drift; the
 // user's edits become the `manning_mapping` passed to the Roughness step.
 import { useEffect, useMemo, useState } from 'react';
+import { HARD_N, clampHard, rowWarning, warningCount, type ClassRange } from './manningRules';
 import './ManningTable.css';
 
-interface ClassRow {
-  label: string;
-  min: number;
-  max: number;
-  default: number;
-}
+type ClassRow = ClassRange;
 
 type Tables = Record<string, Record<string, ClassRow>> & { fallback_default?: number };
 
@@ -44,14 +40,16 @@ export default function ManningTable({ source, value, onChange }: Props) {
   const fallback = Number(tables?.fallback_default ?? 0.045);
 
   const current = (code: string, row: ClassRow) =>
-    value?.[code] ?? row.default;
+    value?.[code] ?? row.default ?? fallback;
 
-  const setValue = (code: string, row: ClassRow, raw: string) => {
+  // BE15: an edit is pinned to the HARD band only; the class's own literature
+  // range is guidance (FE52 warns, never blocks)
+  const setValue = (code: string, raw: string) => {
     const n = Number(raw);
     if (!Number.isFinite(n)) return;
-    const clamped = Math.min(row.max, Math.max(row.min, n));
-    onChange({ default: fallback, ...(value ?? {}), [code]: clamped });
+    onChange({ default: fallback, ...(value ?? {}), [code]: clampHard(n) });
   };
+  const warnings = warningCount(value, tables?.[source] ?? {});
 
   const reset = () => onChange({ default: fallback });
   const edited = value && Object.keys(value).some(
@@ -80,30 +78,43 @@ export default function ManningTable({ source, value, onChange }: Props) {
             {rows.map(([code, row]) => {
               const v = current(code, row);
               const changed = v !== row.default;
+              const warn = changed ? rowWarning(v, row) : null;
               return (
-                <tr key={code} className={changed ? 'is-edited' : ''}>
+                <tr key={code}
+                    className={(changed ? 'is-edited' : '') + (warn ? ' is-warn' : '')}>
                   <td className="mt-code">{code}</td>
                   <td>{row.label}</td>
-                  <td className="mt-range">{row.min.toFixed(3)}</td>
-                  <td>
+                  <td className="mt-range">{row.min?.toFixed(3) ?? '—'}</td>
+                  <td className="mt-cell">
                     <input
                       type="number"
                       value={v}
-                      min={row.min} max={row.max} step={0.001}
-                      onChange={(e) => setValue(code, row, e.target.value)}
+                      min={HARD_N.min} max={HARD_N.max} step={0.001}
+                      onChange={(e) => setValue(code, e.target.value)}
                       aria-label={`Manning's n for ${row.label}`}
+                      aria-invalid={warn ? true : undefined}
+                      title={warn ?? undefined}
                     />
+                    {warn && <span className="mt-warn-icon" role="img" aria-label="warning">⚠️</span>}
                   </td>
-                  <td className="mt-range">{row.max.toFixed(3)}</td>
+                  <td className="mt-range">{row.max?.toFixed(3) ?? '—'}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      {warnings > 0 && (
+        <p className="mt-warn-note" role="status">
+          ⚠️ {warnings} class{warnings === 1 ? '' : 'es'} outside the recommended
+          literature range — this will affect your results. You can still run.
+        </p>
+      )}
       <p className="mt-muted">
-        Values are clamped to the literature range per class; unlisted classes
-        use {fallback.toFixed(3)}. Edits apply when you run this step.
+        Min / Max are the literature range per class (guidance — the default is
+        the recommended value). Any n between {HARD_N.min} and {HARD_N.max} is
+        accepted; unlisted classes use {fallback.toFixed(3)}. Edits apply when you
+        run this step.
       </p>
     </div>
   );

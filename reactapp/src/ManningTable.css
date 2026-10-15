@@ -35,3 +35,14 @@
 }
 tr.is-edited input { border-color: var(--color-primary); background: var(--color-surface-alt); }
 .mt-muted { font-size: 0.78rem; color: var(--color-text-muted); margin: 0.5rem 0 0; }
+
+/* FE52 — soft per-class warning: inside the hard band, outside the class range */
+.mt-cell { white-space: nowrap; }
+.mt-warn-icon { margin-left: 0.35rem; font-size: 0.85rem; vertical-align: middle; }
+tr.is-warn td { background: #fff8e1; }
+tr.is-warn input { border-color: var(--color-warning); background: #fffdf5; }
+.mt-warn-note {
+  margin: 0.5rem 0 0; padding: 0.45rem 0.7rem; font-size: 0.82rem;
+  border: 1.5px solid var(--color-warning); border-left-width: 5px;
+  border-radius: var(--radius-md); background: #fff8e1; color: var(--color-text);
+}

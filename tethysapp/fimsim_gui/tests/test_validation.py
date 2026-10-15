@@ -85,7 +85,7 @@ def test_tfric_year_validation_mirrors_manning():
 
 
 def test_manning_mapping_shape():
-    ok = {"manning_mapping": {"11": 0.03, "42": 0.11}}
+    ok = {"manning_mapping": {"11": 0.03, "42": 0.05}}
     assert _problems("manning", ok) == []
     bad_type = {"manning_mapping": [0.03]}
     assert any("manning_mapping" in p for p in _problems("manning", bad_type))
@@ -233,3 +233,31 @@ def test_run_budget_env_override(monkeypatch):
     assert run_sim.run_timeout_s() == 4000
     monkeypatch.setenv("FIMSIM_RUN_TIMEOUT_S", "garbage")
     assert run_sim.run_timeout_s() == run_sim.RUN_TIMEOUT_DEFAULT_S
+
+
+# ── Manning's n: one hard band, per-class ranges only warn (BE15 / FE52) ──────
+
+def test_manning_hard_band_is_the_only_enforced_limit():
+    from tethysapp.fimsim_gui.job_types.steps import MANNING_N_MAX, MANNING_N_MIN
+    lo, hi = MANNING_N_MIN, MANNING_N_MAX
+    for step in ("manning", "tfric"):
+        assert _problems(step, {"fric_mode": "fixed", "fpfric_val": lo}) == []
+        assert _problems(step, {"fric_mode": "fixed", "fpfric_val": hi}) == []
+        assert any("fpfric_val" in p for p in _problems(step, {"fpfric_val": lo / 2}))
+        assert any("fpfric_val" in p for p in _problems(step, {"fpfric_val": hi * 2}))
+        # per-class values: INSIDE the hard band but outside the class's own
+        # literature range is fine server-side (it's a UI warning, not a clamp)
+        assert _problems(step, {"manning_mapping": {"11": hi, "42": lo}}) == []
+        bad = _problems(step, {"manning_mapping": {"11": hi * 2}})
+        assert any("11" in p and str(hi) in p for p in bad)
+
+
+def test_manning_hard_band_matches_the_frontend_constant():
+    # one number, two codebases: reactapp/src/manningRules.ts must agree
+    import re
+    from pathlib import Path
+    from tethysapp.fimsim_gui.job_types.steps import MANNING_N_MAX, MANNING_N_MIN
+    ts = (Path(__file__).resolve().parents[3] / "reactapp" / "src" / "manningRules.ts").read_text()
+    m = re.search(r"HARD_N\s*=\s*\{\s*min:\s*([\d.]+),\s*max:\s*([\d.]+)", ts)
+    assert m, "HARD_N literal not found in manningRules.ts"
+    assert (float(m.group(1)), float(m.group(2))) == (MANNING_N_MIN, MANNING_N_MAX)

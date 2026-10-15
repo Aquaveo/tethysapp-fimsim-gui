@@ -155,10 +155,28 @@ class DEMStepJobType(StepJobType):
         )
 
 
+# FIMSIM-BE15 / FE52 — Manning's n has ONE enforced limit, this hard band.
+# Nathan's 2026-10-01 compromise was [0.01, 0.09]; the max was raised to 0.15
+# (Reshma, 2026-10-15) because fimcore's own literature tables go up to 0.150
+# (NLCD Developed High / Woody Wetlands; Esri Trees 0.140) and 8 classes have
+# a DEFAULT above 0.09. The per-class [min, max] is guidance the UI WARNS
+# about, never a clamp, so sensitivity analyses can push a class outside its
+# range. The frontend constant (reactapp/src/manningRules.ts HARD_N) must
+# match — a test pins the pair.
+MANNING_N_MIN = 0.01
+MANNING_N_MAX = 0.15
+
+
+def _check_manning_n(config: dict, key: str, problems: list) -> None:
+    """A single Manning's n (the fixed-friction field) inside the hard band."""
+    _check_number(config, key, MANNING_N_MIN, MANNING_N_MAX, problems)
+
+
 def _check_manning_mapping(config: dict, problems: list) -> None:
     """The editable per-class table (manning_mapping): an object of
-    land-cover code → Manning's n, every n in [0.001, 1.0]. Shared by the
-    LISFLOOD and TRITON Roughness steps."""
+    land-cover code → Manning's n, every n inside the hard band
+    [MANNING_N_MIN, MANNING_N_MAX]. Shared by the LISFLOOD and TRITON
+    Roughness steps."""
     mapping = config.get("manning_mapping")
     if mapping is None:
         return
@@ -168,11 +186,11 @@ def _check_manning_mapping(config: dict, problems: list) -> None:
         return
     bad = [k for k, v in mapping.items()
            if isinstance(v, bool) or not isinstance(v, (int, float))
-           or not (0.001 <= v <= 1.0)]
+           or not (MANNING_N_MIN <= v <= MANNING_N_MAX)]
     if bad:
         problems.append(
-            f"'manning_mapping' values must be numbers in "
-            f"[0.001, 1.0] — bad class(es): {', '.join(map(str, bad))}")
+            f"'manning_mapping' values must be numbers between {MANNING_N_MIN} "
+            f"and {MANNING_N_MAX} — bad class(es): {', '.join(map(str, bad))}")
 
 
 class ManningStepJobType(UniformStepJobType):
@@ -215,8 +233,7 @@ class ManningStepJobType(UniformStepJobType):
         problems = []
         _check_choice(config, "fric_mode", ("fixed", "varying"), problems)
         _check_choice(config, "lulc_download_source", ("esri", "nlcd"), problems)
-        # Chow (1959) tables top out well below 1; 0 would zero out friction
-        _check_number(config, "fpfric_val", 0.001, 1.0, problems)
+        _check_manning_n(config, "fpfric_val", problems)
         _check_lulc_years(config, problems)
         _check_manning_mapping(config, problems)
         return problems

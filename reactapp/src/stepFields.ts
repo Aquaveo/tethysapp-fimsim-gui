@@ -1,6 +1,8 @@
 // reactapp/src/stepFields.ts
 // Per-step form fields for the generic StepPanel. Keys are exactly the
 // fimcore kwargs (BE7's config contract); labels are user-language.
+import { HARD_N } from './manningRules';
+
 export interface Condition { key: string; value: unknown }
 
 export interface FieldSpec {
@@ -193,6 +195,10 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'fpfric_val', label: "Fixed Manning's n", widget: 'number',
       showIf: { key: 'fric_mode', value: 'fixed' },
+      min: HARD_N.min, max: HARD_N.max, step: 0.001,
+      help: `One roughness value for the whole domain, between ${HARD_N.min} and `
+        + `${HARD_N.max}. Typical: 0.030 open water/short grass, 0.045 mixed, `
+        + '0.080 built-up or dense vegetation.',
     },
     {
       key: 'lulc_download_source', label: 'Land cover source', widget: 'select',
@@ -337,6 +343,10 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'fpfric_val', label: "Fixed Manning's n", widget: 'number',
       showIf: { key: 'fric_mode', value: 'fixed' },
+      min: HARD_N.min, max: HARD_N.max, step: 0.001,
+      help: `One roughness value for the whole domain, between ${HARD_N.min} and `
+        + `${HARD_N.max}. Typical: 0.030 open water/short grass, 0.045 mixed, `
+        + '0.080 built-up or dense vegetation.',
     },
     {
       key: 'lulc_source', label: 'Land cover source', widget: 'select',
