@@ -168,3 +168,16 @@ describe('flowline_tool fields (FIMSIM-FE63)', () => {
     expect(byKey.cell_size_m.min).toBe(10);
   });
 });
+
+describe('flow_tool fields (FIMSIM-FE64)', () => {
+  const byKey = Object.fromEntries(STEP_FIELDS.flow_tool.map((f) => [f.key, f]));
+  it('shows the window + interval for retro/USGS and the forecast trio for forecasts', () => {
+    const forecast = { key: 'source', value: 'nwm_forecast' };
+    for (const k of ['start_dt', 'end_dt', 'interval_hours']) expect(byKey[k].hideIf).toEqual(forecast);
+    for (const k of ['forecast_range', 'forecast_date', 'forecast_hour']) expect(byKey[k].showIf).toEqual(forecast);
+    expect(byKey.ids.required).toBe(true);
+    expect(byKey.forecast_date.required).toBe(true);
+    expect(byKey.interval_hours.options?.map((o) => o.value)).toEqual([0.25, 0.5, 1, 3, 6, 12, 24]);
+    expect(byKey.forecast_hour.options?.[0]).toEqual({ value: '', label: 'Auto (latest cycle)' });
+  });
+});

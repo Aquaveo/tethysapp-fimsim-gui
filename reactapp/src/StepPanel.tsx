@@ -4,7 +4,7 @@
 // live progress polling, failure detail with re-run, outputs with presigned
 // downloads. Bespoke upgrades (editable Manning table, hydrograph chart)
 // layer on top later — this gets the whole workflow demoable.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ApiError, cancelStepRun, downloadSelectedZip, getStepRun, getStepRunOutputs, submitStep,
@@ -21,6 +21,7 @@ import {
   STEP_FIELDS, applyLinkedDefaults, coerceConfigNumbers, expandEventDates, fieldVisible,
   manningTableSource, previewKind, rangeProblems, type FieldSpec,
 } from './stepFields';
+import { prefillIds, shouldReseed, type FlowSource } from './flowTool';
 import { formatElapsed, phaseLabel } from './runProgress';
 import './StepPanel.css';
 
@@ -136,7 +137,7 @@ export default function StepPanel({
   const [demBusy, setDemBusy] = useState<number | null>(null);
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
-  const visible = (f: FieldSpec) => fieldVisible(f.showIf, value);
+  const visible = (f: FieldSpec) => fieldVisible(f.showIf, value, f.hideIf);
   const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
     && value('dem_input') === 'upload';
   // the editable per-class table, on BOTH Roughness steps (bug-round #iv)
@@ -186,6 +187,21 @@ export default function StepPanel({
     }, POLL_MS);
     return () => clearInterval(t);
   }, [runs]);
+
+  // FE64: the Streamflow tool's ID list comes from the area lookup — gages
+  // for USGS, the main river's NWM reaches otherwise — re-seeded when the
+  // source changes, but only while the field is untouched or still holds
+  // the previous seed (a typed value is never overwritten: shouldReseed).
+  const lastSeed = useRef<string | null>(null);
+  const flowSource = stepKey === 'flow_tool' ? String(value('source')) : '';
+  useEffect(() => {
+    if (stepKey !== 'flow_tool' || aois.length === 0) return;
+    if (!shouldReseed(config.ids, lastSeed.current)) return;
+    const seed = prefillIds(aois[0], flowSource as FlowSource);
+    lastSeed.current = seed;
+    setConfig((c) => ({ ...c, ids: seed }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepKey, aois, flowSource]);
 
   const submit = async () => {
     setBusy(true);

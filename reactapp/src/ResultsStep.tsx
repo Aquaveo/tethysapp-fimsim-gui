@@ -15,6 +15,7 @@ import {
   fileProxyUrl, formatBytes, keepModelSteps, outputMeta, saveBlob, splitResultFiles,
   summarizeSelection, zipFilename, zipSelection,
 } from './outputsMeta';
+import { previewKind } from './stepFields';
 import './StepPanel.css';
 import './ResultsStep.css';
 
@@ -233,7 +234,7 @@ export default function ResultsStep({
             continue;
           }
           if (step === 'run') res.runStatus = 'succeeded';
-          if (step === 'bdy' || step === 'thyg') res.bdyRun = run;  // flow step (both models)
+          if (previewKind(step) === 'hydrograph') res.bdyRun = run;  // flow step (both models) + the Streamflow tool
           for (const m of (Array.isArray(run.manifest) ? run.manifest : [])) {
             // manifests are cumulative (each step re-ships the whole deck) —
             // list every file once, under the step that first produced it

@@ -114,7 +114,7 @@ const RULES: [RegExp, OutputMeta][] = [
     label: 'Inflow time series (model input)',
     description: "The event hydrograph as the solver consumes it — per metre of cell width.",
   }],
-  [/discharge.*\.csv$/i, {
+  [/(^nwm_(retro|forecast)_\d+\.csv$)|(discharge.*\.csv$)/i, {
     label: 'Discharge time series (CSV)',
     description: 'The raw streamflow record (m³/s) fetched from the NWM or USGS — the hydrograph chart plots this.',
   }],

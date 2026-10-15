@@ -259,3 +259,16 @@ describe('manningTableSource on the LULC tool (FIMSIM-FE62)', () => {
     expect(fieldVisible({ key: 'do_manning', value: true }, get({ do_manning: 'true' }))).toBe(false);
   });
 });
+
+describe('fieldVisible with hideIf (FIMSIM-FE64)', () => {
+  const get = (cfg: Record<string, unknown>) => (k: string) => cfg[k];
+  it('hides when any hideIf condition holds, after showIf', () => {
+    expect(fieldVisible(undefined, get({}), { key: 'source', value: 'nwm_forecast' })).toBe(true);
+    expect(fieldVisible(undefined, get({ source: 'nwm_forecast' }),
+                        { key: 'source', value: 'nwm_forecast' })).toBe(false);
+    expect(fieldVisible({ key: 'a', value: 1 }, get({ a: 1, source: 'usgs' }),
+                        [{ key: 'source', value: 'nwm_forecast' }])).toBe(true);
+    expect(fieldVisible({ key: 'a', value: 2 }, get({ a: 1 }),
+                        [{ key: 'source', value: 'nwm_forecast' }])).toBe(false);
+  });
+});

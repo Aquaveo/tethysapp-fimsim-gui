@@ -34,6 +34,8 @@ export interface ServerAoi {
     gages?: { site_no: string; station_nm: string; lat: number; lon: number }[];
     flowlines?: GeoJSON.FeatureCollection | null;
     main_river?: GeoJSON.FeatureCollection | null;
+    /** BE25: the main river's NHDPlus COMIDs = NWM feature IDs (newer lookups only) */
+    reach_ids?: number[];
   } | null;
   steps: Record<string, ServerStepSummary>;
 }

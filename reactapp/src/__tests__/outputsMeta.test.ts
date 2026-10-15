@@ -169,3 +169,11 @@ describe('outputMeta for the Flowline tool (FIMSIM-FE63)', () => {
     expect(outputMeta('preview_features.geojson').label).toBe('Map preview (GeoJSON)');
   });
 });
+
+describe('outputMeta for the Streamflow tool (FIMSIM-FE64)', () => {
+  it('labels the NWM per-reach CSVs like the USGS ones', () => {
+    expect(outputMeta('nwm_retro_8781135.csv').label).toBe('Discharge time series (CSV)');
+    expect(outputMeta('nwm_forecast_8781135.csv').label).toBe('Discharge time series (CSV)');
+    expect(outputMeta('usgs_discharge_02134170.csv').label).toBe('Discharge time series (CSV)');
+  });
+});

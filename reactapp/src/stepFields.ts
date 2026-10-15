@@ -13,6 +13,8 @@ export interface FieldSpec {
   help?: string;
   /** only show when another field has this value; an array means ALL must hold */
   showIf?: Condition | Condition[];
+  /** hide when another field has this value (any of them); checked after showIf */
+  hideIf?: Condition | Condition[];
   required?: boolean;
   /** for a 'date' field: submit as end-of-day (23:59) rather than 00:00 */
   endOfDay?: boolean;
@@ -92,13 +94,14 @@ export function expandEventDates(
   return out;
 }
 
-/** Whether a field's showIf is satisfied. `get(key)` returns the live value. */
+/** Whether a field is visible: every showIf holds and no hideIf holds. */
 export function fieldVisible(
-  showIf: FieldSpec['showIf'], get: (key: string) => unknown,
+  showIf: FieldSpec['showIf'], get: (key: string) => unknown, hideIf?: FieldSpec['hideIf'],
 ): boolean {
-  if (!showIf) return true;
-  const conds = Array.isArray(showIf) ? showIf : [showIf];
-  return conds.every((c) => get(c.key) === c.value);
+  const show = showIf ? (Array.isArray(showIf) ? showIf : [showIf]) : [];
+  if (!show.every((c) => get(c.key) === c.value)) return false;
+  const hide = hideIf ? (Array.isArray(hideIf) ? hideIf : [hideIf]) : [];
+  return !hide.some((c) => get(c.key) === c.value);
 }
 
 /** Land-cover years each source publishes (Parvaneh, 2026-09-23). */
@@ -573,6 +576,64 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'save_feature_ids', label: 'NWM feature IDs as CSV', widget: 'checkbox',
       help: 'The NHDPlus COMID of every reach \u2014 paste them into the Streamflow Data tool.',
+    },
+  ],
+  flow_tool: [
+    {
+      key: 'source', label: 'Data source', widget: 'select',
+      options: [
+        { value: 'nwm_retro', label: 'NWM retrospective (1979-02 → 2023-01)' },
+        { value: 'nwm_forecast', label: 'NWM forecast (2018-09 onwards; short / medium / long range)' },
+        { value: 'usgs', label: 'USGS gage (observed, 15-minute)' },
+      ],
+    },
+    {
+      key: 'ids', label: 'IDs', widget: 'text', required: true,
+      help: 'NWM feature IDs (NHDPlus COMIDs) or USGS gage numbers, comma or space '
+        + 'separated. Prefilled from the area lookup when known — edit freely. '
+        + 'One CSV is written per ID.',
+    },
+    {
+      key: 'start_dt', label: 'Start (date)', widget: 'date', required: true,
+      hideIf: { key: 'source', value: 'nwm_forecast' },
+    },
+    {
+      key: 'end_dt', label: 'End (date)', widget: 'date', required: true, endOfDay: true,
+      hideIf: { key: 'source', value: 'nwm_forecast' },
+    },
+    {
+      key: 'interval_hours', label: 'Interval', widget: 'select',
+      hideIf: { key: 'source', value: 'nwm_forecast' },
+      options: [
+        { value: 0.25, label: '15 min' }, { value: 0.5, label: '30 min' },
+        { value: 1, label: '1 h' }, { value: 3, label: '3 h' }, { value: 6, label: '6 h' },
+        { value: 12, label: '12 h' }, { value: 24, label: '24 h' },
+      ],
+      help: 'The NWM retrospective is hourly; USGS gages report every 15 minutes. '
+        + 'Coarser intervals average the readings.',
+    },
+    {
+      key: 'forecast_range', label: 'Forecast range', widget: 'select',
+      showIf: { key: 'source', value: 'nwm_forecast' },
+      options: [
+        { value: 'short_range', label: 'Short range (18 h)' },
+        { value: 'medium_range', label: 'Medium range (10 days)' },
+        { value: 'long_range', label: 'Long range (30 days)' },
+      ],
+    },
+    {
+      key: 'forecast_date', label: 'Issue date', widget: 'date', required: true,
+      showIf: { key: 'source', value: 'nwm_forecast' },
+      help: 'The day the forecast was issued (2018-09-17 onwards).',
+    },
+    {
+      key: 'forecast_hour', label: 'Cycle (UTC)', widget: 'select',
+      showIf: { key: 'source', value: 'nwm_forecast' },
+      options: [
+        { value: '', label: 'Auto (latest cycle)' },
+        { value: 0, label: '00' }, { value: 6, label: '06' },
+        { value: 12, label: '12' }, { value: 18, label: '18' },
+      ],
     },
   ],
 };
