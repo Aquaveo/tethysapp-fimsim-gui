@@ -128,11 +128,12 @@ export const deleteProject = (id: number) =>
 // ── AOIs ──────────────────────────────────────────────────────────────────────
 
 export const uploadAoiFile = async (
-  projectId: number, file: File, featureIndices?: number[],
+  projectId: number, file: File, featureIndices?: number[], replace = false,
 ) => {
   const form = new FormData();
   form.append('file', file);
   if (featureIndices) form.append('feature_indices', JSON.stringify(featureIndices));
+  if (replace) form.append('replace', '1');  // #xi: swap out the current area
   return request<{ aois: ServerAoi[]; skipped_non_polygon: number }>(
     `/projects/${projectId}/aois/`, { method: 'POST', body: form });
 };
@@ -157,10 +158,10 @@ export const previewAoiFile = async (projectId: number, file: File) => {
 
 export const createDrawnAoi = (
   projectId: number, geometry: Polygon, name: string,
-  source: 'drawn' | 'example' = 'drawn',
+  source: 'drawn' | 'example' = 'drawn', replace = false,
 ) =>
   request<{ aois: ServerAoi[] }>(
-    `/projects/${projectId}/aois/`, json({ geometry, name, source }));
+    `/projects/${projectId}/aois/`, json({ geometry, name, source, replace }));
 
 export const getAoi = (id: number) => request<ServerAoi>(`/aois/${id}/`);
 

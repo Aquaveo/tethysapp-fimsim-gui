@@ -49,6 +49,26 @@ def feature_preview(feature, index: int) -> dict:
     }
 
 
+# #xi (FIMSIM-FE35) — the web app is one case study at a time (Sagy): a
+# project holds ONE study area. Batch work over many areas is the desktop
+# FIMsim's job. Legacy projects that already hold several keep them.
+MAX_AOIS_PER_PROJECT = 1
+
+
+def single_aoi_problem(existing: int, requested: int, replace: bool):
+    """Why *requested* new AOIs can't join a project that has *existing*
+    ones, or None if fine. ``replace`` means the caller will delete the
+    existing area(s) first (the UI's "replace the current study area")."""
+    if requested > MAX_AOIS_PER_PROJECT:
+        return (f"Pick one feature: the web app runs one study area per project "
+                f"({requested} selected). For many areas at once, use the desktop FIMsim.")
+    if requested and existing and not replace:
+        return ("This project already has a study area — the web app runs one study "
+                "area per project. Replace it, or start a new project. For many areas "
+                "at once, use the desktop FIMsim.")
+    return None
+
+
 def select_features(features: list, indices) -> list:
     """Keep only the features at *indices* (order preserved). ``None`` keeps all;
     out-of-range indices are ignored so a stale client can't cause a 500."""
