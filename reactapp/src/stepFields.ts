@@ -143,6 +143,37 @@ export const DEM_RES_HELP =
   + 'and run faster. The web app does not go below 10 m — for finer grids use '
   + 'the desktop FIMsim.';
 
+/** The tools take any cell size ≥ 10 m (FE51 floor), not a 10/30/90 pick. */
+export const TOOL_CELL_HELP =
+  '10 m is the native USGS 3DEP resolution; coarser cells are resampled from '
+  + 'it. The web app does not go below 10 m — for finer grids use the desktop FIMsim.';
+
+/** fimcore.export.export_raster formats (DEM, LULC and Manning exports). */
+export const RASTER_FORMAT_OPTIONS = [
+  { value: 'tif', label: 'GeoTIFF (.tif)' },
+  { value: 'gpkg', label: 'GeoPackage (.gpkg)' },
+  { value: 'asc', label: 'ASCII grid (.asc)' },
+];
+
+/**
+ * Which preview a succeeded run of a step shows (StepPanel keys its preview
+ * components off this, so the tools (FE61–FE64) reuse the LISFLOOD/TRITON
+ * components without new branches).
+ */
+export type PreviewKind = 'dem' | 'lulc' | 'boundary' | 'hydrograph';
+const PREVIEW_STEPS: Record<PreviewKind, readonly string[]> = {
+  dem: ['dem', 'tdem', 'dem_tool'],
+  lulc: ['manning', 'tfric', 'lulc_tool'],
+  boundary: ['bci', 'tbc', 'flowline_tool'],
+  hydrograph: ['bdy', 'thyg', 'flow_tool'],
+};
+export function previewKind(stepKey: string): PreviewKind | null {
+  for (const kind of Object.keys(PREVIEW_STEPS) as PreviewKind[]) {
+    if (PREVIEW_STEPS[kind].includes(stepKey)) return kind;
+  }
+  return null;
+}
+
 /**
  * Which reference table the editable Manning's n table shows for a Roughness
  * step, or null when no table applies (fixed friction, other steps). The
@@ -449,5 +480,23 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       ],
       help: 'Snapshots are one grid per output interval — for animations; adds a large zip.',
     },
+  ],
+  // ── Preparing Input Data tools (desktop Track A — FIMSIM-FE61…FE64).
+  //    Keys are fimcore's standalone-mode option names. ──
+  dem_tool: [
+    {
+      key: 'dem_source', label: 'Elevation source', widget: 'select',
+      options: [
+        { value: '3dep', label: 'USGS 3DEP (1/3 arc-second ≈ 10 m, CONUS)' },
+        { value: 'hand', label: 'HAND — height above nearest drainage (UT Austin, CONUS)' },
+      ],
+      help: '3DEP is the bare-earth elevation. HAND is each cell\'s height above '
+        + 'the nearest stream — the input for HAND-FIM style mapping.',
+    },
+    {
+      key: 'dem_res_m', label: 'Cell size (m)', widget: 'number',
+      min: 10, max: 1000, step: 1, help: TOOL_CELL_HELP,
+    },
+    { key: 'out_format', label: 'File format', widget: 'select', options: RASTER_FORMAT_OPTIONS },
   ],
 };

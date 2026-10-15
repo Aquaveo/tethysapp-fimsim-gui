@@ -19,7 +19,7 @@ import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
 import {
   STEP_FIELDS, applyLinkedDefaults, coerceConfigNumbers, expandEventDates, fieldVisible,
-  manningTableSource, rangeProblems, type FieldSpec,
+  manningTableSource, previewKind, rangeProblems, type FieldSpec,
 } from './stepFields';
 import { formatElapsed, phaseLabel } from './runProgress';
 import './StepPanel.css';
@@ -141,6 +141,7 @@ export default function StepPanel({
     && value('dem_input') === 'upload';
   // the editable per-class table, on BOTH Roughness steps (bug-round #iv)
   const tableSource = manningTableSource(stepKey, value);
+  const preview = previewKind(stepKey);
 
   const uploadDemFor = async (aoiId: number, files: File[]) => {
     setDemBusy(aoiId);
@@ -398,17 +399,17 @@ export default function StepPanel({
               {run ? (
                 <>
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
-                  {run.status === 'succeeded' && (stepKey === 'bdy' || stepKey === 'thyg') && (
+                  {run.status === 'succeeded' && preview === 'hydrograph' && (
                     <HydrographChart run={run} />
                   )}
-                  {run.status === 'succeeded' && (stepKey === 'bci' || stepKey === 'tbc') && (
+                  {run.status === 'succeeded' && preview === 'boundary' && (
                     <BoundaryPreview aoi={a} run={run} defaultOpen={aois.length === 1} />
                   )}
-                  {run.status === 'succeeded' && (stepKey === 'dem' || stepKey === 'tdem') && (
+                  {run.status === 'succeeded' && preview === 'dem' && (
                     <RasterPreview aoi={a} run={run} kind="dem"
                                    defaultOpen={aois.length === 1} />
                   )}
-                  {run.status === 'succeeded' && (stepKey === 'manning' || stepKey === 'tfric') && (
+                  {run.status === 'succeeded' && preview === 'lulc' && (
                     <RasterPreview aoi={a} run={run} kind="lulc"
                                    defaultOpen={aois.length === 1} />
                   )}

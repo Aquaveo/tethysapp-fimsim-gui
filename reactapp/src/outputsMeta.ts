@@ -62,6 +62,14 @@ const RULES: [RegExp, OutputMeta][] = [
     label: 'Depth time series (zip)',
     description: 'Every saved water-depth grid through the event — for animations or time-step analysis.',
   }],
+  [/^DEM_.*\.gpkg$/i, {
+    label: 'Elevation model (GeoPackage)',
+    description: 'The clipped terrain as a GeoPackage raster (DEM tool) — opens in QGIS/ArcGIS.',
+  }],
+  [/^DEM_.*\.asc$/i, {
+    label: 'Elevation model (ASCII grid)',
+    description: 'The clipped terrain as an ESRI ASCII grid (DEM tool) — plain text, any GIS.',
+  }],
   [/^DEM_.*\.tif$/i, {
     label: 'Elevation model (GeoTIFF)',
     description: 'The downloaded terrain, reprojected to the working CRS at your chosen resolution.',

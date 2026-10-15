@@ -140,3 +140,11 @@ describe('zipSelection', () => {
     ])).toEqual([{ run_id: 1, name: 'dem.ascii' }, { run_id: 9, name: 'aoi.cfg' }]);
   });
 });
+
+describe('outputMeta for the DEM tool (FIMSIM-FE61)', () => {
+  it('describes the chosen-format DEM exports, not just GeoTIFFs', () => {
+    expect(outputMeta('DEM_3DEP_Lumber.gpkg').label).toBe('Elevation model (GeoPackage)');
+    expect(outputMeta('DEM_HAND_Lumber.asc').label).toBe('Elevation model (ASCII grid)');
+    expect(outputMeta('DEM_3DEP_Lumber.tif').label).toBe('Elevation model (GeoTIFF)');
+  });
+});
