@@ -60,7 +60,7 @@ export default function ProjectStep() {
         }}
       >
         <fieldset className="ps-models">
-          <legend className="ps-label">What do you want to make?</legend>
+          <legend className="ps-label">What would you like to do?</legend>
           <div className="ps-cats">
             {CATEGORIES.map((c) => (
               <div key={c.id} className={`ps-cat is-${c.id}`}>
