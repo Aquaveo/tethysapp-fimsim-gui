@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CATEGORIES, MODELS, headerModel, isToolModel, modelBadgeClass, modelFromSlug,
-  modelsInCategory, needsRunConfirm, stepDone, wizardPath,
+  modelsInCategory, needsRunConfirm, resultsKind, stepDone, wizardPath,
 } from '../steps';
 import type { ServerAoi } from '../api';
 
@@ -117,5 +117,11 @@ describe('MODELS categories', () => {
     expect(modelBadgeClass('lisflood-fp')).toBe('');
     expect(modelBadgeClass('triton')).toBe(' is-deck');
     expect(modelBadgeClass('flow-tool')).toBe(' is-tool');
+  });
+
+  it('tells the Results step what it is: a simulation, a deck, or tool downloads', () => {
+    expect(resultsKind('lisflood-fp')).toBe('simulation');
+    expect(resultsKind('triton')).toBe('deck');
+    for (const m of modelsInCategory('input-data')) expect(resultsKind(m)).toBe('tools');
   });
 });

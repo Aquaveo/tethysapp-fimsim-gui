@@ -254,6 +254,14 @@ export function isToolModel(model: ModelId): boolean {
   return MODELS[model].category === 'input-data';
 }
 
+/** What the last step shows (FIMSIM-FE65): the flood map + files, the TRITON
+ *  deck download, or just the tool's files (Downloads). */
+export type ResultsKind = 'simulation' | 'deck' | 'tools';
+export function resultsKind(model: ModelId): ResultsKind {
+  if (isToolModel(model)) return 'tools';
+  return MODELS[model].runsOnPortal ? 'simulation' : 'deck';
+}
+
 /**
  * The CSS modifier for a model's badge / tag everywhere it appears (header,
  * step card, project list): '' = cyan (runs here), ' is-deck' = purple

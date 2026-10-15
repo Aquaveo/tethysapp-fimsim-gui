@@ -18,7 +18,7 @@ import StepPanel from './StepPanel';
 import {
   MODELS, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
   type ModelId, type StepId,
-  modelBadgeClass,
+  modelBadgeClass, resultsKind,
 } from './steps';
 import './NewSimulation.css';
 
@@ -178,7 +178,7 @@ export default function NewSimulation() {
         ) : activeStep === 'results' && projectId ? (
           <ResultsStep
             aois={aois}
-            hasRunStep={JOB_STEPS.has('run')}
+            kind={resultsKind(model)}
             modelStepKeys={[...JOB_STEPS]}
             onGoToRun={JOB_STEPS.has('run') ? () => goTo('run') : undefined}
           />
