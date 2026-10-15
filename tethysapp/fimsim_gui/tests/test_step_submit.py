@@ -9,8 +9,7 @@ from tethysapp.fimsim_gui.models import STEP_KEYS
 
 
 def test_registry_covers_the_wizard_steps():
-    assert set(REGISTRY) == {"dem", "manning", "bci", "bdy", "par", "run",
-                             "tdem", "tfric", "tbc", "thyg", "tcfg"}
+    assert set(REGISTRY) == set(STEP_KEYS)
     # TRITON DAG
     assert REGISTRY["tdem"].requires == ()
     assert REGISTRY["tfric"].requires == ("tdem",)
@@ -110,9 +109,10 @@ def test_supersede_cascades_downstream_only():
                       "bci": True, "bdy": True, "par": True}
 
 
-def test_step_keys_cover_both_models_in_wizard_order():
+def test_step_keys_cover_every_model_in_wizard_order():
     assert STEP_KEYS == ("dem", "manning", "bci", "bdy", "par", "run",
-                         "tdem", "tfric", "tbc", "thyg", "tcfg")
+                         "tdem", "tfric", "tbc", "thyg", "tcfg",
+                         "dem_tool", "lulc_tool", "flowline_tool", "flow_tool")
 
 
 def test_supersede_is_graph_based_not_order_based():

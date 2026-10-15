@@ -18,6 +18,7 @@ from tethysapp.fimsim_gui.job_types.registry import (
 )
 from tethysapp.fimsim_gui.job_types.steps import (
     BDYStepJobType, DEMStepJobType, _check_lulc_years, _check_manning_mapping,
+    _check_manning_n,
 )
 
 
@@ -116,7 +117,7 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
         problems = []
         _check_choice(config, "fric_mode", ("fixed", "varying"), problems)
         _check_choice(config, "lulc_source", ("download", "download_nlcd"), problems)
-        _check_number(config, "fpfric_val", 0.001, 1.0, problems)
+        _check_manning_n(config, "fpfric_val", problems)
         _check_lulc_years(config, problems)
         _check_manning_mapping(config, problems)
         return problems

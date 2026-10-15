@@ -3,7 +3,7 @@
 // tagline over the Header-HQ banner, and a Documentation link. Rendered by AppShell.
 import { Link, NavLink } from 'react-router-dom';
 import { useActiveModel } from './activeModel';
-import { MODELS } from './steps';
+import { MODELS, modelBadgeClass } from './steps';
 
 export default function Header() {
   const { model } = useActiveModel();
@@ -22,18 +22,13 @@ export default function Header() {
       </Link>
       <nav className="wk-header-actions">
         {model && (
-          <span
-            className={'wk-model-badge' + (MODELS[model].runsOnPortal ? '' : ' is-deck')}
-            title={MODELS[model].runsOnPortal
-              ? 'This project runs LISFLOOD-FP on the portal'
-              : 'This project builds a TRITON input deck to run on your own GPU/HPC'}
-          >
+          <span className={'wk-model-badge' + modelBadgeClass(model)} title={MODELS[model].note}>
             {MODELS[model].label}
           </span>
         )}
         <span
           className="wk-alpha-badge"
-          title="Lightweight alpha — for the full feature set (HAND-FIM, ARC, standalone tools) use the desktop FIMsim"
+          title="Lightweight alpha — for the full feature set (TRITON execution, OWP HAND-FIM, ARC-Curve2Flood) use the desktop FIMsim"
         >
           Alpha
         </span>

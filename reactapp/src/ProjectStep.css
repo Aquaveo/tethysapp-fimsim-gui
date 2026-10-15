@@ -56,9 +56,23 @@
 }
 .ps-item-x:hover { color: var(--color-error); background: var(--color-surface-alt); }
 
-/* FE48 — explicit model choice at creation */
-.ps-models { border: none; margin: 0; padding: 0; display: flex; gap: 0.6rem; }
+/* FE48 — explicit model choice at creation; FE60 — two category cards (the
+   desktop landing page: green input-data, blue flood-mapping) */
+.ps-models { border: none; margin: 0; padding: 0; }
 .ps-models > legend { padding: 0; }
+.ps-cats { display: flex; gap: 0.8rem; }
+.ps-cat {
+  flex: 1; display: flex; flex-direction: column; gap: 0.45rem;
+  padding: 0.7rem 0.8rem; border: 1.5px solid; border-radius: var(--radius-md);
+}
+.ps-cat.is-input-data { border-color: #9ae6b4; background: #f0fff4; }
+.ps-cat.is-flood-mapping { border-color: #90cdf4; background: #ebf8ff; }
+.ps-cat-title { margin: 0; font-size: 0.92rem; }
+.ps-cat.is-input-data .ps-cat-title { color: #276749; }
+.ps-cat.is-flood-mapping .ps-cat-title { color: #2b6cb0; }
+.ps-cat-desc { margin: 0 0 0.2rem; font-size: 0.78rem; color: var(--color-text-muted); line-height: 1.35; }
+.ps-cat .ps-model { background: var(--color-surface); }
+@media (max-width: 720px) { .ps-cats { flex-direction: column; } }
 .ps-model {
   flex: 1; display: flex; flex-direction: column; gap: 0.15rem;
   padding: 0.6rem 0.8rem; cursor: pointer;
@@ -78,3 +92,4 @@
   text-transform: uppercase; vertical-align: middle;
 }
 .ps-model-tag.is-deck { background: #7c5cff; }
+.ps-model-tag.is-tool { background: #276749; }

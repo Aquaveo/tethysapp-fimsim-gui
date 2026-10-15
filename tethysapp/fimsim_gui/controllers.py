@@ -20,7 +20,9 @@ from shapely.geometry import shape
 from tethys_sdk.routing import controller
 
 from tethysapp.fimsim_gui.app import App
-from tethysapp.fimsim_gui.ingest import IngestError, ingest_aoi_file, ingest_geojson_geometry
+from tethysapp.fimsim_gui.ingest import (
+    IngestError, ingest_aoi_file, ingest_geojson_geometry, single_aoi_problem,
+)
 from tethysapp.fimsim_gui.models import (
     MODELS, Aoi, Project, get_session_maker, normalize_model, sanitize_name,
 )
@@ -220,9 +222,11 @@ def api_project_aois(request, session, project_id):
     if request.method != 'POST':
         return JsonResponse({'aois': [a.to_dict() for a in project.aois]})
 
+    replace = False  # #xi: swap out the project's current study area
     try:
         if request.FILES.get('file'):
             up = request.FILES['file']
+            replace = str(request.POST.get('replace', '')).lower() in ('1', 'true')
             with tempfile.NamedTemporaryFile(
                     suffix=Path(up.name).suffix, delete=False) as tmp:
                 for chunk in up.chunks():
@@ -267,10 +271,20 @@ def api_project_aois(request, session, project_id):
             name = str(body.get('name') or 'Drawn AOI')
             result = ingest_geojson_geometry(geometry, name)
             source, source_key = str(body.get('source') or 'drawn'), None
+            replace = bool(body.get('replace'))
     except IngestError as exc:
         return JsonResponse({'error': str(exc)}, status=400)
     except json.JSONDecodeError:
         return JsonResponse({'error': 'invalid JSON'}, status=400)
+
+    # #xi: one study area per project (replace swaps the current one out)
+    problem = single_aoi_problem(len(project.aois), len(result.features), replace)
+    if problem:
+        return JsonResponse({'error': problem}, status=409)
+    if replace:
+        for old_aoi in list(project.aois):
+            _delete_aoi(session, request, old_aoi)
+        session.refresh(project)
 
     try:
         created = _create_aois(session, request, project, result, source, source_key)
@@ -291,27 +305,33 @@ def api_aoi(request, session, aoi_id):
     if err:
         return err
     if request.method == 'DELETE':
-        from tethysapp.fimsim_gui.storage import (
-            build_key, get_storage, is_source_key_orphaned,
-        )
-        prefix = build_key(request.user.username, aoi.project_id, aoi.id)
-        # the uploaded boundary lives at the PROJECT prefix and can back several
-        # AOIs — delete it only if no sibling AOI still references it.
-        source_key = aoi.source_key
-        siblings = [a.source_key for a in aoi.project.aois
-                    if a.id != aoi.id and a.source_key]
-        session.delete(aoi)
-        session.commit()
-        n = 0
-        try:  # DB row is gone either way; orphaned files are reaped later
-            storage = get_storage()
-            n = storage.delete_prefix(prefix)
-            if is_source_key_orphaned(source_key, siblings):
-                storage.delete(source_key)
-        except Exception as exc:
-            logger.warning('storage cleanup for %s failed: %s', prefix, exc)
+        n = _delete_aoi(session, request, aoi)
         return JsonResponse({'deleted': True, 'files_removed': n})
     return JsonResponse(aoi.to_dict())
+
+
+def _delete_aoi(session, request, aoi) -> int:
+    """Remove one AOI (cascade) and its stored files; returns files removed."""
+    from tethysapp.fimsim_gui.storage import (
+        build_key, get_storage, is_source_key_orphaned,
+    )
+    prefix = build_key(request.user.username, aoi.project_id, aoi.id)
+    # the uploaded boundary lives at the PROJECT prefix and can back several
+    # AOIs — delete it only if no sibling AOI still references it.
+    source_key = aoi.source_key
+    siblings = [a.source_key for a in aoi.project.aois
+                if a.id != aoi.id and a.source_key]
+    session.delete(aoi)
+    session.commit()
+    n = 0
+    try:  # DB row is gone either way; orphaned files are reaped later
+        storage = get_storage()
+        n = storage.delete_prefix(prefix)
+        if is_source_key_orphaned(source_key, siblings):
+            storage.delete(source_key)
+    except Exception as exc:
+        logger.warning('storage cleanup for %s failed: %s', prefix, exc)
+    return n
 
 
 @controller(url='api/aois/{aoi_id}/dem', name='api_aoi_dem')
