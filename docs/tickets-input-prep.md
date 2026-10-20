@@ -6,8 +6,8 @@ standalone tools: DEM, LULC & Manning's n, Flowline, Streamflow Data). The web
 app only has Flood Mapping. Design approved 2026-10-15 — see
 docs/design-input-prep.md. Round 1 =
 the category + the four tools with downloads; reuse of prepared outputs inside
-Flood Mapping steps is round 2 (tickets to follow). Numbers continue from
-FIMSIM-FE59 / FIMSIM-BE24. Build order: BE25 → FE60 → FE61 → FE62 → FE63 →
+Flood Mapping steps is round 2 (tickets to follow). Numbers follow the scrum board
+(filed 2026-10-20: BE18 = WP 23478; FE60–FE65 = WP 23479–23484). Build order: BE18 → FE60 → FE61 → FE62 → FE63 →
 FE64 → FE65.
 
 —
@@ -24,13 +24,13 @@ categories on the Project step; four thin job types call fimcore's existing
 standalone entry points; each tool is a one-step wizard on the generic step
 form with the existing previews and downloads.
 
-📋 Subtasks: BE25, FE60, FE61, FE62, FE63, FE64, FE65 below.
+📋 Subtasks: BE18, FE60, FE61, FE62, FE63, FE64, FE65 below.
 
 🚦 Status: 🔜 To Do
 
 —
 
-TASK: BYU CIROH: FIMsim GUI – [Feature] Backend: Tool Modes + Four Standalone Job Types (FIMSIM-BE25)
+TASK: BYU CIROH: FIMsim GUI – [Feature] Backend: Tool Modes + Four Standalone Job Types (FIMSIM-BE18)
 
 Description: Add the four tool modes to the project model and register four
 job types that wrap fimcore's standalone entry points (run_dem_mode,
