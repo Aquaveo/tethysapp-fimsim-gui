@@ -140,3 +140,40 @@ describe('zipSelection', () => {
     ])).toEqual([{ run_id: 1, name: 'dem.ascii' }, { run_id: 9, name: 'aoi.cfg' }]);
   });
 });
+
+describe('outputMeta for the DEM tool (FIMSIM-FE61)', () => {
+  it('describes the chosen-format DEM exports, not just GeoTIFFs', () => {
+    expect(outputMeta('DEM_3DEP_Lumber.gpkg').label).toBe('Elevation model (GeoPackage)');
+    expect(outputMeta('DEM_HAND_Lumber.asc').label).toBe('Elevation model (ASCII grid)');
+    expect(outputMeta('DEM_3DEP_Lumber.tif').label).toBe('Elevation model (GeoTIFF)');
+  });
+});
+
+describe('outputMeta for the LULC & Manning tool (FIMSIM-FE62)', () => {
+  it('describes the non-GeoTIFF land-cover and roughness exports', () => {
+    expect(outputMeta('LULC_Lumber.gpkg').label).toBe('Land cover (GeoPackage)');
+    expect(outputMeta('LULC_Lumber.asc').label).toBe('Land cover (ASCII grid)');
+    expect(outputMeta('ManningN_Lumber.shp').label).toBe("Manning's n (shapefile)");
+    expect(outputMeta('ManningN_Lumber.asc').label).toBe("Manning's n (ASCII grid)");
+    expect(outputMeta('ManningN_Lumber.dbf').label).toBe('Shapefile component');
+  });
+});
+
+describe('outputMeta for the Flowline tool (FIMSIM-FE63)', () => {
+  it('names each product the tool can save', () => {
+    expect(outputMeta('main_river_Lumber.shp').label).toBe('Main river');
+    expect(outputMeta('main_river_Lumber.tif').label).toBe('Main river');
+    expect(outputMeta('all_flowlines_Lumber.gpkg').label).toBe('All flowlines');
+    expect(outputMeta('usgs_gages_Lumber.csv').label).toBe('USGS gages (CSV)');
+    expect(outputMeta('feature_ids_Lumber.csv').label).toBe('NWM feature IDs (CSV)');
+    expect(outputMeta('preview_features.geojson').label).toBe('Map preview (GeoJSON)');
+  });
+});
+
+describe('outputMeta for the Streamflow tool (FIMSIM-FE64)', () => {
+  it('labels the NWM per-reach CSVs like the USGS ones', () => {
+    expect(outputMeta('nwm_retro_8781135.csv').label).toBe('Discharge time series (CSV)');
+    expect(outputMeta('nwm_forecast_8781135.csv').label).toBe('Discharge time series (CSV)');
+    expect(outputMeta('usgs_discharge_02134170.csv').label).toBe('Discharge time series (CSV)');
+  });
+});

@@ -98,7 +98,7 @@ def test_tfric_without_a_table_leaves_the_builder_to_its_default_map():
 
 
 def test_tfric_validates_the_manning_table_like_the_lisflood_step():
-    ok = {"manning_mapping": {"11": 0.03, "42": 0.11}}
+    ok = {"manning_mapping": {"11": 0.03, "42": 0.05}}
     assert REGISTRY["tfric"].validate_config(ok) == []
     bad_type = {"manning_mapping": [0.03]}
     assert any("manning_mapping" in p

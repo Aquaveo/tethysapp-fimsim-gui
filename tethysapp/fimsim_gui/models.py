@@ -81,15 +81,26 @@ PER_AOI_KEY_HOMES = {
 
 # Step keys, in wizard order (mirrors reactapp/src/steps.ts).
 # wizard order per model: LISFLOOD-FP first (runs on the portal), then the
-# TRITON deck steps (t*). Supersede uses the REGISTRY dependency graph, not
-# this order — the tuple orders zips/summaries and namespaces storage keys.
+# TRITON deck steps (t*), then the four Preparing Input Data tools (one job
+# step each — FIMSIM-BE25). Supersede uses the REGISTRY dependency graph,
+# not this order — the tuple orders zips/summaries and namespaces storage keys.
 STEP_KEYS = ("dem", "manning", "bci", "bdy", "par", "run",
-             "tdem", "tfric", "tbc", "thyg", "tcfg")
+             "tdem", "tfric", "tbc", "thyg", "tcfg",
+             "dem_tool", "lulc_tool", "flowline_tool", "flow_tool")
 
 #: FIMSIM-FE48 — the model is a property of the PROJECT (chosen at creation,
 #: shown throughout), not a URL mode. Mirrors reactapp/src/steps.ts MODELS.
-MODELS = ("lisflood-fp", "triton")
+#: FIMSIM-BE25 — the Preparing Input Data tools are project modes too (the
+#: desktop landing page's second category): Project → Area → options →
+#: Downloads, no simulation.
+TOOL_MODELS = ("dem-tool", "lulc-tool", "flowline-tool", "flow-tool")
+MODELS = ("lisflood-fp", "triton") + TOOL_MODELS
 DEFAULT_MODEL = "lisflood-fp"
+#: tool slug → its single job step
+TOOL_STEP_FOR_MODEL = {
+    "dem-tool": "dem_tool", "lulc-tool": "lulc_tool",
+    "flowline-tool": "flowline_tool", "flow-tool": "flow_tool",
+}
 #: step keys that only the TRITON wizard produces — used to backfill the
 #: model of projects created before the column existed
 TRITON_STEP_KEYS = tuple(k for k in STEP_KEYS if k.startswith("t"))

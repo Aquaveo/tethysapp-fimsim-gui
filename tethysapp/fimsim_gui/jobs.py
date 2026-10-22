@@ -263,14 +263,48 @@ def _persist_workspace(storage, ws_prefix: str, ctx: dict):
             storage.save(key, fh)
 
 
+#: FIMSIM-BE19 — how long a worker waits for the submit request's INSERT to
+#: become visible. The endpoint now commits the row BEFORE dispatching the
+#: Dask task; this is the belt-and-braces for anything that still dispatches
+#: early (a warm worker reached the SELECT within ~100 ms at the 2026-10-21
+#: demo and the run sat in "queued" forever).
+STEP_RUN_FETCH_ATTEMPTS = 20
+STEP_RUN_FETCH_DELAY_S = 0.5
+
+
+def _fetch_step_run(session, steprun_id):
+    """One SELECT of the run with its AOI + project (what the job needs)."""
+    from sqlalchemy.orm import joinedload
+
+    from tethysapp.fimsim_gui.models import Aoi, StepRun
+    return (session.query(StepRun)
+            .options(joinedload(StepRun.aoi).joinedload(Aoi.project))
+            .get(steprun_id))
+
+
+def _load_step_run(session, steprun_id, attempts=STEP_RUN_FETCH_ATTEMPTS,
+                   delay_s=STEP_RUN_FETCH_DELAY_S):
+    """The run row, retrying while it is not visible yet. Each retry rolls
+    the session back first: under READ COMMITTED a repeated SELECT inside
+    one transaction keeps the old snapshot. None once the attempts are
+    spent (the row really does not exist)."""
+    for attempt in range(attempts):
+        run = _fetch_step_run(session, steprun_id)
+        if run is not None:
+            return run
+        if attempt + 1 < attempts:
+            session.rollback()
+            time.sleep(delay_s)
+    return None
+
+
 def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
                  timeout_s: int = DEFAULT_TIMEOUT_S) -> dict:
     """Executed on the Dask worker. Owns the StepRun lifecycle end to end."""
     from sqlalchemy import create_engine
-    from sqlalchemy.orm import joinedload, sessionmaker
+    from sqlalchemy.orm import sessionmaker
 
     from tethysapp.fimsim_gui.job_types import REGISTRY
-    from tethysapp.fimsim_gui.models import StepRun
     from tethysapp.fimsim_gui.storage import build_key, service_from_config
 
     _ensure_django()
@@ -282,10 +316,7 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         # inside the try: a PROJ failure must mark the run failed, not
         # strand it in "queued"
         _sanity_check_proj()
-        from tethysapp.fimsim_gui.models import Aoi
-        run = (session.query(StepRun)
-               .options(joinedload(StepRun.aoi).joinedload(Aoi.project))
-               .get(steprun_id))
+        run = _load_step_run(session, steprun_id)
         if run is None:
             return {"status": "missing", "steprun_id": steprun_id}
         if run.status == "cancelled":
@@ -438,6 +469,81 @@ def submit_step(step_run, user, *, timeout_s: int = DEFAULT_TIMEOUT_S):
     return job
 
 
+#: NHD ID columns, in the order fimcore.flowline_mode searches them
+_NHD_ID_COLUMNS = ("COMID", "comid", "FEATUREID", "featureid",
+                   "NHDPlusID", "nhdplusid", "ID", "id")
+
+
+def nhd_comids(gdf) -> list:
+    """Unique NHDPlus COMIDs (= NWM feature IDs) of a flowline table, as
+    ints in row order; [] without a usable ID column (FIMSIM-BE25: the
+    Streamflow tool prefills its ID field from the main river's reaches)."""
+    if gdf is None or len(gdf) == 0:
+        return []
+    col = next((c for c in _NHD_ID_COLUMNS if c in gdf.columns), None)
+    if col is None:
+        return []
+    out = []
+    for value in gdf[col].tolist():
+        try:
+            comid = int(value)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if comid not in out:
+            out.append(comid)
+    return out
+
+
+def _main_segments_by_name(flowlines_gdf, main_river_gdf):
+    """Fallback when fimcore's picker fails: the flowlines matching the
+    main-river row's name (or its stream order when unnamed)."""
+    if main_river_gdf is None or len(main_river_gdf) == 0:
+        return None
+    row = main_river_gdf.iloc[0]
+    name = row.get("river_name")
+    if name and name != "Unnamed" and "GNIS_NAME" in flowlines_gdf.columns:
+        return flowlines_gdf[flowlines_gdf["GNIS_NAME"] == name]
+    order = row.get("stream_order")
+    if order is not None and "StreamOrde" in flowlines_gdf.columns:
+        return flowlines_gdf[flowlines_gdf["StreamOrde"] == order]
+    return None
+
+
+def main_stem_reach_ids(flowlines_gdf, main_river_gdf=None) -> list:
+    """NHDPlus COMIDs (= NWM feature IDs) of the main river's reaches,
+    upstream → downstream (Hydroseq descending when the column exists, else
+    flowline order). fimcore's merged main-river row carries no ID column,
+    so the reaches come from fimcore.bci._build_main_river on the clipped
+    flowlines — the same picker that drew that row. Never raises: the
+    Streamflow prefill must not fail the AOI lookup (final review C1/I1)."""
+    import warnings
+
+    try:
+        if flowlines_gdf is None or len(flowlines_gdf) == 0:
+            return []
+        try:
+            from fimcore.bci import _build_main_river
+            with warnings.catch_warnings():
+                # lengths in a geographic CRS only rank candidates there
+                warnings.simplefilter("ignore", UserWarning)
+                segments = _build_main_river(flowlines_gdf)[0]
+        except Exception:
+            segments = _main_segments_by_name(flowlines_gdf, main_river_gdf)
+        if segments is None or len(segments) == 0:
+            return []
+        hydroseq = next((c for c in segments.columns
+                         if str(c).lower() == "hydroseq"), None)
+        if hydroseq is not None:
+            import pandas as pd
+            order = pd.to_numeric(segments[hydroseq], errors="coerce")
+            segments = (segments.assign(_hydroseq=order)
+                        .sort_values("_hydroseq", ascending=False,
+                                     kind="stable", na_position="last"))
+        return nhd_comids(segments)
+    except Exception:
+        return []
+
+
 # ── AOI context lookup (BE6): river + gages, network-bound → background job ──
 
 def run_aoi_lookup(db_url: str, aoi_id: int) -> dict:
@@ -493,6 +599,9 @@ def run_aoi_lookup(db_url: str, aoi_id: int) -> dict:
             "gages": gages or [],
             "flowlines": _as_geojson(flowlines_gdf),
             "main_river": _as_geojson(main_river_gdf, tolerance=0.0001),
+            # FIMSIM-BE25: the main river's NWM feature IDs, upstream first
+            # (the Streamflow prefill seeds the first = the inflow reach)
+            "reach_ids": main_stem_reach_ids(flowlines_gdf, main_river_gdf),
         }
         aoi.lookup_status = "done"
         aoi.lookup_error = None

@@ -12,6 +12,7 @@ const SECTIONS = [
   ['aoi', 'Drawing a good study area'],
   ['steps', 'The wizard, step by step'],
   ['triton', 'TRITON (deck generation)'],
+  ['input-data', 'Preparing Input Data'],
   ['previews', 'Reading the step previews'],
   ['data', 'Data sources'],
   ['formats', 'Output files & formats'],
@@ -262,6 +263,61 @@ export default function Docs() {
             <a href="https://triton.ornl.gov/documentation/" target="_blank" rel="noreferrer">
               TRITON documentation
             </a>.
+          </p>
+        </section>
+
+        <section id="input-data">
+          <h2>Preparing Input Data</h2>
+          <p>
+            The desktop FIMsim&apos;s second category, on the portal: four
+            standalone tools that each produce one model-independent input for
+            a study area — no simulation. Pick one on the Project step; the
+            wizard is Project → Area of Interest → the tool&apos;s options →
+            Downloads. Each tool runs as a job like a wizard step, shows its
+            preview on the step, and lists its files on Downloads (per-file
+            links or a zip).
+          </p>
+          <h3>DEM</h3>
+          <p>
+            USGS 3DEP (1/3 arc-second, ≈ 10 m) or HAND (height above nearest
+            drainage, UT Austin, by HUC6) clipped to the area, at any cell size
+            from 10 m up, as GeoTIFF, GeoPackage or ESRI ASCII grid. Output:{' '}
+            <code>DEM_3DEP_&lt;area&gt;.&lt;ext&gt;</code> or{' '}
+            <code>DEM_HAND_…</code>, with the terrain preview.
+          </p>
+          <h3>LULC &amp; Manning&apos;s n</h3>
+          <p>
+            NLCD (30 m, USA) or Esri Sentinel-2 (10 m, global) land cover for a
+            published year, in GeoTIFF / GeoPackage / ASCII, and optionally the
+            Manning&apos;s n grid built from the editable class table (same
+            rules as the Roughness step: one hard band 0.01–0.15, per-class
+            ranges are guidance). Outputs: <code>LULC_&lt;area&gt;</code> and{' '}
+            <code>ManningN_&lt;area&gt;</code> (the latter also as a
+            polygonized shapefile), with the land-cover and roughness previews
+            and the class breakdown.
+          </p>
+          <h3>Flowline</h3>
+          <p>
+            The NHD main river (highest stream order) and/or the full reach
+            network crossing the area as shapefile, GeoPackage, TIF raster or
+            WKT CSV; the USGS gages inside the area as CSV; and the NWM feature
+            IDs (NHDPlus COMIDs) as CSV — the IDs the Streamflow Data tool and
+            the Flow Data step take. The step shows the saved lines and the
+            numbered gages on the map.
+          </p>
+          <h3>Streamflow Data</h3>
+          <p>
+            A discharge time series per ID: NWM retrospective (1979-02 to
+            2023-01, hourly, any interval from 1 h), NWM forecast (archived
+            from 2018-09-17; short / medium / long range, issue date, cycle),
+            or a USGS gage (15-minute observations, any interval from 15 min).
+            The Area step stays so the lookup can prefill the IDs — the gage
+            numbers for USGS, the main river&apos;s inflow reach for NWM (the
+            Flowline tool&apos;s feature-ID CSV lists every reach) — and you
+            can type or paste any others. Output: one{' '}
+            <code>&lt;source&gt;_&lt;id&gt;.csv</code> per ID
+            (<code>time_hours</code>, <code>discharge_cms</code>), plotted on
+            the step.
           </p>
         </section>
 

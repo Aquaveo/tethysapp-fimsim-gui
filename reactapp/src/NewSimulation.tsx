@@ -18,6 +18,7 @@ import StepPanel from './StepPanel';
 import {
   MODELS, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
   type ModelId, type StepId,
+  modelBadgeClass, resultsKind,
 } from './steps';
 import './NewSimulation.css';
 
@@ -156,7 +157,7 @@ export default function NewSimulation() {
 
       <section className="ns-card" aria-labelledby="ns-title">
         <p className="ns-eyebrow">
-          <span className={'ns-model-badge' + (MODELS[model].runsOnPortal ? '' : ' is-deck')}>
+          <span className={'ns-model-badge' + modelBadgeClass(model)}>
             {MODELS[model].label}
           </span>
           Step {idx + 1} of {STEPS.length}
@@ -177,7 +178,7 @@ export default function NewSimulation() {
         ) : activeStep === 'results' && projectId ? (
           <ResultsStep
             aois={aois}
-            hasRunStep={JOB_STEPS.has('run')}
+            kind={resultsKind(model)}
             modelStepKeys={[...JOB_STEPS]}
             onGoToRun={JOB_STEPS.has('run') ? () => goTo('run') : undefined}
           />

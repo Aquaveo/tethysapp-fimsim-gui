@@ -496,8 +496,13 @@ export default function AoiMap({
       map.addSource(srcId, { type: 'geojson', data: vo.data });
       map.addLayer({
         id: `${srcId}-river`, type: 'line', source: srcId,
-        filter: ['==', ['get', 'kind'], 'main_river'],
-        paint: { 'line-color': BOUNDARY_STYLE.main_river.color, 'line-width': 2.5 },
+        filter: ['in', ['get', 'kind'], ['literal', ['main_river', 'flowline']]],
+        paint: {
+          // FE63: the Flowline tool ships the saved reach network too (thin)
+          'line-color': ['match', ['get', 'kind'], 'flowline', '#63b3ed',
+            BOUNDARY_STYLE.main_river.color],
+          'line-width': ['match', ['get', 'kind'], 'flowline', 1.2, 2.5],
+        },
       });
       // added after the base layers → boundary markers sit ABOVE the gage
       // dots; among themselves the downstream marker wins (bug-round #x)
@@ -511,17 +516,28 @@ export default function AoiMap({
           'circle-radius': 8,
           'circle-color': ['match', ['get', 'kind'],
             'upstream', BOUNDARY_STYLE.upstream.fill,
-            'downstream', BOUNDARY_STYLE.downstream.fill, '#888888'],
+            'downstream', BOUNDARY_STYLE.downstream.fill,
+            'gage', GAGE_STYLE.fill, '#888888'],
           'circle-stroke-width': 2.5,
           'circle-stroke-color': ['match', ['get', 'kind'],
             'upstream', BOUNDARY_STYLE.upstream.ring,
-            'downstream', BOUNDARY_STYLE.downstream.ring, '#333333'],
+            'downstream', BOUNDARY_STYLE.downstream.ring,
+            'gage', GAGE_STYLE.stroke, '#333333'],
         },
+      });
+      map.addLayer({
+        id: `${srcId}-nums`, type: 'symbol', source: srcId,
+        filter: ['==', ['get', 'kind'], 'gage'],
+        layout: {
+          'text-field': ['get', 'num'], 'text-size': 10,
+          'text-font': ['Noto Sans Bold'], 'text-allow-overlap': true,
+        },
+        paint: { 'text-color': '#ffffff' },
       });
     }
     const wanted = new Set(vectorOverlays.map((v) => `vec-${v.id}`));
     for (const layer of map.getStyle().layers ?? []) {
-      const m = layer.id.match(/^(vec-.*)-(river|pts)$/);
+      const m = layer.id.match(/^(vec-.*)-(river|pts|nums)$/);
       if (m && !wanted.has(m[1])) map.removeLayer(layer.id);
     }
     for (const srcId of Object.keys(map.getStyle().sources ?? {})) {

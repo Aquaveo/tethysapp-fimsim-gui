@@ -1,16 +1,19 @@
 // reactapp/src/AoiStep.tsx
 // The Area of Interest step, server-backed (FIMSIM-BE6 cutover): uploads go
-// to the ingest endpoint (zipped shapefile / GeoPackage / GeoJSON — every
-// polygon feature becomes its own AOI, validated server-side), drawn
-// rectangles POST as GeoJSON, and each AOI's context lookup (river, gages,
-// flowlines) runs as a background job whose status the cards poll.
+// to the ingest endpoint (zipped shapefile / GeoPackage / GeoJSON, validated
+// server-side), drawn rectangles POST as GeoJSON, and each AOI's context
+// lookup (river, gages, flowlines) runs as a background job whose status the
+// cards poll. #xi: ONE study area per project — a multi-feature file offers a
+// single choice, and adding an area when one exists replaces it (confirmed).
 import { useEffect, useRef, useState } from 'react';
 import type { Position } from 'geojson';
 import AoiMap from './AoiMap';
+import ConfirmDialog from './ConfirmDialog';
 import {
   ApiError, createDrawnAoi, deleteAoi, getAoi, previewAoiFile, uploadAoiFile,
   retryLookup, type PreviewFeature, type ServerAoi,
 } from './api';
+import { defaultPick, needsReplaceConfirm, replaceWarning } from './aoiRules';
 import { NEUSE_AOI } from './exampleAois';
 import './AoiStep.css';
 
@@ -27,10 +30,12 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
   const [drawing, setDrawing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // FE31: a multi-feature upload waiting for the user to pick which to add
+  // FE31/#xi: a multi-feature upload waiting for the user to pick ONE feature
   const [pending, setPending] = useState<{ file: File; features: PreviewFeature[] } | null>(null);
-  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [picked, setPicked] = useState<number | null>(null);
   const [zoomTo, setZoomTo] = useState<ServerAoi | null>(null);
+  // #xi: an add that would replace the current area, awaiting confirmation
+  const [replaceAsk, setReplaceAsk] = useState<{ run: () => Promise<void> } | null>(null);
 
   // ── lookup polling: refresh any AOI whose lookup is still in flight ──
   useEffect(() => {
@@ -52,12 +57,19 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
   const fail = (e: unknown) =>
     setError(e instanceof ApiError ? e.message : String((e as Error).message ?? e));
 
-  const addAois = (created: ServerAoi[]) =>
-    setAois((prev) => [...prev, ...created]);
+  // #xi: with replace, the server has deleted the previous area(s) — the
+  // created list IS the project's areas now
+  const replaceAois = (created: ServerAoi[]) => setAois(() => created);
+
+  // run an add now, or ask first when it would replace the current area
+  const addOrAsk = (run: () => Promise<void>) => {
+    if (needsReplaceConfirm(aois.length)) setReplaceAsk({ run });
+    else void run();
+  };
 
   const createFromUpload = async (file: File, indices?: number[]) => {
-    const res = await uploadAoiFile(projectId, file, indices);
-    addAois(res.aois);
+    const res = await uploadAoiFile(projectId, file, indices, aois.length > 0);
+    replaceAois(res.aois);
     if (res.skipped_non_polygon) {
       setError(`${res.skipped_non_polygon} non-polygon feature(s) were skipped.`);
     }
@@ -69,10 +81,14 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
     try {
       const { features } = await previewAoiFile(projectId, file);
       if (features.length <= 1) {
-        await createFromUpload(file);        // single feature: add it straight away
+        // single feature: add it (replacing the current area after a confirm)
+        addOrAsk(async () => {
+          setBusy(`Adding ${file.name}…`);
+          try { await createFromUpload(file); } catch (e) { fail(e); } finally { setBusy(null); }
+        });
       } else {
-        setPending({ file, features });      // multi-feature: let the user choose
-        setPicked(new Set(features.map((f) => f.index)));  // default: all selected
+        setPending({ file, features });      // multi-feature: pick ONE
+        setPicked(defaultPick(features));
       }
     } catch (e) {
       fail(e);
@@ -81,13 +97,31 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
     }
   };
 
-  const confirmPending = async () => {
-    if (!pending) return;
+  const confirmPending = () => {
+    if (!pending || picked === null) return;
+    const { file } = pending;
+    const index = picked;
+    addOrAsk(async () => {
+      setError(null);
+      setBusy('Adding the selected area…');
+      try {
+        await createFromUpload(file, [index]);
+        setPending(null);
+      } catch (e) {
+        fail(e);
+      } finally {
+        setBusy(null);
+      }
+    });
+  };
+
+  const createDrawn = async (geometry: GeoJSON.Polygon, name: string,
+                             source: 'drawn' | 'example', label: string) => {
+    setBusy(label);
     setError(null);
-    setBusy(`Adding ${picked.size} area(s)…`);
     try {
-      await createFromUpload(pending.file, [...picked].sort((a, b) => a - b));
-      setPending(null);
+      const res = await createDrawnAoi(projectId, geometry, name, source, aois.length > 0);
+      replaceAois(res.aois);
     } catch (e) {
       fail(e);
     } finally {
@@ -95,36 +129,15 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
     }
   };
 
-  const onDrawComplete = async (ring: Position[]) => {
+  const onDrawComplete = (ring: Position[]) => {
     setDrawing(false);
-    setBusy('Saving drawn area…');
-    setError(null);
-    try {
-      const n = aois.filter((a) => a.source === 'drawn').length + 1;
-      const res = await createDrawnAoi(
-        projectId, { type: 'Polygon', coordinates: [ring] }, `Drawn AOI ${n}`);
-      addAois(res.aois);
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(null);
-    }
+    addOrAsk(() => createDrawn(
+      { type: 'Polygon', coordinates: [ring] }, 'Drawn AOI', 'drawn', 'Saving drawn area…'));
   };
 
-  const loadExample = async () => {
-    setBusy('Adding example…');
-    setError(null);
-    try {
-      const res = await createDrawnAoi(
-        projectId, NEUSE_AOI.geometry as GeoJSON.Polygon,
-        'Neuse River, NC (example)', 'example');
-      addAois(res.aois);
-    } catch (e) {
-      fail(e);
-    } finally {
-      setBusy(null);
-    }
-  };
+  const loadExample = () => addOrAsk(() => createDrawn(
+    NEUSE_AOI.geometry as GeoJSON.Polygon, 'Neuse River, NC (example)', 'example',
+    'Adding example…'));
 
   const remove = async (a: ServerAoi) => {
     try {
@@ -148,10 +161,10 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
     ];
     setBusy('Replacing with bounding box…');
     try {
+      // #xi: replace=true — the server swaps the area out in one request
       const res = await createDrawnAoi(
-        projectId, { type: 'Polygon', coordinates: [ring] }, a.name, 'drawn');
-      await deleteAoi(a.id);
-      setAois((prev) => [...prev.filter((x) => x.id !== a.id), ...res.aois]);
+        projectId, { type: 'Polygon', coordinates: [ring] }, a.name, 'drawn', true);
+      replaceAois(res.aois);
     } catch (e) {
       fail(e);
     } finally {
@@ -186,7 +199,7 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
         >
           {drawing ? 'Cancel drawing' : 'Draw on map'}
         </button>
-        <button type="button" className="button-secondary" disabled={!!busy} onClick={() => void loadExample()}>
+        <button type="button" className="button-secondary" disabled={!!busy} onClick={loadExample}>
           Load example: Neuse River, NC
         </button>
         <input
@@ -202,8 +215,10 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
         />
       </div>
       <p className="as-hint">
-        Zipped shapefile (.zip), GeoPackage (.gpkg), or GeoJSON — every polygon
-        feature becomes its own study area, validated on the server.
+        Zipped shapefile (.zip), GeoPackage (.gpkg), or GeoJSON, validated on
+        the server. <strong>One study area per project</strong> — a file with
+        several polygons lets you pick one; for many areas at once, use the
+        desktop FIMsim.
         LISFLOOD-FP and TRITON require <strong>rectangular</strong> areas: click
         the corners on the map and the drawn shape closes into its smallest
         enclosing rectangle; non-rectangular uploads can be converted to their
@@ -214,28 +229,17 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
       {error && <div className="as-error" role="alert">{error}</div>}
 
       {pending && (
-        <div className="as-picker" role="group" aria-label="Choose areas to add">
+        <div className="as-picker" role="radiogroup" aria-label="Choose the study area">
           <div className="as-picker-head">
-            <strong>{pending.file.name}</strong> has {pending.features.length} areas.
-            Choose which to add:
-            <label className="as-picker-all">
-              <input type="checkbox"
-                     checked={picked.size === pending.features.length}
-                     onChange={(e) => setPicked(e.target.checked
-                       ? new Set(pending.features.map((f) => f.index)) : new Set())} />
-              Select all
-            </label>
+            <strong>{pending.file.name}</strong> has {pending.features.length} polygons.
+            Choose <strong>one</strong> as the study area:
           </div>
           <ul className="as-picker-list">
             {pending.features.map((f) => (
               <li key={f.index}>
                 <label>
-                  <input type="checkbox" checked={picked.has(f.index)}
-                         onChange={() => setPicked((prev) => {
-                           const next = new Set(prev);
-                           if (next.has(f.index)) next.delete(f.index); else next.add(f.index);
-                           return next;
-                         })} />
+                  <input type="radio" name="as-pick" checked={picked === f.index}
+                         onChange={() => setPicked(f.index)} />
                   <span className="as-picker-name">{f.name}</span>
                   <span className="as-picker-meta">
                     {f.area_km2.toLocaleString()} km²
@@ -251,18 +255,31 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
               Cancel
             </button>
             <button type="button" className="button-primary"
-                    disabled={!!busy || picked.size === 0}
-                    onClick={() => void confirmPending()}>
-              Add {picked.size} selected area{picked.size === 1 ? '' : 's'}
+                    disabled={!!busy || picked === null}
+                    onClick={confirmPending}>
+              Use this area
             </button>
           </div>
         </div>
       )}
 
+      {replaceAsk && (
+        <ConfirmDialog
+          title="Replace the current study area?"
+          confirmLabel="Replace it"
+          cancelLabel="Keep the current area"
+          onConfirm={() => { const { run } = replaceAsk; setReplaceAsk(null); void run(); }}
+          onCancel={() => setReplaceAsk(null)}
+        >
+          <p>{replaceWarning(aois)}</p>
+          <p>The web app runs one study area per project. To keep this one, start a new project instead.</p>
+        </ConfirmDialog>
+      )}
+
       <AoiMap
         aois={aois}
         drawing={drawing}
-        onDrawComplete={(ring) => void onDrawComplete(ring)}
+        onDrawComplete={onDrawComplete}
         onDrawCancel={() => setDrawing(false)}
         zoomTo={zoomTo}
       />
