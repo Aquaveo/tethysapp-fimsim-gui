@@ -570,7 +570,11 @@ def api_step_submit(request, session, project_id, step_key):
             merged_config['solver_path'] = App.get_custom_setting('lisflood_binary_path')
         run = StepRun(aoi_id=aoi.id, step_key=step_key, config=merged_config)
         session.add(run)
-        session.flush()
+        # FIMSIM-BE19: COMMIT before dispatching — the worker's first act is
+        # to SELECT this row, and a warm worker gets there within ~100 ms. A
+        # flush alone left the INSERT invisible to it (READ COMMITTED), the
+        # worker returned "missing" and the run sat in "queued" forever.
+        session.commit()
         try:
             submit_step(run, request.user)
             results.append({'aoi_id': aoi.id, 'submitted': True, 'steprun_id': run.id})

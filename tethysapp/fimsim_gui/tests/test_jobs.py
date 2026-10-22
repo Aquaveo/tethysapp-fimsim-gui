@@ -206,3 +206,47 @@ def test_main_stem_reach_ids_never_raise(monkeypatch):
     assert main_stem_reach_ids(flowlines, _fimcore_main_river(flowlines)) == [9003, 9001, 9004]
     assert main_stem_reach_ids(flowlines, None) == []
     assert main_stem_reach_ids(object(), object()) == []
+
+
+# ── FIMSIM-BE19: a worker must not give up on a step run the web request
+#    has not committed yet (the LULC run that sat in "queued" forever at the
+#    2026-10-21 demo) ───────────────────────────────────────────────────────────
+
+class _FlakySession:
+    """A session whose lookup returns None for the first `misses` calls —
+    the uncommitted-row window a warm worker can hit."""
+
+    def __init__(self, misses, row="row"):
+        self.misses = misses
+        self.row = row
+        self.calls = 0
+        self.rolled_back = 0
+
+    def rollback(self):
+        self.rolled_back += 1
+
+
+def test_load_step_run_retries_until_the_row_is_visible(monkeypatch):
+    from tethysapp.fimsim_gui import jobs
+    sess = _FlakySession(misses=2)
+
+    def fetch(session, steprun_id):
+        session.calls += 1
+        return None if session.calls <= session.misses else session.row
+
+    monkeypatch.setattr(jobs, "_fetch_step_run", fetch)
+    slept = []
+    monkeypatch.setattr(jobs.time, "sleep", slept.append)
+    assert jobs._load_step_run(sess, 255, attempts=5, delay_s=0.5) == "row"
+    assert sess.calls == 3
+    assert slept == [0.5, 0.5]            # one pause per miss, none after the hit
+    assert sess.rolled_back == 2          # a fresh snapshot per retry (READ COMMITTED)
+
+
+def test_load_step_run_gives_up_after_the_attempts(monkeypatch):
+    from tethysapp.fimsim_gui import jobs
+    sess = _FlakySession(misses=99)
+    monkeypatch.setattr(jobs, "_fetch_step_run",
+                        lambda session, steprun_id: None)
+    monkeypatch.setattr(jobs.time, "sleep", lambda *_: None)
+    assert jobs._load_step_run(sess, 255, attempts=3, delay_s=0) is None

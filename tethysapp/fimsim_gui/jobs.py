@@ -263,14 +263,48 @@ def _persist_workspace(storage, ws_prefix: str, ctx: dict):
             storage.save(key, fh)
 
 
+#: FIMSIM-BE19 — how long a worker waits for the submit request's INSERT to
+#: become visible. The endpoint now commits the row BEFORE dispatching the
+#: Dask task; this is the belt-and-braces for anything that still dispatches
+#: early (a warm worker reached the SELECT within ~100 ms at the 2026-10-21
+#: demo and the run sat in "queued" forever).
+STEP_RUN_FETCH_ATTEMPTS = 20
+STEP_RUN_FETCH_DELAY_S = 0.5
+
+
+def _fetch_step_run(session, steprun_id):
+    """One SELECT of the run with its AOI + project (what the job needs)."""
+    from sqlalchemy.orm import joinedload
+
+    from tethysapp.fimsim_gui.models import Aoi, StepRun
+    return (session.query(StepRun)
+            .options(joinedload(StepRun.aoi).joinedload(Aoi.project))
+            .get(steprun_id))
+
+
+def _load_step_run(session, steprun_id, attempts=STEP_RUN_FETCH_ATTEMPTS,
+                   delay_s=STEP_RUN_FETCH_DELAY_S):
+    """The run row, retrying while it is not visible yet. Each retry rolls
+    the session back first: under READ COMMITTED a repeated SELECT inside
+    one transaction keeps the old snapshot. None once the attempts are
+    spent (the row really does not exist)."""
+    for attempt in range(attempts):
+        run = _fetch_step_run(session, steprun_id)
+        if run is not None:
+            return run
+        if attempt + 1 < attempts:
+            session.rollback()
+            time.sleep(delay_s)
+    return None
+
+
 def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
                  timeout_s: int = DEFAULT_TIMEOUT_S) -> dict:
     """Executed on the Dask worker. Owns the StepRun lifecycle end to end."""
     from sqlalchemy import create_engine
-    from sqlalchemy.orm import joinedload, sessionmaker
+    from sqlalchemy.orm import sessionmaker
 
     from tethysapp.fimsim_gui.job_types import REGISTRY
-    from tethysapp.fimsim_gui.models import StepRun
     from tethysapp.fimsim_gui.storage import build_key, service_from_config
 
     _ensure_django()
@@ -282,10 +316,7 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         # inside the try: a PROJ failure must mark the run failed, not
         # strand it in "queued"
         _sanity_check_proj()
-        from tethysapp.fimsim_gui.models import Aoi
-        run = (session.query(StepRun)
-               .options(joinedload(StepRun.aoi).joinedload(Aoi.project))
-               .get(steprun_id))
+        run = _load_step_run(session, steprun_id)
         if run is None:
             return {"status": "missing", "steprun_id": steprun_id}
         if run.status == "cancelled":
