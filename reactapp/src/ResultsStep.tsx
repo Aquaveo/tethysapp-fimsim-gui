@@ -387,8 +387,10 @@ export default function ResultsStep({
       )}
 
       {tab === 'inputs' && (
-        <div role="tabpanel" id="rs-panel-inputs" aria-labelledby="rs-tab-inputs"
-             className="rs-panel">
+        <div id="rs-panel-inputs" className="rs-panel"
+             {...(tabs.length > 1
+               ? { role: 'tabpanel', 'aria-labelledby': 'rs-tab-inputs' }
+               : { role: 'region', 'aria-label': 'Downloads' })}>
           {results.map((r) => {
             const { inputs } = splitResultFiles(r.files);
             return (

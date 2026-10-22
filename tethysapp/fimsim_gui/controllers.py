@@ -540,9 +540,9 @@ def api_step_submit(request, session, project_id, step_key):
                 continue
         # per-AOI resource prechecks BEFORE anything is superseded or created
         guard_reason = None
-        if step_key in ('dem', 'tdem'):
+        if step_key in ('dem', 'tdem', 'dem_tool', 'lulc_tool', 'flowline_tool'):
             # BE17: uploaded-DEM keys must belong to THIS AOI (no cross-AOI refs)
-            dem_keys = merged_config.get('user_dem_keys')
+            dem_keys = merged_config.get('user_dem_keys') if step_key in ('dem', 'tdem') else None
             if dem_keys:
                 from tethysapp.fimsim_gui.dem_upload import rejected_dem_keys
                 from tethysapp.fimsim_gui.storage import build_key

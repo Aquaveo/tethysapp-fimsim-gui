@@ -40,6 +40,14 @@ def test_dem_guard_rejects_fine_resolution_on_big_area():
     assert reason and "megacell" in reason and "coarser" in reason.lower()
 
 
+def test_dem_guard_reads_the_tools_cell_size_key():
+    # the DEM / LULC / Flowline tools send cell_size_m, not dem_res_m
+    aoi = _neuse_aoi()
+    assert guards.check_dem_submit(aoi, {"cell_size_m": 30}, guards.DEFAULT_MAX_DEM_CELLS) is None
+    reason = guards.check_dem_submit(aoi, {"cell_size_m": 1}, guards.DEFAULT_MAX_DEM_CELLS)
+    assert reason and "megacell" in reason
+
+
 # ── run-time estimate ─────────────────────────────────────────────────────────
 
 def test_run_guard_uses_be8_characterization():

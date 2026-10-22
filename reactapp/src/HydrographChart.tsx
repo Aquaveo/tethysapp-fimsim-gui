@@ -72,7 +72,7 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
           const parsed = parseHyg(
             await (await fetch(fileProxyUrl(run.id, hyg.name))).text(), startMs);
           if (!parsed.length) throw new Error('no readable series in the .hyg');
-          if (alive) { setSeries(parsed); setUnit('m³/s'); }
+          if (alive) { setSeries(parsed); setUnit('m³/s'); setAbsolute(false); }
           return;
         }
         const bdy = outputs.find((o) => o.name.toLowerCase().endsWith('.bdy'));
@@ -80,7 +80,7 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
         const text = await (await fetch(fileProxyUrl(run.id, bdy.name))).text();
         const parsed = parseBdy(text, startMs);
         if (!parsed.length) throw new Error('no readable series in the .bdy');
-        if (alive) { setSeries(parsed); setUnit('m²/s'); }
+        if (alive) { setSeries(parsed); setUnit('m²/s'); setAbsolute(false); }
       } catch (e) {
         if (alive) setError(String((e as Error).message ?? e));
       }
@@ -93,7 +93,8 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
 
   const s0 = series[0];
   const peakOf = (s: Series) => s.points.reduce((a, b) => (b[1] > a[1] ? b : a));
-  const peak = peakOf(s0);
+  // the caption's peak is the highest point across ALL series (several IDs on a tool run)
+  const peak = series.map(peakOf).reduce((a, b) => (b[1] > a[1] ? b : a));
   const toolRun = run.step_key === 'flow_tool';
   const spanMs = s0.points[s0.points.length - 1][0] - s0.points[0][0];
   const durationH = spanMs / 3.6e6;
@@ -149,7 +150,8 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
       markPoint: {
         data: [{ coord: pk, name: 'peak' }],
         symbolSize: 44,
-        itemStyle: { color: '#25C2DF' },
+        // one series: the brand cyan; several: each marker takes its line's colour
+        ...(series.length > 1 ? {} : { itemStyle: { color: '#25C2DF' } }),
         label: {
           formatter: () => `${pk[1].toFixed(1)}`,
           color: '#152428', fontSize: 10,

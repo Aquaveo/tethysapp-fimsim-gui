@@ -39,7 +39,8 @@ def predicted_dem_cells(aoi, res_m: float) -> int:
 def check_dem_submit(aoi, config: dict, max_cells: int):
     """Reject a DEM submit whose grid would exceed max_cells (reason or None).
     Runs BEFORE anything is superseded, so an oversized request costs nothing."""
-    res_m = float(config.get("dem_res_m") or 30)
+    # dem/tdem use dem_res_m; the Preparing Input Data tools use cell_size_m
+    res_m = float(config.get("dem_res_m") or config.get("cell_size_m") or 30)
     cells = predicted_dem_cells(aoi, res_m)
     if cells > max_cells:
         return (
