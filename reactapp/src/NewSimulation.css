@@ -61,6 +61,23 @@
   border-color: var(--color-primary);
   color: #fff;
 }
+/* FE70 — Run was skipped: amber node (the FE52 warning colour) + an
+   informational tooltip in the step-form tooltip's style */
+.ns-step.skipped { color: var(--color-text); position: relative; }
+.ns-step.skipped .ns-dot {
+  border-color: var(--color-warning);
+  background: #fff8e1;
+  color: #8a5a00;
+  font-size: 1rem;
+}
+.ns-step.skipped:hover::after, .ns-step.skipped:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute; left: 0; top: calc(100% + 4px);
+  width: max-content; max-width: 17rem; white-space: normal; text-align: left;
+  background: #1f2733; color: #fff; font: 400 0.75rem/1.4 inherit;
+  padding: 0.45rem 0.6rem; border-radius: var(--radius-md); z-index: 30;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28); pointer-events: none;
+}
 /* Vertical reach between nodes, aligned to the dot centers. */
 .ns-line {
   width: 2px;

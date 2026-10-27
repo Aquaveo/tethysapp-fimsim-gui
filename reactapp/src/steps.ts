@@ -347,3 +347,23 @@ export function stepDone(
 export function headerModel(projectId: number | null, model: ModelId): ModelId | null {
   return projectId ? model : null;
 }
+
+/**
+ * FIMSIM-FE70 — Nathan (2026-10-22): a bare number on the Run node hides that
+ * the model was skipped. Once the user is PAST Run with no succeeded run on
+ * any area, the node shows a warning with an informational tooltip. Never on
+ * a model without a Run step (TRITON, the tools).
+ */
+export const RUN_SKIPPED_TIP =
+  'The model was not run — Results has no flood map. Go to Run to start it.';
+
+export function runSkipped(
+  steps: StepDef[], activeStep: StepId,
+  aois: { steps?: Record<string, { status: string }> }[],
+): boolean {
+  const runIdx = steps.findIndex((s) => s.id === 'run');
+  if (runIdx < 0) return false;
+  const cur = steps.findIndex((s) => s.id === activeStep);
+  if (cur <= runIdx) return false;
+  return !aois.some((a) => a.steps?.run?.status === 'succeeded');
+}

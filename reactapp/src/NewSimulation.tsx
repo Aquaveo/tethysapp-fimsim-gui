@@ -16,7 +16,8 @@ import ProjectStep from './ProjectStep';
 import ResultsStep from './ResultsStep';
 import StepPanel from './StepPanel';
 import {
-  MODELS, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
+  MODELS, RUN_SKIPPED_TIP, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep,
+  runSkipped, stepDone, wizardPath,
   type ModelId, type StepId,
   modelBadgeClass, resultsKind,
 } from './steps';
@@ -132,8 +133,11 @@ export default function NewSimulation() {
       {/* The river stepper: dots are reaches; the line fills as flow moves downstream. */}
       <ol className="ns-stepper" aria-label="Simulation steps">
         {STEPS.map((s, i) => {
-          // ✓ means the step really completed (FE55), not merely "behind you"
+          // ✓ means the step really completed (FE55), not merely "behind you";
+          // ⚠ on Run means the user went past it without a run (FE70)
+          const skipped = s.id === 'run' && runSkipped(STEPS, activeStep, aois);
           const state = i === idx ? 'active'
+            : skipped ? 'skipped'
             : stepDone(s.id, aois, !!projectId) ? 'done' : 'todo';
           return (
             <li key={s.id} className="ns-step-wrap">
@@ -142,10 +146,12 @@ export default function NewSimulation() {
                 type="button"
                 className={`ns-step ${state}`}
                 aria-current={state === 'active' ? 'step' : undefined}
+                aria-label={skipped ? `${s.label}: ${RUN_SKIPPED_TIP}` : undefined}
+                data-tip={skipped ? RUN_SKIPPED_TIP : undefined}
                 onClick={() => tryGoTo(s.id)}
               >
                 <span className="ns-dot" aria-hidden="true">
-                  {state === 'done' ? '✓' : i + 1}
+                  {state === 'done' ? '✓' : skipped ? '⚠' : i + 1}
                 </span>
                 <span className="ns-step-label">{s.label}</span>
               </button>
