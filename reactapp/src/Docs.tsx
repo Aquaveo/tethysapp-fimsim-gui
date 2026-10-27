@@ -5,6 +5,7 @@
 // AOI-drawing guidance is her hydrology expertise, lightly edited for the
 // web wizard.
 import { useEffect, useState } from 'react';
+import { INDEPENDENCE_NOTE } from './steps';
 import './Docs.css';
 
 const SECTIONS = [
@@ -24,6 +25,10 @@ const SECTIONS = [
 
 export default function Docs() {
   const [cap, setCap] = useState<string>('1,000');
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (id) document.getElementById(id)?.scrollIntoView();
+  }, []);
   useEffect(() => {
     fetch('/apps/fimsim-gui/api/limits/')
       .then((r) => r.json())
@@ -277,6 +282,7 @@ export default function Docs() {
             preview on the step, and lists its files on Downloads (per-file
             links or a zip).
           </p>
+          <p className="dc-note">{INDEPENDENCE_NOTE}</p>
           <h3>DEM</h3>
           <p>
             USGS 3DEP (1/3 arc-second, ≈ 10 m) or HAND (height above nearest

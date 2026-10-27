@@ -246,6 +246,14 @@ export const CATEGORIES: { id: CategoryId; title: string; description: string }[
   },
 ];
 
+// FIMSIM-FE67 (Sagy, 2026-10-22: "do I have to prepare inputs first?"). One
+// sentence shared by the Project step and the docs; round 2 (reusing a tool's
+// output inside a modeling project) will soften it.
+export const INDEPENDENCE_NOTE =
+  'The two categories are independent: a Flood Modeling project prepares its own inputs '
+  + '(terrain, roughness, flowlines, flows), so you never need the Preparing Input Data tools '
+  + 'first. Use the tools when you want one of those inputs on its own, in a format you choose.';
+
 export function modelsInCategory(category: CategoryId): ModelId[] {
   return (Object.keys(MODELS) as ModelId[]).filter((m) => MODELS[m].category === category);
 }

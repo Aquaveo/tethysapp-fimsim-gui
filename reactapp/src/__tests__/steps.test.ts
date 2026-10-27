@@ -2,7 +2,7 @@
 // forward with no successful run asks for confirmation.
 import { describe, expect, it } from 'vitest';
 import {
-  CATEGORIES, MODELS, headerModel, isToolModel, modelBadgeClass, modelFromSlug,
+  CATEGORIES, INDEPENDENCE_NOTE, MODELS, headerModel, isToolModel, modelBadgeClass, modelFromSlug,
   modelsInCategory, needsRunConfirm, resultsKind, runSkipped, stepDone, wizardPath,
 } from '../steps';
 import type { ServerAoi } from '../api';
@@ -95,6 +95,11 @@ describe('MODELS categories', () => {
     expect(blue?.title).toBe('Flood Modeling');
     expect(blue?.description)
       .toBe('Build a complete input package for a supported 2D flood simulation model.');
+  });
+
+  it('says the two categories are independent (FIMSIM-FE67, Sagy 2026-10-22)', () => {
+    expect(INDEPENDENCE_NOTE).toMatch(/independent/);
+    expect(INDEPENDENCE_NOTE).toMatch(/Flood Modeling project prepares its own inputs/);
   });
 
   it('round-trips every tool slug through wizardPath / modelFromSlug', () => {
