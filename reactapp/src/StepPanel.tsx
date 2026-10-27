@@ -424,7 +424,7 @@ export default function StepPanel({
                 <>
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
                   {run.status === 'succeeded' && preview === 'hydrograph' && (
-                    <HydrographChart run={run} />
+                    <HydrographChart run={run} aoiName={a.name} />
                   )}
                   {run.status === 'succeeded' && preview === 'boundary' && (
                     <BoundaryPreview

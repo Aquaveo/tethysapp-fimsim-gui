@@ -2,7 +2,7 @@
 // the proxy/zip URL shapes (trailing slashes are load-bearing for Django).
 import { describe, expect, it } from 'vitest';
 import {
-  aoiZipUrl, fileProxyUrl, outputMeta, splitResultFiles, zipSelection,
+  aoiZipUrl, fileProxyUrl, outputMeta, pngFilename, splitResultFiles, zipSelection,
 } from '../outputsMeta';
 
 describe('outputMeta', () => {
@@ -175,5 +175,15 @@ describe('outputMeta for the Streamflow tool (FIMSIM-FE64)', () => {
     expect(outputMeta('nwm_retro_8781135.csv').label).toBe('Discharge time series (CSV)');
     expect(outputMeta('nwm_forecast_8781135.csv').label).toBe('Discharge time series (CSV)');
     expect(outputMeta('usgs_discharge_02134170.csv').label).toBe('Discharge time series (CSV)');
+  });
+});
+
+// FIMSIM-FE69 — the hydrograph's "Download PNG" names the file after the area
+// and the step, filesystem-safe like the zips.
+describe('pngFilename', () => {
+  it('builds <area>_<step>_hydrograph.png with a safe area name', () => {
+    expect(pngFilename('Lumber River (Test Case 3)', 'flow_tool'))
+      .toBe('Lumber_River_Test_Case_3_flow_tool_hydrograph.png');
+    expect(pngFilename('Neuse', 'bdy')).toBe('Neuse_bdy_hydrograph.png');
   });
 });
