@@ -377,6 +377,46 @@ def api_aoi_dem(request, session, aoi_id):
     return JsonResponse({'dems': dems})
 
 
+PREPARED_LIST_LIMIT = 50   # newest tool runs read per listing (header reads)
+
+
+@controller(url='api/aois/{aoi_id}/prepared', name='api_aoi_prepared')
+@with_session
+def api_aoi_prepared(request, session, aoi_id):
+    """FIMSIM-BE20: the user's prepared tool outputs a modeling step can pick.
+
+    GET ?kind=dem|manning|lulc|flow → one row per output file of that kind
+    from the user's succeeded, current tool runs (any project), newest first,
+    each flagged `covers` (the raster contains this AOI) and `usable`
+    (GeoTIFF / CSV, readable; HAND is never a terrain).
+    """
+    from geoalchemy2.shape import to_shape
+    from tethysapp.fimsim_gui.models import StepRun
+    from tethysapp.fimsim_gui.prepared import KIND_STEP, prepared_rows, raster_bounds_4326
+    from tethysapp.fimsim_gui.storage import get_storage
+
+    aoi, err = _owned_aoi(session, request, aoi_id)
+    if err:
+        return err
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET required'}, status=405)
+    kind = request.GET.get('kind', '')
+    if kind not in KIND_STEP:
+        return JsonResponse(
+            {'error': f"'kind' must be one of {', '.join(KIND_STEP)}"}, status=400)
+    runs = (session.query(StepRun).join(Aoi).join(Project)
+            .filter(Project.username == request.user.username,
+                    StepRun.step_key == KIND_STEP[kind],
+                    StepRun.status == 'succeeded',
+                    StepRun.superseded.is_(False))
+            .order_by(StepRun.finished.desc())
+            .limit(PREPARED_LIST_LIMIT).all())
+    storage = get_storage()
+    rows = prepared_rows(runs, kind, to_shape(aoi.geometry),
+                         lambda key: raster_bounds_4326(storage, key))
+    return JsonResponse({'prepared': rows})
+
+
 @controller(url='api/aois/{aoi_id}/lookup', name='api_aoi_lookup')
 @with_session
 def api_aoi_lookup(request, session, aoi_id):
