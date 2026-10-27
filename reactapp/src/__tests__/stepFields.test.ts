@@ -80,6 +80,26 @@ describe('STEP_FIELDS consistency', () => {
   });
 });
 
+// FIMSIM-FE68 (Sagy, 2026-10-22): the cell size resamples the 10 m 3DEP
+// source; it is not a choice of download product.
+describe('DEM cell size is labelled as a resampling (FIMSIM-FE68)', () => {
+  const field = (step: string) => STEP_FIELDS[step].find((f) => f.key === 'dem_res_m');
+
+  it('labels the Terrain selects "Resampling cell size" and keeps 10 m as native', () => {
+    for (const step of ['dem', 'tdem']) {
+      expect(field(step)?.label).toBe('Resampling cell size');
+      expect(field(step)?.options?.[0].label).toBe('10 m — native (default)');
+    }
+  });
+
+  it('labels the DEM tool field "Resampling cell size (m)", 10 m native, coarser resampled', () => {
+    const f = field('dem_tool');
+    expect(f?.label).toBe('Resampling cell size (m)');
+    expect(f?.help).toMatch(/10 m is the native/);
+    expect(f?.help).toMatch(/resampled from/);
+  });
+});
+
 describe('DEM resolution tooltip (FIMSIM-FE51)', () => {
   const help = (step: string) =>
     STEP_FIELDS[step].find((f) => f.key === 'dem_res_m')?.help ?? '';

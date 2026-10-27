@@ -150,7 +150,8 @@ export default function Docs() {
             Downloads elevation and grids it for the model
             (<code>dem.ascii</code>). Sources: the{' '}
             <strong>USGS 3DEP 1/3 arc-second DEM</strong> (~10 m — the native
-            product; other resolutions are resampled from it) or{' '}
+            product; the <em>Resampling cell size</em> choice resamples it to
+            30 m or 90 m, it is not a different download) or{' '}
             <strong>TACC HAND</strong> (height above nearest drainage). Finer
             grids (1 m / 3 m) increase simulation times substantially;
             30 m / 90 m are useful for fast previews.
@@ -286,8 +287,8 @@ export default function Docs() {
           <h3>DEM</h3>
           <p>
             USGS 3DEP (1/3 arc-second, ≈ 10 m) or HAND (height above nearest
-            drainage, UT Austin, by HUC6) clipped to the area, at any cell size
-            from 10 m up, as GeoTIFF, GeoPackage or ESRI ASCII grid. Output:{' '}
+            drainage, UT Austin, by HUC6) clipped to the area, at any resampling
+            cell size from 10 m (native) up, as GeoTIFF, GeoPackage or ESRI ASCII grid. Output:{' '}
             <code>DEM_3DEP_&lt;area&gt;.&lt;ext&gt;</code> or{' '}
             <code>DEM_HAND_…</code>, with the terrain preview.
           </p>
