@@ -90,6 +90,13 @@ describe('MODELS categories', () => {
       .toBe('Download and process the geospatial data needed to configure a flood model.');
   });
 
+  it('calls the blue category Flood Modeling (FIMSIM-FE66, Sagy 2026-10-22)', () => {
+    const blue = CATEGORIES.find((c) => c.id === 'flood-mapping');
+    expect(blue?.title).toBe('Flood Modeling');
+    expect(blue?.description)
+      .toBe('Build a complete input package for a supported 2D flood simulation model.');
+  });
+
   it('round-trips every tool slug through wizardPath / modelFromSlug', () => {
     for (const m of modelsInCategory('input-data')) {
       expect(modelFromSlug(m)).toBe(m);

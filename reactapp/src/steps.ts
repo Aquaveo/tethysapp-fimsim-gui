@@ -241,7 +241,7 @@ export const CATEGORIES: { id: CategoryId; title: string; description: string }[
   },
   {
     id: 'flood-mapping',
-    title: 'Flood Mapping',
+    title: 'Flood Modeling',   // FE66: "modeling", not "mapping" — it builds and runs the model (Sagy, 2026-10-22)
     description: 'Build a complete input package for a supported 2D flood simulation model.',
   },
 ];
