@@ -352,7 +352,7 @@ def api_aoi_dem(request, session, aoi_id):
     if not ups:
         return JsonResponse({'error': 'attach at least one GeoTIFF'}, status=400)
 
-    from tethysapp.fimsim_gui.dem_upload import validate_dem_geotiff
+    from tethysapp.fimsim_gui.dem_upload import validate_geotiff
     from tethysapp.fimsim_gui.storage import build_key, get_storage
     storage = get_storage()
     dems = []
@@ -363,7 +363,7 @@ def api_aoi_dem(request, session, aoi_id):
                 tmp.write(chunk)
             tmp_path = tmp.name
         try:
-            reason = validate_dem_geotiff(tmp_path)
+            reason = validate_geotiff(tmp_path)
             if reason:
                 return JsonResponse(
                     {'error': f"'{up.name}': {reason}"}, status=400)
@@ -383,23 +383,34 @@ PREPARED_LIST_LIMIT = 50   # newest tool runs read per listing (header reads)
 @controller(url='api/aois/{aoi_id}/prepared', name='api_aoi_prepared')
 @with_session
 def api_aoi_prepared(request, session, aoi_id):
-    """FIMSIM-BE20: the user's prepared tool outputs a modeling step can pick.
+    """Prepared tool outputs for a modeling step (round 2 of Preparing Input
+    Data, docs/design-input-prep-round2.md).
 
-    GET ?kind=dem|manning|lulc|flow → one row per output file of that kind
-    from the user's succeeded, current tool runs (any project), newest first,
-    each flagged `covers` (the raster contains this AOI) and `usable`
-    (GeoTIFF / CSV, readable; HAND is never a terrain).
+    GET ?kind=dem|manning|lulc|flow (FIMSIM-BE20) → one row per output file
+    of that kind from the user's succeeded, current tool runs (any project),
+    newest first, each flagged `covers` (the raster contains this AOI) and
+    `usable` (GeoTIFF / CSV, readable; HAND is never a terrain).
+
+    POST {steprun_id, file, kind} (FIMSIM-BE21) → re-checks the pick, copies
+    the file to this AOI's user_<kind>/ prefix and returns the upload shape
+    {key, name, bytes, source}; the step passes the key as user_<kind>_keys.
     """
+    aoi, err = _owned_aoi(session, request, aoi_id)
+    if err:
+        return err
+    if request.method == 'GET':
+        return _list_prepared(session, request, aoi)
+    if request.method == 'POST':
+        return _pick_prepared(session, request, aoi)
+    return JsonResponse({'error': 'GET or POST required'}, status=405)
+
+
+def _list_prepared(session, request, aoi):
     from geoalchemy2.shape import to_shape
     from tethysapp.fimsim_gui.models import StepRun
     from tethysapp.fimsim_gui.prepared import KIND_STEP, prepared_rows, raster_bounds_4326
     from tethysapp.fimsim_gui.storage import get_storage
 
-    aoi, err = _owned_aoi(session, request, aoi_id)
-    if err:
-        return err
-    if request.method != 'GET':
-        return JsonResponse({'error': 'GET required'}, status=405)
     kind = request.GET.get('kind', '')
     if kind not in KIND_STEP:
         return JsonResponse(
@@ -415,6 +426,36 @@ def api_aoi_prepared(request, session, aoi_id):
     rows = prepared_rows(runs, kind, to_shape(aoi.geometry),
                          lambda key: raster_bounds_4326(storage, key))
     return JsonResponse({'prepared': rows})
+
+
+def _pick_prepared(session, request, aoi):
+    from geoalchemy2.shape import to_shape
+    from tethysapp.fimsim_gui.models import StepRun
+    from tethysapp.fimsim_gui.prepared import (
+        KIND_STEP, PickError, check_pick, copy_prepared,
+    )
+    from tethysapp.fimsim_gui.storage import build_key, get_storage
+
+    try:
+        body = json.loads(request.body or '{}')
+        steprun_id = int(body.get('steprun_id'))
+    except (ValueError, TypeError):
+        return JsonResponse({'error': "send JSON {steprun_id, file, kind}"}, status=400)
+    kind, file = body.get('kind', ''), str(body.get('file') or '')
+    if kind not in KIND_STEP:
+        return JsonResponse(
+            {'error': f"'kind' must be one of {', '.join(KIND_STEP)}"}, status=400)
+    run = session.query(StepRun).get(steprun_id)
+    try:
+        src_key = check_pick(run, request.user.username, file, kind)
+        dest_key = build_key(request.user.username, aoi.project_id, aoi.id,
+                             f'user_{kind}', file)
+        out = copy_prepared(get_storage(), src_key, dest_key, kind, to_shape(aoi.geometry))
+    except PickError as exc:
+        return JsonResponse({'error': exc.message}, status=exc.status)
+    out['source'] = {'steprun_id': run.id, 'project': run.aoi.project.name,
+                     'aoi': run.aoi.name}
+    return JsonResponse(out)
 
 
 @controller(url='api/aois/{aoi_id}/lookup', name='api_aoi_lookup')
@@ -579,20 +620,17 @@ def api_step_submit(request, session, project_id, step_key):
                                 'reason': 'config rejected: ' + '; '.join(problems)})
                 continue
         # per-AOI resource prechecks BEFORE anything is superseded or created
+        # BE17 / BE21: supplied-input keys (uploaded or picked) must belong to
+        # THIS AOI (no cross-AOI or cross-user refs)
+        from tethysapp.fimsim_gui.dem_upload import rejected_input_keys
+        from tethysapp.fimsim_gui.storage import build_key
+        if rejected_input_keys(merged_config,
+                               build_key(request.user.username, aoi.project_id, aoi.id)):
+            results.append({'aoi_id': aoi.id, 'submitted': False,
+                            'reason': 'a supplied input file does not belong to this area'})
+            continue
         guard_reason = None
         if step_key in ('dem', 'tdem', 'dem_tool', 'lulc_tool', 'flowline_tool'):
-            # BE17: uploaded-DEM keys must belong to THIS AOI (no cross-AOI refs)
-            dem_keys = merged_config.get('user_dem_keys') if step_key in ('dem', 'tdem') else None
-            if dem_keys:
-                from tethysapp.fimsim_gui.dem_upload import rejected_dem_keys
-                from tethysapp.fimsim_gui.storage import build_key
-                prefix = build_key(request.user.username, aoi.project_id,
-                                   aoi.id, 'user_dem') + '/'
-                if rejected_dem_keys(dem_keys, prefix):
-                    results.append({'aoi_id': aoi.id, 'submitted': False,
-                                    'reason': 'an uploaded DEM does not belong '
-                                              'to this area'})
-                    continue
             guard_reason = guards.check_dem_submit(
                 aoi, jt.merged(merged_config),
                 _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS))

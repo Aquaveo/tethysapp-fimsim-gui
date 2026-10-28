@@ -131,7 +131,121 @@ def test_unknown_kind_is_rejected():
         prepared_rows([], "flowline", AOI, _covering)
 
 
+# ── FIMSIM-BE21: picking a prepared file ─────────────────────────────────────
+
+def _err(fn, *a):
+    from tethysapp.fimsim_gui.prepared import PickError
+    with pytest.raises(PickError) as e:
+        fn(*a)
+    return e.value.status, e.value.message
+
+
+def _owned(run, user="admin"):
+    run.status, run.superseded = "succeeded", False
+    run.aoi.project.username = user
+    return run
+
+
+def test_check_pick_accepts_a_usable_output_of_the_right_tool():
+    from tethysapp.fimsim_gui.prepared import check_pick
+    run = _owned(_run(259, "lulc_tool", ["LULC_A.tif", "ManningN_A.tif"]))
+    assert check_pick(run, "admin", "ManningN_A.tif", "manning") \
+        == "admin/35/54/lulc_tool/ManningN_A.tif"
+
+
+def test_check_pick_refusals():
+    from tethysapp.fimsim_gui.prepared import check_pick
+    run = _owned(_run(259, "lulc_tool", ["LULC_A.tif", "ManningN_A.asc"]))
+    assert _err(check_pick, None, "admin", "x.tif", "dem")[0] == 404
+    assert _err(check_pick, run, "someone", "LULC_A.tif", "lulc")[0] == 403
+    assert _err(check_pick, run, "admin", "LULC_A.tif", "dem") \
+        == (400, "run 259 is not a DEM tool run")
+    assert _err(check_pick, run, "admin", "other.tif", "lulc") \
+        == (400, "'other.tif' is not an output of that run")
+    assert _err(check_pick, run, "admin", "LULC_A.tif", "manning") \
+        == (400, "'LULC_A.tif' is not a Manning's n file")
+    status, msg = _err(check_pick, run, "admin", "ManningN_A.asc", "manning")
+    assert status == 400 and "GeoTIFF" in msg
+    with pytest.raises(ValueError):
+        check_pick(run, "admin", "LULC_A.tif", "flowline")
+
+
+def test_check_pick_refuses_a_failed_or_replaced_run():
+    from tethysapp.fimsim_gui.prepared import check_pick
+    run = _owned(_run(259, "lulc_tool", ["LULC_A.tif"]))
+    run.superseded = True
+    assert _err(check_pick, run, "admin", "LULC_A.tif", "lulc") \
+        == (404, "that prepared run no longer exists — refresh the list")
+    run.superseded, run.status = False, "failed"
+    assert _err(check_pick, run, "admin", "LULC_A.tif", "lulc")[0] == 404
+
+
+def test_copy_prepared_flow_csv_checks_its_columns(tmp_path):
+    from tethysapp.fimsim_gui.prepared import copy_prepared
+    from tethysapp.fimsim_gui.storage import make_local_service
+    st = make_local_service(tmp_path / "store")
+    st.save("admin/9/1/flow_tool/usgs_discharge_1.csv",
+            b"datetime,time_hours,discharge_cms\n2016-10-01 00:00,0,12.5\n")
+    out = copy_prepared(st, "admin/9/1/flow_tool/usgs_discharge_1.csv",
+                        "admin/3/7/user_flow/usgs_discharge_1.csv", "flow", AOI)
+    assert out == {"key": "admin/3/7/user_flow/usgs_discharge_1.csv",
+                   "name": "usgs_discharge_1.csv", "bytes": st.size(out["key"])}
+    with st.open(out["key"]) as fh:
+        assert fh.read().startswith(b"datetime,time_hours")
+
+    st.save("admin/9/1/flow_tool/usgs_discharge_2.csv", b"when,flow\n1,2\n")
+    status, msg = _err(copy_prepared, st, "admin/9/1/flow_tool/usgs_discharge_2.csv",
+                       "admin/3/7/user_flow/usgs_discharge_2.csv", "flow", AOI)
+    assert status == 400 and "time_hours" in msg
+    assert not st.exists("admin/3/7/user_flow/usgs_discharge_2.csv")
+
+
 rasterio = pytest.importorskip("rasterio")
+
+
+def _store_tif(storage, tmp_path, key, west=680000, crs="EPSG:26917"):
+    from rasterio.transform import from_origin
+    src = tmp_path / "src.tif"
+    kw = dict(driver="GTiff", height=10, width=10, count=1, dtype="float32",
+              transform=from_origin(west, 3850000, 1000, 1000))
+    if crs:
+        kw["crs"] = crs
+    with rasterio.open(src, "w", **kw) as d:
+        d.write(np.ones((10, 10), dtype="float32"), 1)
+    with open(src, "rb") as fh:
+        storage.save(key, fh)
+
+
+# the stored test raster (UTM 17N, 680–690 km E, 3840–3850 km N) spans about
+# -79.03…-78.92 E, 34.69…34.78 N; a modeling AOI inside it:
+INSIDE = box(-79.0, 34.7, -78.95, 34.75)
+
+
+def test_copy_prepared_raster_copies_a_covering_geotiff(tmp_path):
+    from tethysapp.fimsim_gui.prepared import copy_prepared
+    from tethysapp.fimsim_gui.storage import make_local_service
+    st = make_local_service(tmp_path / "store")
+    _store_tif(st, tmp_path, "admin/9/1/dem_tool/DEM_3DEP_A.tif")
+    out = copy_prepared(st, "admin/9/1/dem_tool/DEM_3DEP_A.tif",
+                        "admin/3/7/user_dem/DEM_3DEP_A.tif", "dem", INSIDE)
+    assert out["key"] == "admin/3/7/user_dem/DEM_3DEP_A.tif" and out["bytes"] > 0
+    assert st.exists("admin/9/1/dem_tool/DEM_3DEP_A.tif")       # a copy, not a move
+
+
+def test_copy_prepared_raster_refuses_an_uncovered_or_crs_less_file(tmp_path):
+    from tethysapp.fimsim_gui.prepared import copy_prepared
+    from tethysapp.fimsim_gui.storage import make_local_service
+    st = make_local_service(tmp_path / "store")
+    _store_tif(st, tmp_path, "admin/9/1/dem_tool/DEM_3DEP_A.tif")
+    status, msg = _err(copy_prepared, st, "admin/9/1/dem_tool/DEM_3DEP_A.tif",
+                       "admin/3/7/user_dem/DEM_3DEP_A.tif", "dem", AOI)
+    assert status == 400 and "does not cover this area" in msg
+    _store_tif(st, tmp_path, "admin/9/1/dem_tool/DEM_3DEP_B.tif", crs=None)
+    status, msg = _err(copy_prepared, st, "admin/9/1/dem_tool/DEM_3DEP_B.tif",
+                       "admin/3/7/user_dem/DEM_3DEP_B.tif", "dem", INSIDE)
+    assert status == 400 and "coordinate reference system" in msg
+    assert not st.exists("admin/3/7/user_dem/DEM_3DEP_A.tif")
+    assert not st.exists("admin/3/7/user_dem/DEM_3DEP_B.tif")
 
 
 def test_raster_bounds_4326_reads_a_stored_geotiff(tmp_path):

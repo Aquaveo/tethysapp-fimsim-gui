@@ -6,6 +6,8 @@ Data tools produced, from any of the user's projects. Pure helpers here; the
 controller supplies the runs, the modeling AOI's geometry and a bounds reader.
 """
 import re
+import tempfile
+from pathlib import Path
 
 # what each modeling input is picked from
 KIND_STEP = {"dem": "dem_tool", "manning": "lulc_tool",
@@ -19,7 +21,20 @@ _PATTERNS = {
     "flow": re.compile(r"^(nwm_retro|nwm_forecast|usgs_discharge)_.+\.csv$"),
 }
 _FORMAT_NAMES = {"asc": "an ESRI ASCII grid", "gpkg": "a GeoPackage"}
-_TOOL_NAMES = {"dem": "DEM", "manning": "LULC & Manning", "lulc": "LULC & Manning"}
+_TOOL_NAMES = {"dem": "DEM", "manning": "LULC & Manning", "lulc": "LULC & Manning",
+               "flow": "Streamflow Data"}
+_KIND_NAMES = {"dem": "DEM", "manning": "Manning's n", "lulc": "land-cover",
+               "flow": "streamflow"}
+GONE = "that prepared run no longer exists — refresh the list"
+
+
+class PickError(Exception):
+    """A refused pick: the HTTP status and the message the step shows."""
+
+    def __init__(self, status: int, message: str):
+        super().__init__(status, message)
+        self.status, self.message = status, message
+
 
 # a raster covers the area when at most this share of the AOI falls outside
 # it (a tool clips to its own AOI and round-trips through UTM, so the same
@@ -108,6 +123,64 @@ def prepared_rows(runs, kind: str, aoi_geom, bounds_fn) -> list:
     return rows
 
 
+def check_pick(run, username: str, file: str, kind: str) -> str:
+    """FIMSIM-BE21: the storage key of *file* in tool *run* if the user may
+    pick it as a *kind* input; raises PickError otherwise."""
+    if kind not in KIND_STEP:
+        raise ValueError(f"unknown kind {kind!r}; one of {', '.join(KIND_STEP)}")
+    if run is None:
+        raise PickError(404, GONE)
+    if run.aoi.project.username != username:
+        raise PickError(403, "access denied")
+    if run.step_key != KIND_STEP[kind]:
+        raise PickError(400, f"run {run.id} is not a {_TOOL_NAMES[kind]} tool run")
+    if run.status != "succeeded" or run.superseded:
+        raise PickError(404, GONE)
+    entry = next((m for m in run.manifest or [] if m["name"] == file), None)
+    if entry is None:
+        raise PickError(400, f"'{file}' is not an output of that run")
+    verdict = classify(file, kind)
+    if verdict is None:
+        raise PickError(400, f"'{file}' is not a {_KIND_NAMES[kind]} file")
+    if not verdict[0]:
+        raise PickError(400, verdict[1])
+    return entry["key"]
+
+
+def _csv_problem(path) -> str:
+    import csv
+    with open(path, newline="", encoding="utf-8-sig") as fh:
+        header = {c.strip().lower() for c in next(csv.reader(fh), [])}
+    if not {"time_hours", "discharge_cms"} <= header:
+        return "the CSV needs the columns time_hours and discharge_cms"
+    return None
+
+
+def copy_prepared(storage, src_key: str, dest_key: str, kind: str, aoi_geom) -> dict:
+    """Copy a picked file into the modeling AOI's storage after re-checking
+    it (a GeoTIFF that covers the area, or a CSV with the flow columns).
+    Returns the upload-shaped {key, name, bytes}; raises PickError."""
+    name = Path(dest_key).name
+    with tempfile.TemporaryDirectory() as tmp:
+        local = Path(tmp) / name
+        if not storage.exists(src_key):
+            raise PickError(404, GONE)
+        storage.download_to_path(src_key, local)
+        if kind == "flow":
+            reason = _csv_problem(local)
+        else:
+            from tethysapp.fimsim_gui.dem_upload import validate_geotiff
+            reason = validate_geotiff(local)
+            if reason is None and not covers(_bounds_4326(local), aoi_geom):
+                reason = ("the prepared file does not cover this area — re-run the "
+                          "tool on an area that contains it")
+        if reason:
+            raise PickError(400, f"'{name}': {reason}")
+        with open(local, "rb") as fh:
+            storage.save(dest_key, fh)
+    return {"key": dest_key, "name": name, "bytes": storage.size(dest_key)}
+
+
 def gdal_path(storage, key) -> str:
     """Where GDAL reads a stored object from without downloading it: the
     local path, or the server-side presigned GET through /vsicurl. The URL is
@@ -121,10 +194,14 @@ def gdal_path(storage, key) -> str:
             + quote(storage.internal_url(key), safe=""))
 
 
-def raster_bounds_4326(storage, key):
-    """A stored raster's bounds in EPSG:4326, reading only its header."""
+def _bounds_4326(path):
     import rasterio
     from rasterio.warp import transform_bounds
 
-    with rasterio.open(gdal_path(storage, key)) as src:
+    with rasterio.open(path) as src:
         return transform_bounds(src.crs, "EPSG:4326", *src.bounds, densify_pts=21)
+
+
+def raster_bounds_4326(storage, key):
+    """A stored raster's bounds in EPSG:4326, reading only its header."""
+    return _bounds_4326(gdal_path(storage, key))
