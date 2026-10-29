@@ -1,6 +1,6 @@
 // Progress helpers behind the run-status UX (feedback #1, #2).
 import { describe, expect, it } from 'vitest';
-import { formatElapsed, phaseLabel } from '../runProgress';
+import { formatElapsed, phaseLabel, pollProblem } from '../runProgress';
 
 describe('formatElapsed', () => {
   it('formats sub-hour durations as m:ss', () => {
@@ -31,5 +31,22 @@ describe('phaseLabel', () => {
 
   it('falls back to the raw status for anything unknown', () => {
     expect(phaseLabel('weird')).toBe('weird');
+  });
+});
+
+// FIMSIM-FE75: a finished 80-minute run looked "not run" because the status
+// polls failed silently (2026-10-29, run 268).
+describe('pollProblem', () => {
+  it('stays quiet for an occasional failure', () => {
+    expect(pollProblem(0, null)).toBeNull();
+    expect(pollProblem(2, 500)).toBeNull();
+  });
+  it('warns after three failures in a row', () => {
+    expect(pollProblem(3, 502)).toMatch(/Lost contact with the server/);
+    expect(pollProblem(3, 502)).toMatch(/reload/i);
+  });
+  it('names the expired session on a 401 or 403', () => {
+    expect(pollProblem(3, 401)).toMatch(/session has expired/);
+    expect(pollProblem(4, 403)).toMatch(/session has expired/);
   });
 });

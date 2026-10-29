@@ -42,7 +42,10 @@ export function summarizeStep(step: string, cfg: Record<string, unknown>): strin
     case 'tcfg':
       return `Δt ${s('time_step') || '10'} s · output every ${s('print_interval') || '3600'} s`;
     case 'run':
-      return `time limit ${s('solver_timeout_s') || '3600'} s`;
+      // FE75: the limit is server-only (FIMSIM_RUN_TIMEOUT_S, 6 h default)
+      return s('solver_timeout_s')
+        ? `time limit ${Number(s('solver_timeout_s')) / 3600} h`
+        : 'time limit 6 h (portal default)';
     default:
       return '';
   }
