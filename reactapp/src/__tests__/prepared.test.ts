@@ -2,7 +2,7 @@
 // and its two API calls (FIMSIM-FE71).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { listPrepared, pickPrepared, type PreparedRow } from '../api';
-import { orderRows, rowNote, rowState } from '../prepared';
+import { PICKED_HINT, orderRows, rowNote, rowState } from '../prepared';
 
 const row = (over: Partial<PreparedRow> = {}): PreparedRow => ({
   steprun_id: 1, project: 'Lumber prep', aoi: 'AOI_3_Lumber',
@@ -77,5 +77,14 @@ describe('prepared-input API', () => {
     expect(call?.[1]?.method).toBe('POST');
     expect(JSON.parse(String(call?.[1]?.body))).toEqual(
       { steprun_id: 1, file: picked.name, kind: 'dem' });
+  });
+});
+
+// 2026-10-29: after "Use this", the "Prepared: …" line read as if the step
+// were done; the user moved on to Roughness without running Terrain.
+describe('PICKED_HINT', () => {
+  it('says the step still has to be run, naming the button', () => {
+    expect(PICKED_HINT).toMatch(/not run yet/i);
+    expect(PICKED_HINT).toMatch(/Run this step/);
   });
 });

@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import {
   ApiError, listPrepared, pickPrepared, type PickedInput, type PreparedKind, type PreparedRow,
 } from './api';
-import { orderRows, rowNote, rowState } from './prepared';
+import { PICKED_HINT, orderRows, rowNote, rowState } from './prepared';
 import './PreparedPicker.css';
 
 interface Props {
@@ -73,6 +73,7 @@ export default function PreparedPicker({ aoiId, kind, picked, onPick, onClear }:
           {' '}({picked.source.aoi})
         </span>
         <button type="button" className="pp-link" onClick={onClear}>choose another</button>
+        <span className="pp-hint" role="note">{PICKED_HINT}</span>
       </div>
     );
   }

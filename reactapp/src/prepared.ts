@@ -25,3 +25,8 @@ export function orderRows(rows: PreparedRow[]): PreparedRow[] {
     .sort((a, b) => rank[rowState(a.r)] - rank[rowState(b.r)] || a.i - b.i)
     .map(({ r }) => r);
 }
+
+/** Shown under a picked file: picking only copies it, the step still has to run. */
+export const PICKED_HINT =
+  'Copied into this area, but the step has not run yet: press "Run this step" above '
+  + 'to use it.';
