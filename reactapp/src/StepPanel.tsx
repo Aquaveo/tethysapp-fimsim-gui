@@ -8,12 +8,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ApiError, cancelStepRun, downloadSelectedZip, getStepRun, getStepRunOutputs, submitStep,
-  uploadDem, type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
+  uploadDem, type OutputEntry, type PickedInput, type ServerAoi, type ServerStepRun,
+  type StepSchema,
 } from './api';
 import { fileProxyUrl, formatBytes, saveBlob, stepZipFiles, zipFilename } from './outputsMeta';
 import BoundaryPreview from './BoundaryPreview';
 import HydrographChart from './HydrographChart';
 import RasterPreview from './RasterPreview';
+import PreparedPicker from './PreparedPicker';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
@@ -135,11 +137,15 @@ export default function StepPanel({
   // BE17: per-AOI uploaded DEMs (keys) for the "upload my DEM" path
   const [demKeys, setDemKeys] = useState<Record<number, { key: string; name: string }[]>>({});
   const [demBusy, setDemBusy] = useState<number | null>(null);
+  // FE72: per-AOI DEM picked from the DEM tool (copied into the AOI by BE21)
+  const [demPicks, setDemPicks] = useState<Record<number, PickedInput | null>>({});
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
   const visible = (f: FieldSpec) => fieldVisible(f.showIf, value, f.hideIf);
   const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
     && value('dem_input') === 'upload';
+  const isDemPrepared = (stepKey === 'dem' || stepKey === 'tdem')
+    && value('dem_input') === 'prepared';
   // the editable per-class table, on BOTH Roughness steps (bug-round #iv)
   const tableSource = manningTableSource(stepKey, value);
   const preview = previewKind(stepKey);
@@ -236,6 +242,16 @@ export default function StepPanel({
         aoiConfigs = {};
         for (const a of aois) {
           aoiConfigs[String(a.id)] = { user_dem_keys: demKeys[a.id].map((d) => d.key) };
+        }
+      }
+      if (isDemPrepared) {
+        const missing = aois.filter((a) => !demPicks[a.id]);
+        if (missing.length) {
+          throw new Error(`Pick a prepared DEM for: ${missing.map((a) => a.name).join(', ')}`);
+        }
+        aoiConfigs = {};
+        for (const a of aois) {
+          aoiConfigs[String(a.id)] = { user_dem_keys: [demPicks[a.id]!.key] };
         }
       }
       const { results } = await submitStep(projectId, stepKey, merged, aoiConfigs);
@@ -403,6 +419,12 @@ export default function StepPanel({
                     <span className="sp-muted">no DEM uploaded yet</span>
                   )}
                 </div>
+              )}
+              {isDemPrepared && (
+                <PreparedPicker
+                  aoiId={a.id} kind="dem" picked={demPicks[a.id] ?? null}
+                  onPick={(p) => setDemPicks((prev) => ({ ...prev, [a.id]: p }))}
+                  onClear={() => setDemPicks((prev) => ({ ...prev, [a.id]: null }))} />
               )}
               {stepKey === 'run' && (
                 <p className="sp-field-help">

@@ -201,3 +201,21 @@ describe('flow_tool fields (FIMSIM-FE64)', () => {
     expect(byKey.forecast_hour.options?.[0]).toEqual({ value: '', label: 'Auto (latest cycle)' });
   });
 });
+
+// FIMSIM-FE72 (round 2, Terrain part): a DEM made by the DEM tool can be
+// picked in Terrain instead of downloading or uploading one.
+describe('Terrain offers a prepared DEM (FIMSIM-FE72)', () => {
+  const input = (step: string) => STEP_FIELDS[step].find((f) => f.key === 'dem_input');
+
+  it('adds "prepared" after download and upload on both models', () => {
+    for (const step of ['dem', 'tdem']) {
+      expect(input(step)?.options?.map((o) => o.value)).toEqual(['download', 'upload', 'prepared']);
+      expect(input(step)?.options?.[2].label).toBe('Use a DEM from the DEM tool');
+    }
+  });
+
+  it('explains that a picked DEM is copied and must cover the area', () => {
+    expect(input('dem')?.help).toMatch(/DEM tool/);
+    expect(input('dem')?.help).toMatch(/cover/);
+  });
+});

@@ -208,6 +208,10 @@ export function manningTableSource(
   return src === 'nlcd' || src === 'download_nlcd' ? 'nlcd' : 'esri';
 }
 
+const DEM_INPUT_HELP = 'Upload one or more GeoTIFFs (merged if several, resampled to the '
+  + 'cell size below) instead of downloading elevation, or use a DEM made by the '
+  + 'Preparing Input Data DEM tool: it is copied into this area and must cover it.';
+
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
     {
@@ -215,9 +219,9 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: [
         { value: 'download', label: 'Download (USGS 3DEP)' },
         { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+        { value: 'prepared', label: 'Use a DEM from the DEM tool' },   // FE72
       ],
-      help: 'Upload one or more GeoTIFFs (merged if several, resampled to the '
-        + 'cell size below) instead of downloading elevation.',
+      help: DEM_INPUT_HELP,
     },
     {
       key: 'dem_res_m', label: 'Resampling cell size', widget: 'select',   // FE68
@@ -363,9 +367,9 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: [
         { value: 'download', label: 'Download (USGS 3DEP)' },
         { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+        { value: 'prepared', label: 'Use a DEM from the DEM tool' },   // FE72
       ],
-      help: 'Upload one or more GeoTIFFs (merged if several, resampled to the '
-        + 'cell size below) instead of downloading elevation.',
+      help: DEM_INPUT_HELP,
     },
     {
       key: 'dem_res_m', label: 'Resampling cell size', widget: 'select',   // FE68

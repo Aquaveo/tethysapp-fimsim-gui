@@ -154,7 +154,11 @@ export default function Docs() {
             30 m or 90 m, it is not a different download) or{' '}
             <strong>TACC HAND</strong> (height above nearest drainage). Finer
             grids (1 m / 3 m) increase simulation times substantially;
-            30 m / 90 m are useful for fast previews.
+            30 m / 90 m are useful for fast previews. Instead of downloading,
+            you can upload your own GeoTIFF(s) or <em>use a DEM from the DEM
+            tool</em>: pick one of your Preparing Input Data DEM outputs; it is
+            copied into this area, so it must cover the whole area (files that
+            do not, and HAND grids, are listed but cannot be picked).
           </p>
 
           <h3>4 · Roughness</h3>
