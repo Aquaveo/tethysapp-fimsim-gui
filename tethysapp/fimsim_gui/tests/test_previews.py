@@ -212,3 +212,21 @@ def test_flowline_preview_with_nothing_to_draw_writes_nothing(tmp_path):
     from tethysapp.fimsim_gui.job_types.previews import write_flowline_preview
     assert write_flowline_preview(None, None, [], tmp_path / "p.geojson") is None
     assert not (tmp_path / "p.geojson").exists()
+
+
+def test_uint8_lulc_with_nodata_gets_its_previews(tmp_path):
+    # the LULC & Manning tool saves NLCD as uint8 with nodata outside the
+    # AOI; filling the mask with -1 overflowed uint8 and the swallowed error
+    # left the tool run with no previews (2026-10-29, run 260)
+    lulc = np.full((5, 5), 41, dtype="uint8")  # NLCD 41 = Deciduous Forest
+    lulc[0, :] = 0
+    _write_tif(tmp_path / "LULC_AOI_3_Lumber.tif", lulc, nodata=0)
+    _write_tif(tmp_path / "ManningN_AOI_3_Lumber.tif",
+               np.full((5, 5), 0.1, dtype="float32"), nodata=-9999)
+    out = tmp_path / "outputs"
+    out.mkdir()
+    assert write_manning_preview(_ctx(tmp_path), out, lulc_source="nlcd")
+    meta = json.loads((out / "preview_lulc.json").read_text())
+    assert [c["code"] for c in meta["classes"]] == [41]
+    assert (out / "preview_lulc.png").exists()
+    assert (out / "preview_manning.png").exists()

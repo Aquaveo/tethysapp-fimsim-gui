@@ -175,8 +175,10 @@ def write_manning_preview(ctx, outputs, lulc_source, manning_mapping=None,
         })
 
     rgba = np.zeros((*arr.shape, 4), dtype="uint8")
+    # widen before filling: -1 does not fit the tool's uint8 land cover
+    codes_arr = arr.astype(int).filled(-1)
     for code, color in code_color.items():
-        m = arr.filled(-1).astype(int) == code
+        m = codes_arr == code
         rgba[m] = [*_rgb(color), 255]
     _write_png(Path(outputs) / "preview_lulc.png", rgba)
 
