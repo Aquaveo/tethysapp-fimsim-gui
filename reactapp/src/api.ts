@@ -228,6 +228,40 @@ export const uploadDem = async (aoiId: number, files: File[]) => {
     `/aois/${aoiId}/dem/`, { method: 'POST', body: form });
 };
 
+// ── prepared inputs (round 2: BE20 list, BE21 pick) ─────────────────────────
+
+export type PreparedKind = 'dem' | 'manning' | 'lulc' | 'flow';
+
+/** One file of one of the user's succeeded tool runs (BE20). */
+export interface PreparedRow {
+  steprun_id: number;
+  project: string;
+  aoi: string;
+  file: string;
+  finished: string | null;
+  detail: string;
+  /** null when the file is not usable (its footprint was not checked) */
+  covers: boolean | null;
+  usable: boolean;
+  reason: string | null;
+}
+
+/** A picked file, copied into this area's storage (BE21) — same shape as an upload. */
+export interface PickedInput {
+  key: string;
+  name: string;
+  bytes: number;
+  source: { steprun_id: number; project: string; aoi: string };
+}
+
+export const listPrepared = (aoiId: number, kind: PreparedKind) =>
+  request<{ prepared: PreparedRow[] }>(`/aois/${aoiId}/prepared/?kind=${kind}`)
+    .then((r) => r.prepared);
+
+export const pickPrepared = (
+  aoiId: number, pick: { steprun_id: number; file: string; kind: PreparedKind },
+) => request<PickedInput>(`/aois/${aoiId}/prepared/`, json(pick));
+
 export const getProjectStatus = (projectId: number) =>
   request<{ aois: ServerAoi[] }>(`/projects/${projectId}/status/`);
 

@@ -189,6 +189,12 @@ export function zipFilename(aoiName: string, suffix: string): string {
   return `${safe}_${suffix}.zip`;
 }
 
+/** FE69 — `<area>_<step>_hydrograph.png`, same sanitising as the zips. */
+export function pngFilename(aoiName: string, stepKey: string): string {
+  const safe = aoiName.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return `${safe}_${stepKey}_hydrograph.png`;
+}
+
 /** Hand a Blob to the browser as a file download. */
 export function saveBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);

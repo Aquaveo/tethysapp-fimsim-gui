@@ -84,7 +84,7 @@ export default function WelcomeModal({ onClose }: Props) {
               enclosing rectangle automatically.
             </li>
             <li>
-              <strong>Two categories:</strong> Flood Mapping builds a LISFLOOD-FP
+              <strong>Two categories:</strong> Flood Modeling builds a LISFLOOD-FP
               run on the portal or a TRITON deck for your own GPU/HPC; Preparing
               Input Data gives you a DEM, land cover with Manning&apos;s n, the
               river network with gages, or a streamflow series for an area — no

@@ -5,6 +5,7 @@
 // AOI-drawing guidance is her hydrology expertise, lightly edited for the
 // web wizard.
 import { useEffect, useState } from 'react';
+import { INDEPENDENCE_NOTE } from './steps';
 import './Docs.css';
 
 const SECTIONS = [
@@ -24,6 +25,10 @@ const SECTIONS = [
 
 export default function Docs() {
   const [cap, setCap] = useState<string>('1,000');
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (id) document.getElementById(id)?.scrollIntoView();
+  }, []);
   useEffect(() => {
     fetch('/apps/fimsim-gui/api/limits/')
       .then((r) => r.json())
@@ -145,10 +150,15 @@ export default function Docs() {
             Downloads elevation and grids it for the model
             (<code>dem.ascii</code>). Sources: the{' '}
             <strong>USGS 3DEP 1/3 arc-second DEM</strong> (~10 m — the native
-            product; other resolutions are resampled from it) or{' '}
+            product; the <em>Resampling cell size</em> choice resamples it to
+            30 m or 90 m, it is not a different download) or{' '}
             <strong>TACC HAND</strong> (height above nearest drainage). Finer
             grids (1 m / 3 m) increase simulation times substantially;
-            30 m / 90 m are useful for fast previews.
+            30 m / 90 m are useful for fast previews. Instead of downloading,
+            you can upload your own GeoTIFF(s) or <em>use a DEM from the DEM
+            tool</em>: pick one of your Preparing Input Data DEM outputs; it is
+            copied into this area, so it must cover the whole area (files that
+            do not, and HAND grids, are listed but cannot be picked).
           </p>
 
           <h3>4 · Roughness</h3>
@@ -277,11 +287,12 @@ export default function Docs() {
             preview on the step, and lists its files on Downloads (per-file
             links or a zip).
           </p>
+          <p className="dc-note">{INDEPENDENCE_NOTE}</p>
           <h3>DEM</h3>
           <p>
             USGS 3DEP (1/3 arc-second, ≈ 10 m) or HAND (height above nearest
-            drainage, UT Austin, by HUC6) clipped to the area, at any cell size
-            from 10 m up, as GeoTIFF, GeoPackage or ESRI ASCII grid. Output:{' '}
+            drainage, UT Austin, by HUC6) clipped to the area, at any resampling
+            cell size from 10 m (native) up, as GeoTIFF, GeoPackage or ESRI ASCII grid. Output:{' '}
             <code>DEM_3DEP_&lt;area&gt;.&lt;ext&gt;</code> or{' '}
             <code>DEM_HAND_…</code>, with the terrain preview.
           </p>

@@ -398,7 +398,7 @@ export default function ResultsStep({
                 <div className="rs-head">
                   <span className="sp-aoi-name">{r.aoi.name}</span>
                 </div>
-                {r.bdyRun && <HydrographChart run={r.bdyRun} />}
+                {r.bdyRun && <HydrographChart run={r.bdyRun} aoiName={r.aoi.name} />}
                 {inputs.length > 0 ? (
                   <FilesTable aoi={r.aoi} files={inputs} zipSuffix={kind === 'tools' ? 'files' : 'inputs'}
                               selected={setFor(r.aoi.id)}

@@ -148,8 +148,8 @@ export const DEM_RES_HELP =
 
 /** The tools take any cell size ≥ 10 m (FE51 floor), not a 10/30/90 pick. */
 export const TOOL_CELL_HELP =
-  '10 m is the native USGS 3DEP resolution; coarser cells are resampled from '
-  + 'it. The web app does not go below 10 m — for finer grids use the desktop FIMsim.';
+  '10 m is the native USGS 3DEP resolution; any coarser cell size is resampled from '
+  + 'that 10 m source, not a separate download. The web app does not go below 10 m — for finer grids use the desktop FIMsim.';
 
 /** fimcore.export.export_raster formats (DEM, LULC and Manning exports). */
 export const RASTER_FORMAT_OPTIONS = [
@@ -208,6 +208,10 @@ export function manningTableSource(
   return src === 'nlcd' || src === 'download_nlcd' ? 'nlcd' : 'esri';
 }
 
+const DEM_INPUT_HELP = 'Upload one or more GeoTIFFs (merged if several, resampled to the '
+  + 'cell size below) instead of downloading elevation, or use a DEM made by the '
+  + 'Preparing Input Data DEM tool: it is copied into this area and must cover it.';
+
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
     {
@@ -215,14 +219,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: [
         { value: 'download', label: 'Download (USGS 3DEP)' },
         { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+        { value: 'prepared', label: 'Use a DEM from the DEM tool' },   // FE72
       ],
-      help: 'Upload one or more GeoTIFFs (merged if several, resampled to the '
-        + 'resolution below) instead of downloading elevation.',
+      help: DEM_INPUT_HELP,
     },
     {
-      key: 'dem_res_m', label: 'Resolution', widget: 'select',
+      key: 'dem_res_m', label: 'Resampling cell size', widget: 'select',   // FE68
       options: [
-        { value: 10, label: '10 m — default' },
+        { value: 10, label: '10 m — native (default)' },
         { value: 30, label: '30 m (faster, coarser)' },
         { value: 90, label: '90 m (fastest, coarsest)' },
       ],
@@ -363,14 +367,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: [
         { value: 'download', label: 'Download (USGS 3DEP)' },
         { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+        { value: 'prepared', label: 'Use a DEM from the DEM tool' },   // FE72
       ],
-      help: 'Upload one or more GeoTIFFs (merged if several, resampled to the '
-        + 'resolution below) instead of downloading elevation.',
+      help: DEM_INPUT_HELP,
     },
     {
-      key: 'dem_res_m', label: 'Resolution', widget: 'select',
+      key: 'dem_res_m', label: 'Resampling cell size', widget: 'select',   // FE68
       options: [
-        { value: 10, label: '10 m — default' },
+        { value: 10, label: '10 m — native (default)' },
         { value: 30, label: '30 m (faster, coarser)' },
         { value: 90, label: '90 m (fastest, coarsest)' },
       ],
@@ -511,7 +515,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         + 'the nearest stream — the input for HAND-FIM style mapping.',
     },
     {
-      key: 'dem_res_m', label: 'Cell size (m)', widget: 'number',
+      key: 'dem_res_m', label: 'Resampling cell size (m)', widget: 'number',   // FE68
       min: 10, max: 1000, step: 1, help: TOOL_CELL_HELP,
     },
     { key: 'out_format', label: 'File format', widget: 'select', options: RASTER_FORMAT_OPTIONS },
