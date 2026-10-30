@@ -51,6 +51,7 @@
   text-transform: uppercase;
 }
 .wk-model-badge.is-deck { border-color: #7c5cff; background: #7c5cff; }
+.wk-model-badge.is-tool { border-color: #276749; background: #276749; }
 /* Documentation button — FIMbench scheme: filled cyan + ink text; darker cyan on
    hover, when pressed, and when live (on the docs page). */
 .wk-doc-pill {

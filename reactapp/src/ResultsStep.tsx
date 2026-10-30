@@ -7,6 +7,7 @@
 //                  model (TRITON) it is the deck download + "runs off-portal".
 //   "Input Data" — the hydrograph recap and every input step's files with
 //                  the FE30 select / Download Selected zip.
+// FE65: tool projects (Preparing Input Data) show only the Input Data tab, as 'Downloads'.
 import { useEffect, useState } from 'react';
 import AoiMap, { type MapOverlay } from './AoiMap';
 import HydrographChart from './HydrographChart';
@@ -15,6 +16,8 @@ import {
   fileProxyUrl, formatBytes, keepModelSteps, outputMeta, saveBlob, splitResultFiles,
   summarizeSelection, zipFilename, zipSelection,
 } from './outputsMeta';
+import { previewKind } from './stepFields';
+import type { ResultsKind } from './steps';
 import './StepPanel.css';
 import './ResultsStep.css';
 
@@ -23,6 +26,7 @@ const STEP_LABELS: Record<string, string> = {
   bdy: 'Flow Data', par: 'Settings', run: 'Simulation',
   tdem: 'Terrain', tfric: 'Friction', tbc: 'Boundaries',
   thyg: 'Hydrograph', tcfg: 'Config',
+  dem_tool: 'DEM', lulc_tool: 'LULC & Manning', flowline_tool: 'Flowline', flow_tool: 'Streamflow',
 };
 
 type Tab = 'results' | 'inputs';
@@ -187,19 +191,22 @@ function DeckDownload({ aoi, files }: { aoi: ServerAoi; files: FileRow[] }) {
 }
 
 export default function ResultsStep({
-  aois, hasRunStep = true, modelStepKeys, onGoToRun,
+  aois, kind = 'simulation', modelStepKeys, onGoToRun,
 }: {
   aois: ServerAoi[];
-  /** false for deck-only models (TRITON): no flood overlay, no run nagging */
-  hasRunStep?: boolean;
+  /** FE65: simulation = map + run files; deck = TRITON download; tools = the
+   *  Input Data tab only, titled Downloads */
+  kind?: ResultsKind;
   /** the active model's job-step keys; other models' steps are ignored so a
    *  LISFLOOD run never leaks an overlay/files into a TRITON deck view */
   modelStepKeys?: string[];
   /** jump back to the Run step (the no-run notice's call to action) */
   onGoToRun?: () => void;
 }) {
+  const hasRunStep = kind === 'simulation';
+  const tabs = kind === 'tools' ? TABS.filter((t) => t.id === 'inputs') : TABS;
   const [results, setResults] = useState<AoiResult[]>([]);
-  const [tab, setTab] = useState<Tab>('results');
+  const [tab, setTab] = useState<Tab>(kind === 'tools' ? 'inputs' : 'results');
   const [opacity, setOpacity] = useState(0.8);
   // per-AOI file selection (keys "runId:name") for "Download Selected"; shared
   // across both tabs, each table only acts on its own rows
@@ -233,7 +240,7 @@ export default function ResultsStep({
             continue;
           }
           if (step === 'run') res.runStatus = 'succeeded';
-          if (step === 'bdy' || step === 'thyg') res.bdyRun = run;  // flow step (both models)
+          if (previewKind(step) === 'hydrograph') res.bdyRun = run;  // flow step (both models) + the Streamflow tool
           for (const m of (Array.isArray(run.manifest) ? run.manifest : [])) {
             // manifests are cumulative (each step re-ships the whole deck) —
             // list every file once, under the step that first produced it
@@ -283,8 +290,8 @@ export default function ResultsStep({
   const onTabKey = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
     e.preventDefault();
-    const i = TABS.findIndex((t) => t.id === tab);
-    const next = TABS[(i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length];
+    const i = tabs.findIndex((t) => t.id === tab);
+    const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
     setTab(next.id);
     (e.currentTarget.parentElement?.querySelector(
       `[data-tab="${next.id}"]`) as HTMLButtonElement | null)?.focus();
@@ -292,8 +299,9 @@ export default function ResultsStep({
 
   return (
     <div className="sp-wrap">
+      {tabs.length > 1 && (
       <div className="rs-tabs" role="tablist" aria-label="Results sections">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button key={t.id} type="button" role="tab" data-tab={t.id}
                   id={`rs-tab-${t.id}`} aria-controls={`rs-panel-${t.id}`}
                   aria-selected={tab === t.id} tabIndex={tab === t.id ? 0 : -1}
@@ -303,6 +311,7 @@ export default function ResultsStep({
           </button>
         ))}
       </div>
+      )}
 
       {tab === 'results' && (
         <div role="tabpanel" id="rs-panel-results" aria-labelledby="rs-tab-results"
@@ -328,7 +337,7 @@ export default function ResultsStep({
               )}
             </div>
           ))}
-          {!hasRunStep && (
+          {kind === 'deck' && (
             <p className="rs-offportal">
               TRITON runs off-portal: download the input deck below and run it on
               your own GPU/HPC system. The portal does not produce TRITON flood maps.
@@ -360,7 +369,7 @@ export default function ResultsStep({
                     )}
                   </div>
                 </div>
-                {!hasRunStep ? (
+                {kind === 'deck' ? (
                   r.files.length > 0
                     ? <DeckDownload aoi={r.aoi} files={r.files} />
                     : <p className="sp-muted">No deck files for this area yet.</p>
@@ -378,8 +387,10 @@ export default function ResultsStep({
       )}
 
       {tab === 'inputs' && (
-        <div role="tabpanel" id="rs-panel-inputs" aria-labelledby="rs-tab-inputs"
-             className="rs-panel">
+        <div id="rs-panel-inputs" className="rs-panel"
+             {...(tabs.length > 1
+               ? { role: 'tabpanel', 'aria-labelledby': 'rs-tab-inputs' }
+               : { role: 'region', 'aria-label': 'Downloads' })}>
           {results.map((r) => {
             const { inputs } = splitResultFiles(r.files);
             return (
@@ -389,11 +400,15 @@ export default function ResultsStep({
                 </div>
                 {r.bdyRun && <HydrographChart run={r.bdyRun} />}
                 {inputs.length > 0 ? (
-                  <FilesTable aoi={r.aoi} files={inputs} zipSuffix="inputs"
+                  <FilesTable aoi={r.aoi} files={inputs} zipSuffix={kind === 'tools' ? 'files' : 'inputs'}
                               selected={setFor(r.aoi.id)}
                               onSelect={(next) => setSel(r.aoi.id, next)} />
                 ) : (
-                  <p className="sp-muted">No stored input files for this area yet.</p>
+                  <p className="sp-muted">
+                    {kind === 'tools'
+                      ? 'Nothing to download yet — run the tool step first.'
+                      : 'No stored input files for this area yet.'}
+                  </p>
                 )}
               </section>
             );

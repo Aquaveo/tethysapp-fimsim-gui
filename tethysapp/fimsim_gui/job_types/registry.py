@@ -38,6 +38,13 @@ def _check_number(cfg, key, lo, hi, problems, unit=""):
         problems.append(f"'{key}' must be between {lo} and {hi}{unit} (got {val})")
 
 
+def _check_bool(cfg, key, problems):
+    """Reject cfg[key] unless it is a real boolean (missing is fine). JSON
+    "true"/1 are not booleans — fimcore's `bool("false")` is True."""
+    if key in cfg and not isinstance(cfg[key], bool):
+        problems.append(f"'{key}' must be true or false (got {cfg[key]!r})")
+
+
 def validate_aoi_override(override):
     """Reason a per-AOI config override is unusable, or None if fine.
 

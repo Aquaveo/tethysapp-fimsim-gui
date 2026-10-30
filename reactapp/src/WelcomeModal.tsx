@@ -47,7 +47,7 @@ export default function WelcomeModal({ onClose }: Props) {
           <div className="wm-alpha" role="note">
             This is the <strong>lightweight alpha</strong> of FIMsim — tuned
             for a shared portal. For the full feature set (TRITON execution,
-            OWP HAND-FIM, ARC-Curve2Flood, standalone data tools), use the{' '}
+            OWP HAND-FIM, ARC-Curve2Flood), use the{' '}
             <a href="https://github.com/pnikrou/FIMsim" target="_blank" rel="noreferrer">
               desktop FIMsim
             </a>.
@@ -84,9 +84,11 @@ export default function WelcomeModal({ onClose }: Props) {
               enclosing rectangle automatically.
             </li>
             <li>
-              <strong>Two models:</strong> LISFLOOD-FP runs right here on the
-              portal; TRITON generates a ready-to-run input deck for your own
-              GPU/HPC system.
+              <strong>Two categories:</strong> Flood Mapping builds a LISFLOOD-FP
+              run on the portal or a TRITON deck for your own GPU/HPC; Preparing
+              Input Data gives you a DEM, land cover with Manning&apos;s n, the
+              river network with gages, or a streamflow series for an area — no
+              model needed.
             </li>
             <li>
               <strong>Your work is saved per project</strong> — reopen it any

@@ -161,3 +161,54 @@ def test_lulc_map_uses_official_nlcd_palette(tmp_path):
                json.loads((out / "preview_lulc.json").read_text())["classes"]}
     assert classes[11]["color"] == "#466b9f"   # MRLC Open Water
     assert classes[42]["color"] == "#1c5f2c"   # MRLC Evergreen Forest
+
+
+def test_dem_preview_reads_an_ascii_grid(tmp_path):
+    # FIMSIM-BE25: the DEM tool may write only a .asc/.gpkg (fimcore deletes
+    # the intermediate GeoTIFF) — the terrain preview must still appear
+    dem = np.linspace(20, 50, 20 * 25).reshape(20, 25).astype("float32")
+    with rasterio.open(
+            tmp_path / "DEM_3DEP_Test.asc", "w", driver="AAIGrid", width=25, height=20,
+            count=1, dtype="float32", crs="EPSG:26917", transform=TRANSFORM,
+            nodata=-9999.0) as dst:
+        dst.write(dem, 1)
+    out = tmp_path / "outputs"
+    out.mkdir()
+    assert write_dem_preview(_ctx(tmp_path), out)
+    meta = json.loads((out / "preview_dem.json").read_text())
+    assert 20 <= meta["stats"]["min_m"] and meta["stats"]["max_m"] <= 50
+    assert -79 < meta["bounds"]["west"] < -77        # the .prj sidecar carried the CRS
+
+
+def test_flowline_preview_kinds_and_wgs84(tmp_path):
+    gpd = pytest.importorskip("geopandas")
+    from shapely.geometry import LineString
+    from tethysapp.fimsim_gui.job_types.previews import write_flowline_preview
+
+    # EPSG:26917 lines near the Neuse (same neighbourhood as TRANSFORM)
+    main = gpd.GeoDataFrame({"COMID": [8781135]},
+                            geometry=[LineString([(762300, 3927100), (763300, 3926100)])],
+                            crs="EPSG:26917")
+    net = gpd.GeoDataFrame({"COMID": [1, 2]}, geometry=[
+        LineString([(762000, 3927000), (762500, 3927500)]),
+        LineString([(763000, 3927000), (763500, 3927500)])], crs="EPSG:26917")
+    gages = [{"site_no": "02134170", "station_nm": "LUMBER RIVER", "lat": 35.4, "lon": -78.1},
+             {"site_no": "0000", "station_nm": "no coords", "lat": None, "lon": None}]
+    out = write_flowline_preview(main, net, gages, tmp_path / "preview_features.geojson")
+    fc = json.loads(out.read_text())
+    kinds = [f["properties"]["kind"] for f in fc["features"]]
+    assert kinds.count("flowline") == 2 and kinds.count("main_river") == 1
+    assert kinds.count("gage") == 1                       # the one without coords is skipped
+    gage = next(f for f in fc["features"] if f["properties"]["kind"] == "gage")
+    assert gage["properties"] == {"kind": "gage", "num": "1", "site_no": "02134170",
+                                  "name": "LUMBER RIVER"}
+    river = next(f for f in fc["features"] if f["properties"]["kind"] == "main_river")
+    lon, lat = river["geometry"]["coordinates"][0]
+    assert -79 < lon < -77 and 35 < lat < 36             # reprojected to WGS84
+    assert fc["style"]["main_river"]["color"] == "#2b6cb0"
+
+
+def test_flowline_preview_with_nothing_to_draw_writes_nothing(tmp_path):
+    from tethysapp.fimsim_gui.job_types.previews import write_flowline_preview
+    assert write_flowline_preview(None, None, [], tmp_path / "p.geojson") is None
+    assert not (tmp_path / "p.geojson").exists()

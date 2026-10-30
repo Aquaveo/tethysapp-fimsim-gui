@@ -15,6 +15,9 @@ def _problems(step, config):
 REQUIRED_INPUT = {
     "bdy": {"start_dt": "2016-10-05T00:00", "end_dt": "2016-10-15T00:00"},
     "thyg": {"start_dt": "2016-10-05T00:00", "end_dt": "2016-10-15T00:00"},
+    # the Streamflow tool has no sensible default ID list / window either
+    "flow_tool": {"ids": "02134170", "start_dt": "2016-10-01T00:00",
+                  "end_dt": "2016-10-19T23:59"},
 }
 
 
@@ -85,7 +88,7 @@ def test_tfric_year_validation_mirrors_manning():
 
 
 def test_manning_mapping_shape():
-    ok = {"manning_mapping": {"11": 0.03, "42": 0.11}}
+    ok = {"manning_mapping": {"11": 0.03, "42": 0.05}}
     assert _problems("manning", ok) == []
     bad_type = {"manning_mapping": [0.03]}
     assert any("manning_mapping" in p for p in _problems("manning", bad_type))
@@ -233,3 +236,73 @@ def test_run_budget_env_override(monkeypatch):
     assert run_sim.run_timeout_s() == 4000
     monkeypatch.setenv("FIMSIM_RUN_TIMEOUT_S", "garbage")
     assert run_sim.run_timeout_s() == run_sim.RUN_TIMEOUT_DEFAULT_S
+
+
+# ── Manning's n: one hard band, per-class ranges only warn (BE15 / FE52) ──────
+
+def test_manning_hard_band_is_the_only_enforced_limit():
+    from tethysapp.fimsim_gui.job_types.steps import MANNING_N_MAX, MANNING_N_MIN
+    lo, hi = MANNING_N_MIN, MANNING_N_MAX
+    for step in ("manning", "tfric"):
+        assert _problems(step, {"fric_mode": "fixed", "fpfric_val": lo}) == []
+        assert _problems(step, {"fric_mode": "fixed", "fpfric_val": hi}) == []
+        assert any("fpfric_val" in p for p in _problems(step, {"fpfric_val": lo / 2}))
+        assert any("fpfric_val" in p for p in _problems(step, {"fpfric_val": hi * 2}))
+        # per-class values: INSIDE the hard band but outside the class's own
+        # literature range is fine server-side (it's a UI warning, not a clamp)
+        assert _problems(step, {"manning_mapping": {"11": hi, "42": lo}}) == []
+        bad = _problems(step, {"manning_mapping": {"11": hi * 2}})
+        assert any("11" in p and str(hi) in p for p in bad)
+
+
+def test_manning_hard_band_matches_the_frontend_constant():
+    # one number, two codebases: reactapp/src/manningRules.ts must agree
+    import re
+    from pathlib import Path
+    from tethysapp.fimsim_gui.job_types.steps import MANNING_N_MAX, MANNING_N_MIN
+    ts = (Path(__file__).resolve().parents[3] / "reactapp" / "src" / "manningRules.ts").read_text()
+    m = re.search(r"HARD_N\s*=\s*\{\s*min:\s*([\d.]+),\s*max:\s*([\d.]+)", ts)
+    assert m, "HARD_N literal not found in manningRules.ts"
+    assert (float(m.group(1)), float(m.group(2))) == (MANNING_N_MIN, MANNING_N_MAX)
+
+
+# ── shared helpers the tools reuse (FIMSIM-BE25) ─────────────────────────────
+
+def test_check_bool_accepts_only_real_booleans():
+    from tethysapp.fimsim_gui.job_types.registry import _check_bool
+    problems = []
+    _check_bool({"flag": True}, "flag", problems)
+    _check_bool({}, "flag", problems)                       # missing is fine
+    assert problems == []
+    _check_bool({"flag": "true"}, "flag", problems)        # JSON string, not bool
+    _check_bool({"flag": 1}, "flag", problems)
+    assert len(problems) == 2 and all("'flag' must be true or false" in p for p in problems)
+
+
+def test_check_window_is_the_bdy_rule_set():
+    from tethysapp.fimsim_gui.job_types.steps import _check_window
+    ok = {"start_dt": "2016-10-01T00:00", "end_dt": "2016-10-19T23:59"}
+    problems = []
+    _check_window(ok, problems, nwm_retro=True)
+    assert problems == []
+    problems = []
+    _check_window({"start_dt": "2024-01-01", "end_dt": "2024-01-05"}, problems, nwm_retro=True)
+    assert any("1979-02-01 to 2023-01-31" in p for p in problems)   # outside the retro
+    problems = []
+    _check_window({"start_dt": "2024-01-01", "end_dt": "2024-01-05"}, problems, nwm_retro=False)
+    assert problems == []                                            # USGS/forecast: fine
+    problems = []
+    _check_window({"start_dt": "2016-10-05", "end_dt": "2016-10-01"}, problems, nwm_retro=False)
+    assert any("empty" in p for p in problems)
+    problems = []
+    _check_window({"end_dt": "2016-10-01"}, problems, nwm_retro=False)
+    assert any("'start_dt' is required" in p for p in problems)
+
+
+def test_lulc_years_can_read_the_tools_sentinel2_key():
+    from tethysapp.fimsim_gui.job_types.steps import _check_lulc_years
+    problems = []
+    _check_lulc_years({"sentinel2_year": 2023}, problems, s2_key="sentinel2_year")
+    assert problems == []
+    _check_lulc_years({"sentinel2_year": 2016}, problems, s2_key="sentinel2_year")
+    assert len(problems) == 1 and "'sentinel2_year'" in problems[0]

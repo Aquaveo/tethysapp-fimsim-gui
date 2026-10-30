@@ -4,7 +4,7 @@
 // live progress polling, failure detail with re-run, outputs with presigned
 // downloads. Bespoke upgrades (editable Manning table, hydrograph chart)
 // layer on top later — this gets the whole workflow demoable.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ApiError, cancelStepRun, downloadSelectedZip, getStepRun, getStepRunOutputs, submitStep,
@@ -19,8 +19,9 @@ import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
 import {
   STEP_FIELDS, applyLinkedDefaults, coerceConfigNumbers, expandEventDates, fieldVisible,
-  manningTableSource, rangeProblems, type FieldSpec,
+  manningTableSource, previewKind, rangeProblems, type FieldSpec,
 } from './stepFields';
+import { prefillIds, shouldReseed, type FlowSource } from './flowTool';
 import { formatElapsed, phaseLabel } from './runProgress';
 import './StepPanel.css';
 
@@ -136,11 +137,12 @@ export default function StepPanel({
   const [demBusy, setDemBusy] = useState<number | null>(null);
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
-  const visible = (f: FieldSpec) => fieldVisible(f.showIf, value);
+  const visible = (f: FieldSpec) => fieldVisible(f.showIf, value, f.hideIf);
   const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
     && value('dem_input') === 'upload';
   // the editable per-class table, on BOTH Roughness steps (bug-round #iv)
   const tableSource = manningTableSource(stepKey, value);
+  const preview = previewKind(stepKey);
 
   const uploadDemFor = async (aoiId: number, files: File[]) => {
     setDemBusy(aoiId);
@@ -186,6 +188,21 @@ export default function StepPanel({
     return () => clearInterval(t);
   }, [runs]);
 
+  // FE64: the Streamflow tool's ID list comes from the area lookup — gages
+  // for USGS, the main river's NWM reaches otherwise — re-seeded when the
+  // source changes, but only while the field is untouched or still holds
+  // the previous seed (a typed value is never overwritten: shouldReseed).
+  const lastSeed = useRef<string | null>(null);
+  const flowSource = stepKey === 'flow_tool' ? String(value('source')) : '';
+  useEffect(() => {
+    if (stepKey !== 'flow_tool' || aois.length === 0) return;
+    if (!shouldReseed(config.ids, lastSeed.current)) return;
+    const seed = prefillIds(aois[0], flowSource as FlowSource);
+    lastSeed.current = seed;
+    setConfig((c) => ({ ...c, ids: seed }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepKey, aois, flowSource]);
+
   const submit = async () => {
     setBusy(true);
     setError(null);
@@ -203,7 +220,7 @@ export default function StepPanel({
       const merged: Record<string, unknown> = Object.fromEntries(
         Object.entries(coerced)
           .filter(([k, v]) => allowed.has(k) && v !== null && v !== ''));
-      for (const f of fields) {
+      for (const f of fields.filter(visible)) {
         if (f.required && !merged[f.key]) {
           throw new Error(`"${f.label}" is required.`);
         }
@@ -306,6 +323,14 @@ export default function StepPanel({
                 value={String(value(f.key)).slice(0, 10)}
                 onChange={(e) => setConfig({ ...config, [f.key]: e.target.value })}
               />
+            ) : f.widget === 'checkbox' ? (
+              <input
+                type="checkbox"
+                className="sp-checkbox"
+                checked={value(f.key) === true}
+                onChange={(e) => setConfig(applyLinkedDefaults(
+                  { ...config, [f.key]: e.target.checked }, fields, f.key, e.target.checked))}
+              />
             ) : (
               <input
                 type={f.widget === 'number' ? 'number' : 'text'}
@@ -398,17 +423,20 @@ export default function StepPanel({
               {run ? (
                 <>
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
-                  {run.status === 'succeeded' && (stepKey === 'bdy' || stepKey === 'thyg') && (
+                  {run.status === 'succeeded' && preview === 'hydrograph' && (
                     <HydrographChart run={run} />
                   )}
-                  {run.status === 'succeeded' && (stepKey === 'bci' || stepKey === 'tbc') && (
-                    <BoundaryPreview aoi={a} run={run} defaultOpen={aois.length === 1} />
+                  {run.status === 'succeeded' && preview === 'boundary' && (
+                    <BoundaryPreview
+                      aoi={a} run={run} defaultOpen={aois.length === 1}
+                      variant={stepKey === 'flowline_tool' ? 'flowlines' : 'boundaries'}
+                    />
                   )}
-                  {run.status === 'succeeded' && (stepKey === 'dem' || stepKey === 'tdem') && (
+                  {run.status === 'succeeded' && preview === 'dem' && (
                     <RasterPreview aoi={a} run={run} kind="dem"
                                    defaultOpen={aois.length === 1} />
                   )}
-                  {run.status === 'succeeded' && (stepKey === 'manning' || stepKey === 'tfric') && (
+                  {run.status === 'succeeded' && preview === 'lulc' && (
                     <RasterPreview aoi={a} run={run} kind="lulc"
                                    defaultOpen={aois.length === 1} />
                   )}

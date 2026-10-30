@@ -22,10 +22,11 @@ NLCD_YEARS = ("2021", "2019", "2016", "2013", "2011",   # MRLC L48 (strings)
               "2008", "2006", "2004", "2001")
 
 
-def _check_lulc_years(config: dict, problems: list) -> None:
+def _check_lulc_years(config: dict, problems: list, s2_key: str = "lulc_year") -> None:
     """Reject a land-cover year the chosen source doesn't publish. Keys mirror
-    fimcore: `lulc_year` (Esri Sentinel-2, int) and `nlcd_year` (NLCD, str)."""
-    yr = config.get("lulc_year")
+    fimcore: `lulc_year` (Esri Sentinel-2, int; the LULC tool calls it
+    `sentinel2_year`) and `nlcd_year` (NLCD, str)."""
+    yr = config.get(s2_key)
     if yr is not None:
         try:
             ok = int(yr) in SENTINEL2_YEARS
@@ -33,7 +34,7 @@ def _check_lulc_years(config: dict, problems: list) -> None:
             ok = False
         if not ok:
             problems.append(
-                f"'lulc_year' {yr!r}: the ESRI Sentinel-2 land cover only "
+                f"'{s2_key}' {yr!r}: the ESRI Sentinel-2 land cover only "
                 f"covers {SENTINEL2_YEARS[-1]}–{SENTINEL2_YEARS[0]}")
     ny = config.get("nlcd_year")
     if ny is not None and str(ny) not in NLCD_YEARS:
@@ -155,10 +156,28 @@ class DEMStepJobType(StepJobType):
         )
 
 
+# FIMSIM-BE15 / FE52 — Manning's n has ONE enforced limit, this hard band.
+# Nathan's 2026-10-01 compromise was [0.01, 0.09]; the max was raised to 0.15
+# (Reshma, 2026-10-15) because fimcore's own literature tables go up to 0.150
+# (NLCD Developed High / Woody Wetlands; Esri Trees 0.140) and 8 classes have
+# a DEFAULT above 0.09. The per-class [min, max] is guidance the UI WARNS
+# about, never a clamp, so sensitivity analyses can push a class outside its
+# range. The frontend constant (reactapp/src/manningRules.ts HARD_N) must
+# match — a test pins the pair.
+MANNING_N_MIN = 0.01
+MANNING_N_MAX = 0.15
+
+
+def _check_manning_n(config: dict, key: str, problems: list) -> None:
+    """A single Manning's n (the fixed-friction field) inside the hard band."""
+    _check_number(config, key, MANNING_N_MIN, MANNING_N_MAX, problems)
+
+
 def _check_manning_mapping(config: dict, problems: list) -> None:
     """The editable per-class table (manning_mapping): an object of
-    land-cover code → Manning's n, every n in [0.001, 1.0]. Shared by the
-    LISFLOOD and TRITON Roughness steps."""
+    land-cover code → Manning's n, every n inside the hard band
+    [MANNING_N_MIN, MANNING_N_MAX]. Shared by the LISFLOOD and TRITON
+    Roughness steps."""
     mapping = config.get("manning_mapping")
     if mapping is None:
         return
@@ -168,11 +187,11 @@ def _check_manning_mapping(config: dict, problems: list) -> None:
         return
     bad = [k for k, v in mapping.items()
            if isinstance(v, bool) or not isinstance(v, (int, float))
-           or not (0.001 <= v <= 1.0)]
+           or not (MANNING_N_MIN <= v <= MANNING_N_MAX)]
     if bad:
         problems.append(
-            f"'manning_mapping' values must be numbers in "
-            f"[0.001, 1.0] — bad class(es): {', '.join(map(str, bad))}")
+            f"'manning_mapping' values must be numbers between {MANNING_N_MIN} "
+            f"and {MANNING_N_MAX} — bad class(es): {', '.join(map(str, bad))}")
 
 
 class ManningStepJobType(UniformStepJobType):
@@ -215,8 +234,7 @@ class ManningStepJobType(UniformStepJobType):
         problems = []
         _check_choice(config, "fric_mode", ("fixed", "varying"), problems)
         _check_choice(config, "lulc_download_source", ("esri", "nlcd"), problems)
-        # Chow (1959) tables top out well below 1; 0 would zero out friction
-        _check_number(config, "fpfric_val", 0.001, 1.0, problems)
+        _check_manning_n(config, "fpfric_val", problems)
         _check_lulc_years(config, problems)
         _check_manning_mapping(config, problems)
         return problems
@@ -268,6 +286,50 @@ class BCIStepJobType(UniformStepJobType):
         return problems
 
 
+#: NWM v3.0 retrospective coverage (fimcore.bdy constant)
+NWM_RETRO_START = datetime(1979, 2, 1)
+NWM_RETRO_END = datetime(2023, 1, 31)
+
+
+def _check_window(config: dict, problems: list, nwm_retro: bool) -> None:
+    """The event window ('start_dt' < 'end_dt', ISO, ≤ 366 days; inside the
+    NWM retrospective when that is the source). Shared by the Flow Data
+    steps (LISFLOOD bdy, TRITON thyg) and the Streamflow tool."""
+    window = {}
+    for key in ("start_dt", "end_dt"):
+        raw = config.get(key)
+        if raw is None:
+            problems.append(f"'{key}' is required — the event window "
+                            f"(ISO datetime, e.g. 2016-10-05T00:00)")
+            continue
+        try:
+            dt = datetime.fromisoformat(str(raw))
+            # fromisoformat accepts "…Z"/offsets → aware; the NWM coverage
+            # constants are naive UTC, so normalize to UTC-naive before any
+            # comparison (mixing the two raises TypeError → a 500, not a
+            # clean rejection).
+            if dt.tzinfo is not None:
+                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+            window[key] = dt
+        except ValueError:
+            problems.append(f"'{key}' is not a valid ISO datetime "
+                            f"(got {raw!r})")
+    if len(window) != 2:
+        return
+    start, end = window["start_dt"], window["end_dt"]
+    if start >= end:
+        problems.append("the event window is empty — 'start_dt' must "
+                        "be before 'end_dt'")
+    elif (end - start) > timedelta(days=366):
+        problems.append("event windows are capped at 366 days — "
+                        "narrow the window to the flood of interest")
+    elif nwm_retro and (start < NWM_RETRO_START or end > NWM_RETRO_END):
+        problems.append(
+            "the NWM retrospective covers 1979-02-01 to 2023-01-31 — "
+            "for dates outside that range use a USGS gage or the "
+            "NWM forecast")
+
+
 class BDYStepJobType(UniformStepJobType):
     clean_patterns = ("*.bdy", "*_discharge.csv")
     step_key = "bdy"
@@ -287,9 +349,8 @@ class BDYStepJobType(UniformStepJobType):
 
     extra_config_keys = ("start_dt", "end_dt", "gage_id")
 
-    #: NWM v3.0 retrospective coverage (fimcore.bdy constant)
-    NWM_RETRO_START = datetime(1979, 2, 1)
-    NWM_RETRO_END = datetime(2023, 1, 31)
+    NWM_RETRO_START = NWM_RETRO_START  # aliases of the module constants
+    NWM_RETRO_END = NWM_RETRO_END
 
     def defaults(self) -> dict:
         return {
@@ -307,39 +368,8 @@ class BDYStepJobType(UniformStepJobType):
         _check_choice(config, "gap_handling", ("interpolate", "zero", "hold"),
                       problems)
 
-        window = {}
-        for key in ("start_dt", "end_dt"):
-            raw = config.get(key)
-            if raw is None:
-                problems.append(f"'{key}' is required — the event window "
-                                f"(ISO datetime, e.g. 2016-10-05T00:00)")
-                continue
-            try:
-                dt = datetime.fromisoformat(str(raw))
-                # fromisoformat accepts "…Z"/offsets → aware; the NWM coverage
-                # constants are naive UTC, so normalize to UTC-naive before any
-                # comparison (mixing the two raises TypeError → a 500, not a
-                # clean rejection).
-                if dt.tzinfo is not None:
-                    dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-                window[key] = dt
-            except ValueError:
-                problems.append(f"'{key}' is not a valid ISO datetime "
-                                f"(got {raw!r})")
-        if len(window) == 2:
-            start, end = window["start_dt"], window["end_dt"]
-            if start >= end:
-                problems.append("the event window is empty — 'start_dt' must "
-                                "be before 'end_dt'")
-            elif (end - start) > timedelta(days=366):
-                problems.append("event windows are capped at 366 days — "
-                                "narrow the window to the flood of interest")
-            elif config.get("bdy_source", "nwm_retro") == "nwm_retro" and (
-                    start < self.NWM_RETRO_START or end > self.NWM_RETRO_END):
-                problems.append(
-                    "the NWM retrospective covers 1979-02-01 to 2023-01-31 — "
-                    "for dates outside that range use a USGS gage or the "
-                    "NWM forecast")
+        _check_window(config, problems,
+                      nwm_retro=config.get("bdy_source", "nwm_retro") == "nwm_retro")
         if config.get("bdy_source") == "usgs":
             gage = config.get("gage_id")
             if not (isinstance(gage, str) and gage.isdigit() and

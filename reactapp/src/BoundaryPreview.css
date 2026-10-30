@@ -19,6 +19,7 @@
 .bp-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
 /* desktop symbology, verbatim (gui/bci_preview.py) */
 .bp-line { width: 1.4rem; height: 3px; border-radius: 2px; background: #2b6cb0; }
+.bp-line.bp-thin { height: 1.5px; background: #63b3ed; }
 .bp-dot {
   width: 0.85rem; height: 0.85rem; border-radius: 50%;
   display: inline-block; box-sizing: border-box;

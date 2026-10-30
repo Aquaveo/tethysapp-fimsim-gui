@@ -1,7 +1,7 @@
 // Pure helpers behind three Copilot-review fixes: decimal number entry,
 // model-switch safety, and per-model Results filtering.
 import { describe, expect, it } from 'vitest';
-import { coerceConfigNumbers, expandEventDates, fieldVisible, STEP_FIELDS } from '../stepFields';
+import { coerceConfigNumbers, expandEventDates, fieldVisible, manningTableSource, STEP_FIELDS } from '../stepFields';
 import { resolveActiveStep } from '../steps';
 import { keepModelSteps } from '../outputsMeta';
 import { MODELS } from '../steps';
@@ -243,5 +243,32 @@ describe('wizardPath / modelFromSlug (FIMSIM-FE48: the model lives on the projec
     expect(modelFromSlug('triton')).toBe('triton');
     expect(modelFromSlug(undefined)).toBe(DEFAULT_MODEL);
     expect(modelFromSlug('hec-ras')).toBe(DEFAULT_MODEL);
+  });
+});
+
+describe('manningTableSource on the LULC tool (FIMSIM-FE62)', () => {
+  const get = (cfg: Record<string, unknown>) => (k: string) => cfg[k];
+  it('shows the table only while Manning is on, keyed to the chosen source', () => {
+    expect(manningTableSource('lulc_tool', get({ do_manning: true, lulc_source: 'nlcd' }))).toBe('nlcd');
+    expect(manningTableSource('lulc_tool', get({ do_manning: true, lulc_source: 'sentinel2' }))).toBe('esri');
+    expect(manningTableSource('lulc_tool', get({ do_manning: false, lulc_source: 'nlcd' }))).toBeNull();
+    expect(manningTableSource('lulc_tool', get({ do_manning: true }))).toBe('nlcd');   // default source
+  });
+  it('treats a checkbox field as visible only on a real true', () => {
+    expect(fieldVisible({ key: 'do_manning', value: true }, get({ do_manning: true }))).toBe(true);
+    expect(fieldVisible({ key: 'do_manning', value: true }, get({ do_manning: 'true' }))).toBe(false);
+  });
+});
+
+describe('fieldVisible with hideIf (FIMSIM-FE64)', () => {
+  const get = (cfg: Record<string, unknown>) => (k: string) => cfg[k];
+  it('hides when any hideIf condition holds, after showIf', () => {
+    expect(fieldVisible(undefined, get({}), { key: 'source', value: 'nwm_forecast' })).toBe(true);
+    expect(fieldVisible(undefined, get({ source: 'nwm_forecast' }),
+                        { key: 'source', value: 'nwm_forecast' })).toBe(false);
+    expect(fieldVisible({ key: 'a', value: 1 }, get({ a: 1, source: 'usgs' }),
+                        [{ key: 'source', value: 'nwm_forecast' }])).toBe(true);
+    expect(fieldVisible({ key: 'a', value: 2 }, get({ a: 1 }),
+                        [{ key: 'source', value: 'nwm_forecast' }])).toBe(false);
   });
 });
