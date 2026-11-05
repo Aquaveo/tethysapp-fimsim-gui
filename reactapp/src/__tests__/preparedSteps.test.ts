@@ -1,5 +1,5 @@
-// reactapp/src/__tests__/preparedSteps.test.ts — FE72 (BE22): Roughness
-// offers a file from a Preparing Input Data tool, like Terrain.
+// reactapp/src/__tests__/preparedSteps.test.ts — FE72 (BE22/BE23): Roughness
+// and Flow Data offer a file from a Preparing Input Data tool, like Terrain.
 import { describe, expect, it } from 'vitest';
 import { summarizeStep } from '../StepOverview';
 import { PICK_NOUN, preparedKindFor } from '../prepared';
@@ -19,12 +19,15 @@ describe('preparedKindFor', () => {
     ['manning', { manning_input: 'prepared_manning' }, 'manning'],
     ['tfric', { manning_input: 'prepared_lulc' }, 'lulc'],
     ['manning', { manning_input: 'download' }, null],
+    ['bdy', { bdy_source: 'prepared' }, 'flow'],
+    ['thyg', { bdy_source: 'usgs' }, null],
     ['par', { bdy_source: 'prepared' }, null],
   ])('%s %o → %s', (step, cfg, kind) => {
     expect(preparedKindFor(step, getter(cfg))).toBe(kind);
   });
   it('names every kind for the missing-pick message', () => {
     expect(PICK_NOUN.manning).toBe("Manning's n grid");
+    expect(PICK_NOUN.flow).toBe('streamflow series');
   });
 });
 
@@ -58,11 +61,26 @@ describe.each([
   });
 });
 
+describe.each(['bdy', 'thyg'])('Flow Data source on %s', (step) => {
+  it('offers the Streamflow Data tool and hides the event window for it', () => {
+    expect(field(step, 'bdy_source').options!.map((o) => o.value)).toContain('prepared');
+    expect(shown(step, 'start_dt', { bdy_source: 'prepared' })).toBe(false);
+    expect(shown(step, 'end_dt', { bdy_source: 'prepared' })).toBe(false);
+    expect(shown(step, 'interval_hours', { bdy_source: 'prepared' })).toBe(true);
+    expect(shown(step, 'start_dt', { bdy_source: 'nwm_retro' })).toBe(true);
+  });
+});
+
 describe('step summaries name a picked file', () => {
   it('Roughness', () => {
     expect(summarizeStep('manning', { manning_input: 'prepared_manning' }))
       .toBe("Manning's n grid from the LULC & Manning tool");
     expect(summarizeStep('tfric', { manning_input: 'prepared_lulc', lulc_source: 'download_nlcd' }))
       .toBe('NLCD land cover from the LULC & Manning tool');
+  });
+  it('Flow Data, with the dates the series brought', () => {
+    expect(summarizeStep('bdy', {
+      bdy_source: 'prepared', start_dt: '2016-10-08T00:00:00', end_dt: '2016-10-15T00:00:00',
+    })).toBe('Streamflow Data tool series · 2016-10-08 → 2016-10-15');
   });
 });

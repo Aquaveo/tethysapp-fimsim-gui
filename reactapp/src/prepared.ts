@@ -6,7 +6,8 @@ import type { PreparedKind, PreparedRow } from './api';
 /**
  * Which prepared-input kind a modeling step's current input choice asks for
  * (FE72), or null when the step downloads its data. Terrain picks a DEM;
- * Roughness a Manning's n grid or a land cover (BE22).
+ * Roughness a Manning's n grid or a land cover (BE22); Flow Data a
+ * streamflow series (BE23).
  */
 export function preparedKindFor(
   stepKey: string, get: (key: string) => unknown,
@@ -21,6 +22,9 @@ export function preparedKindFor(
       return input === 'prepared_manning' ? 'manning'
         : input === 'prepared_lulc' ? 'lulc' : null;
     }
+    case 'bdy':
+    case 'thyg':
+      return get('bdy_source') === 'prepared' ? 'flow' : null;
     default:
       return null;
   }

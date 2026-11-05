@@ -37,7 +37,8 @@ export function summarizeStep(step: string, cfg: Record<string, unknown>): strin
     case 'bdy':
     case 'thyg': {
       const src = s('bdy_source') === 'usgs' ? `USGS ${s('gage_id')}`
-        : s('bdy_source') === 'nwm_forecast' ? 'NWM forecast' : 'NWM retrospective';
+        : s('bdy_source') === 'nwm_forecast' ? 'NWM forecast'
+          : s('bdy_source') === 'prepared' ? 'Streamflow Data tool series' : 'NWM retrospective';
       const win = s('start_dt') && s('end_dt')
         ? ` · ${s('start_dt').slice(0, 10)} → ${s('end_dt').slice(0, 10)}` : '';
       return src + win;

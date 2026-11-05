@@ -239,6 +239,15 @@ const FRIC_FOLLOWS_INPUT = {
 const PICKED_LULC_HELP = 'For land cover from the tool, choose the source the tool '
   + 'used, so the class table matches its classes.';
 
+// FIMSIM-BE23 / FE72: Flow Data can use a series from the Streamflow Data tool
+const FLOW_PREPARED_OPTION = {
+  value: 'prepared', label: 'Use a series from the Streamflow Data tool',
+};
+const FLOW_SOURCE_HELP = 'Download the inflow for an event window, or use a series '
+  + 'made by the Preparing Input Data Streamflow Data tool: it is copied into this '
+  + 'area and its own dates set the event window.';
+const PREPARED_FLOW: Condition = { key: 'bdy_source', value: 'prepared' };
+
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
     {
@@ -358,10 +367,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'nwm_retro', label: 'NWM retrospective (1979–2023)' },
         { value: 'nwm_forecast', label: 'NWM forecast (2023 onwards)' },
         { value: 'usgs', label: 'USGS gage' },
+        FLOW_PREPARED_OPTION,
       ],
+      help: FLOW_SOURCE_HELP,
     },
-    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true },
-    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true },
+    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true,
+      hideIf: PREPARED_FLOW },
+    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true,
+      hideIf: PREPARED_FLOW },
     { key: 'interval_hours', label: 'Interval (hours)', widget: 'number' },
     {
       key: 'gage_id', label: 'USGS gage ID', widget: 'text',
@@ -492,10 +505,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'nwm_retro', label: 'NWM retrospective (1979–2023)' },
         { value: 'nwm_forecast', label: 'NWM forecast (2023 onwards)' },
         { value: 'usgs', label: 'USGS gage' },
+        FLOW_PREPARED_OPTION,
       ],
+      help: FLOW_SOURCE_HELP,
     },
-    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true },
-    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true },
+    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true,
+      hideIf: PREPARED_FLOW },
+    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true,
+      hideIf: PREPARED_FLOW },
     { key: 'interval_hours', label: 'Interval (hours)', widget: 'number' },
     {
       key: 'gage_id', label: 'USGS gage ID', widget: 'text',

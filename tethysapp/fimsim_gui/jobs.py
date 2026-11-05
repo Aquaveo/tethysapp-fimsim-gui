@@ -350,7 +350,14 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         # staged path (BE17 user DEM) is seen by execute. A staging failure
         # (e.g. a missing uploaded file) SHOULD fail the job — not swallowed.
         cfg = run.config or {}
+        submitted = dict(cfg)
         job_type.prestage_inputs(storage, ctx, cfg, adapter)
+        derived = {k: cfg[k] for k in job_type.derived_config_keys if k in cfg}
+        if derived:
+            # only the declared keys (never a staged worker path); a new dict,
+            # so the JSON column registers the change
+            run.config = {**submitted, **derived}
+            session.commit()
         job_type.execute(ctx_path, ctx, cfg, adapter)
 
         try:

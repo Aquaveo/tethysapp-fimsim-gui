@@ -99,6 +99,26 @@ def strip_roughness_ui(cfg: dict) -> dict:
     return cfg
 
 
+def csv_window(path) -> tuple:
+    """(start, end) ISO strings (naive UTC) of a dated discharge CSV, as the
+    Streamflow Data tool writes it (time_hours holds timestamps)."""
+    import pandas as pd
+    from fimcore.bdy import _read_user_discharge_table
+
+    _df, has_dates, start, end = _read_user_discharge_table(path)
+    if not has_dates or start is None or end is None:
+        raise ValueError(
+            f"{Path(path).name}: the series has no dates — time_hours must hold "
+            f"timestamps, as the Streamflow Data tool writes them")
+
+    def iso(t):
+        ts = pd.Timestamp(t)
+        if ts.tzinfo is not None:
+            ts = ts.tz_convert("UTC").tz_localize(None)
+        return ts.isoformat()
+    return iso(start), iso(end)
+
+
 class DEMStepJobType(StepJobType):
     # wildcards also sweep up "dem (1).ascii"-style versioned leftovers
     clean_patterns = ("dem*.ascii", "dem*.prj", "DEM_*.tif")
@@ -416,7 +436,12 @@ class BDYStepJobType(UniformStepJobType):
             shutil.copy2(p, Path(outputs) / p.name)
         return outputs
 
-    extra_config_keys = ("start_dt", "end_dt", "gage_id")
+    extra_config_keys = ("start_dt", "end_dt", "gage_id", "user_flow_keys")
+    # BE23: the staged path of a picked Streamflow Data tool CSV
+    server_only_keys = ("file_path",)
+    # a picked series brings its own dates; kept on the run for the summary
+    # line and the hydrograph's date axis
+    derived_config_keys = ("start_dt", "end_dt")
 
     NWM_RETRO_START = NWM_RETRO_START  # aliases of the module constants
     NWM_RETRO_END = NWM_RETRO_END
@@ -431,14 +456,16 @@ class BDYStepJobType(UniformStepJobType):
     def check_values(self, config: dict) -> list:
         problems = []
         _check_choice(config, "bdy_source",
-                      ("nwm_retro", "nwm_forecast", "usgs"), problems)
+                      ("nwm_retro", "nwm_forecast", "usgs", "prepared"), problems)
         _check_choice(config, "interval_hours",
                       (0.5, 1, 1.0, 3, 3.0, 6, 6.0, 12, 12.0, 24, 24.0), problems)
         _check_choice(config, "gap_handling", ("interpolate", "zero", "hold"),
                       problems)
 
-        _check_window(config, problems,
-                      nwm_retro=config.get("bdy_source", "nwm_retro") == "nwm_retro")
+        # a picked series carries its own dates (set when it is staged)
+        if config.get("bdy_source") != "prepared":
+            _check_window(config, problems,
+                          nwm_retro=config.get("bdy_source", "nwm_retro") == "nwm_retro")
         if config.get("bdy_source") == "usgs":
             gage = config.get("gage_id")
             if not (isinstance(gage, str) and gage.isdigit() and
@@ -447,7 +474,20 @@ class BDYStepJobType(UniformStepJobType):
                                 "(8–15 digits) when the source is a USGS gage")
         return problems
 
+    def prestage_inputs(self, storage, ctx, config, log_fn):
+        # BE23: a picked Streamflow Data tool CSV → fimcore's "csv" source
+        if config.get("bdy_source") != "prepared":
+            return
+        path = stage_one_pick(storage, ctx, config, "flow", "streamflow series", log_fn)
+        config["file_path"] = path
+        config["start_dt"], config["end_dt"] = csv_window(path)
+        log_fn(f"series covers {config['start_dt']} → {config['end_dt']}")
+
     def transform_config(self, cfg: dict, ctx) -> dict:
+        cfg = dict(cfg)
+        cfg.pop("user_flow_keys", None)
+        if cfg.get("bdy_source") == "prepared":
+            cfg["bdy_source"] = "csv"
         for key in ("start_dt", "end_dt"):
             if isinstance(cfg.get(key), str):
                 cfg[key] = datetime.fromisoformat(cfg[key])
