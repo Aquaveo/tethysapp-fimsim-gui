@@ -1,7 +1,35 @@
 // reactapp/src/prepared.ts
 // Row logic for the PreparedPicker (FIMSIM-FE71): which of the user's tool
 // outputs can be used in this area, and why not.
-import type { PreparedRow } from './api';
+import type { PreparedKind, PreparedRow } from './api';
+
+/**
+ * Which prepared-input kind a modeling step's current input choice asks for
+ * (FE72), or null when the step downloads its data. Terrain picks a DEM;
+ * Roughness a Manning's n grid or a land cover (BE22).
+ */
+export function preparedKindFor(
+  stepKey: string, get: (key: string) => unknown,
+): PreparedKind | null {
+  switch (stepKey) {
+    case 'dem':
+    case 'tdem':
+      return get('dem_input') === 'prepared' ? 'dem' : null;
+    case 'manning':
+    case 'tfric': {
+      const input = get('manning_input');
+      return input === 'prepared_manning' ? 'manning'
+        : input === 'prepared_lulc' ? 'lulc' : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** What the user picks, in the "Pick a prepared … for:" submit message. */
+export const PICK_NOUN: Record<PreparedKind, string> = {
+  dem: 'DEM', manning: "Manning's n grid", lulc: 'land cover', flow: 'streamflow series',
+};
 
 export type RowState = 'ready' | 'uncovered' | 'unusable';
 

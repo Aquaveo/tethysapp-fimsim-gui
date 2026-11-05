@@ -15,6 +15,12 @@ export function summarizeStep(step: string, cfg: Record<string, unknown>): strin
       return `${s('dem_source') === 'hand' ? 'HAND' : '3DEP'} @ ${s('dem_res_m') || '30'} m`;
     case 'manning':
     case 'tfric':
+      // BE22: a file from the LULC & Manning tool
+      if (s('manning_input') === 'prepared_manning') return "Manning's n grid from the LULC & Manning tool";
+      if (s('manning_input') === 'prepared_lulc') {
+        return `${(s('lulc_download_source') || s('lulc_source') || 'esri').includes('nlcd') ? 'NLCD' : 'Esri'}`
+          + ' land cover from the LULC & Manning tool';
+      }
       return s('fric_mode') === 'fixed'
         ? `fixed n = ${s('fpfric_val') || '?'}`
         : `${(s('lulc_download_source') || s('lulc_source') || 'esri').includes('nlcd') ? 'NLCD' : 'Esri'} land cover`;

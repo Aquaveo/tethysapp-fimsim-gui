@@ -16,6 +16,7 @@ import BoundaryPreview from './BoundaryPreview';
 import HydrographChart from './HydrographChart';
 import RasterPreview from './RasterPreview';
 import PreparedPicker from './PreparedPicker';
+import { PICK_NOUN, preparedKindFor } from './prepared';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
@@ -137,15 +138,19 @@ export default function StepPanel({
   // BE17: per-AOI uploaded DEMs (keys) for the "upload my DEM" path
   const [demKeys, setDemKeys] = useState<Record<number, { key: string; name: string }[]>>({});
   const [demBusy, setDemBusy] = useState<number | null>(null);
-  // FE72: per-AOI DEM picked from the DEM tool (copied into the AOI by BE21)
-  const [demPicks, setDemPicks] = useState<Record<number, PickedInput | null>>({});
+  // FE72: per-AOI file picked from a Preparing Input Data tool (copied into
+  // the AOI by BE21), keyed "<kind>:<aoiId>" so switching the input choice
+  // never sends a pick of the wrong kind
+  const [picks, setPicks] = useState<Record<string, PickedInput | null>>({});
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
   const visible = (f: FieldSpec) => fieldVisible(f.showIf, value, f.hideIf);
   const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
     && value('dem_input') === 'upload';
-  const isDemPrepared = (stepKey === 'dem' || stepKey === 'tdem')
-    && value('dem_input') === 'prepared';
+  const pickKind = preparedKindFor(stepKey, value);
+  const pickOf = (aoiId: number) => (pickKind ? picks[`${pickKind}:${aoiId}`] ?? null : null);
+  const setPick = (aoiId: number, p: PickedInput | null) =>
+    setPicks((prev) => ({ ...prev, [`${pickKind}:${aoiId}`]: p }));
   // the editable per-class table, on BOTH Roughness steps (bug-round #iv)
   const tableSource = manningTableSource(stepKey, value);
   const preview = previewKind(stepKey);
@@ -244,14 +249,15 @@ export default function StepPanel({
           aoiConfigs[String(a.id)] = { user_dem_keys: demKeys[a.id].map((d) => d.key) };
         }
       }
-      if (isDemPrepared) {
-        const missing = aois.filter((a) => !demPicks[a.id]);
+      if (pickKind) {
+        const missing = aois.filter((a) => !pickOf(a.id));
         if (missing.length) {
-          throw new Error(`Pick a prepared DEM for: ${missing.map((a) => a.name).join(', ')}`);
+          throw new Error(`Pick a prepared ${PICK_NOUN[pickKind]} for: `
+            + missing.map((a) => a.name).join(', '));
         }
         aoiConfigs = {};
         for (const a of aois) {
-          aoiConfigs[String(a.id)] = { user_dem_keys: [demPicks[a.id]!.key] };
+          aoiConfigs[String(a.id)] = { [`user_${pickKind}_keys`]: [pickOf(a.id)!.key] };
         }
       }
       const { results } = await submitStep(projectId, stepKey, merged, aoiConfigs);
@@ -420,11 +426,11 @@ export default function StepPanel({
                   )}
                 </div>
               )}
-              {isDemPrepared && (
+              {pickKind && (
                 <PreparedPicker
-                  aoiId={a.id} kind="dem" picked={demPicks[a.id] ?? null}
-                  onPick={(p) => setDemPicks((prev) => ({ ...prev, [a.id]: p }))}
-                  onClear={() => setDemPicks((prev) => ({ ...prev, [a.id]: null }))} />
+                  key={pickKind} aoiId={a.id} kind={pickKind} picked={pickOf(a.id)}
+                  onPick={(p) => setPick(a.id, p)}
+                  onClear={() => setPick(a.id, null)} />
               )}
               {stepKey === 'run' && (
                 <p className="sp-field-help">

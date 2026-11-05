@@ -201,6 +201,7 @@ export function manningTableSource(
     return String(get('lulc_source') || 'nlcd') === 'nlcd' ? 'nlcd' : 'esri';
   }
   if (stepKey !== 'manning' && stepKey !== 'tfric') return null;
+  if (get('manning_input') === 'prepared_manning') return null;   // values come from the file
   if (get('fric_mode') !== 'varying') return null;
   const src = stepKey === 'manning'
     ? String(get('lulc_download_source') || 'esri')
@@ -211,6 +212,32 @@ export function manningTableSource(
 const DEM_INPUT_HELP = 'Upload one or more GeoTIFFs (merged if several, resampled to the '
   + 'cell size below) instead of downloading elevation, or use a DEM made by the '
   + 'Preparing Input Data DEM tool: it is copied into this area and must cover it.';
+
+// FIMSIM-BE22 / FE72: Roughness can download land cover or use a file from
+// the LULC & Manning tool (a Manning's n grid as is, or its land cover with
+// the class table). Same field on LISFLOOD-FP (manning) and TRITON (tfric).
+const ROUGHNESS_INPUT: FieldSpec = {
+  key: 'manning_input', label: 'Roughness input', widget: 'select',
+  help: 'Download land cover for this area, or use a file made by the Preparing '
+    + "Input Data LULC & Manning tool: its Manning's n grid is used as is, its land "
+    + 'cover gets the class table below. The file is copied into this area and '
+    + 'must cover it.',
+  options: [
+    { value: 'download', label: 'Download land cover' },
+    { value: 'prepared_manning', label: "Use a Manning's n grid from the LULC & Manning tool" },
+    { value: 'prepared_lulc', label: 'Use land cover from the LULC & Manning tool' },
+  ],
+};
+const PREPARED_ROUGHNESS: Condition[] = [
+  { key: 'manning_input', value: 'prepared_manning' },
+  { key: 'manning_input', value: 'prepared_lulc' },
+];
+// a picked file always means varying friction
+const FRIC_FOLLOWS_INPUT = {
+  key: 'manning_input', values: { prepared_manning: 'varying', prepared_lulc: 'varying' },
+};
+const PICKED_LULC_HELP = 'For land cover from the tool, choose the source the tool '
+  + 'used, so the class table matches its classes.';
 
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
@@ -234,6 +261,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
   ],
   manning: [
+    ROUGHNESS_INPUT,
     {
       key: 'fric_mode', label: 'Friction', widget: 'select',
       help: "Surface roughness (Manning's n) controls how much the ground slows "
@@ -243,6 +271,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'varying', label: 'From land cover (varying)' },
         { value: 'fixed', label: 'Single value everywhere (fixed)' },
       ],
+      hideIf: PREPARED_ROUGHNESS,
+      linkedDefault: FRIC_FOLLOWS_INPUT,
     },
     {
       key: 'fpfric_val', label: "Fixed Manning's n", widget: 'number',
@@ -255,6 +285,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'lulc_download_source', label: 'Land cover source', widget: 'select',
       showIf: { key: 'fric_mode', value: 'varying' },
+      hideIf: { key: 'manning_input', value: 'prepared_manning' },
+      help: PICKED_LULC_HELP,
       options: [
         { value: 'esri', label: 'Esri Sentinel-2 (10 m, global)' },
         { value: 'nlcd', label: 'NLCD (30 m, USA)' },
@@ -265,12 +297,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: SENTINEL2_YEAR_OPTIONS,
       showIf: [{ key: 'fric_mode', value: 'varying' },
                { key: 'lulc_download_source', value: 'esri' }],
+      hideIf: PREPARED_ROUGHNESS,
     },
     {
       key: 'nlcd_year', label: 'Land cover year', widget: 'select',
       options: NLCD_YEAR_OPTIONS,
       showIf: [{ key: 'fric_mode', value: 'varying' },
                { key: 'lulc_download_source', value: 'nlcd' }],
+      hideIf: PREPARED_ROUGHNESS,
     },
   ],
   bci: [
@@ -382,6 +416,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
   ],
   tfric: [
+    ROUGHNESS_INPUT,
     {
       key: 'fric_mode', label: 'Friction', widget: 'select',
       help: "Surface roughness (Manning's n) controls how much the ground slows "
@@ -391,6 +426,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'varying', label: 'From land cover (varying)' },
         { value: 'fixed', label: 'Single value everywhere (fixed)' },
       ],
+      hideIf: PREPARED_ROUGHNESS,
+      linkedDefault: FRIC_FOLLOWS_INPUT,
     },
     {
       key: 'fpfric_val', label: "Fixed Manning's n", widget: 'number',
@@ -403,6 +440,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'lulc_source', label: 'Land cover source', widget: 'select',
       showIf: { key: 'fric_mode', value: 'varying' },
+      hideIf: { key: 'manning_input', value: 'prepared_manning' },
+      help: PICKED_LULC_HELP,
       options: [
         { value: 'download', label: 'Esri Sentinel-2 (10 m, global)' },
         { value: 'download_nlcd', label: 'NLCD (30 m, USA)' },
@@ -413,12 +452,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: SENTINEL2_YEAR_OPTIONS,
       showIf: [{ key: 'fric_mode', value: 'varying' },
                { key: 'lulc_source', value: 'download' }],
+      hideIf: PREPARED_ROUGHNESS,
     },
     {
       key: 'nlcd_year', label: 'Land cover year', widget: 'select',
       options: NLCD_YEAR_OPTIONS,
       showIf: [{ key: 'fric_mode', value: 'varying' },
                { key: 'lulc_source', value: 'download_nlcd' }],
+      hideIf: PREPARED_ROUGHNESS,
     },
     // No resolution control: the friction grid is snapped to the terrain DEM
     // on the server, so a second resolution here would only mislead.
