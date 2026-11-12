@@ -11,7 +11,8 @@ from pathlib import Path
 
 # what each modeling input is picked from
 KIND_STEP = {"dem": "dem_tool", "manning": "lulc_tool",
-             "lulc": "lulc_tool", "flow": "flow_tool"}
+             "lulc": "lulc_tool", "flow": "flow_tool",
+             "flowline": "flowline_tool"}   # A2F-2: the A2F Flowline step
 
 # the tool output names (fimcore run_dem_mode / run_lulc_mode / run_streamflow_mode)
 _PATTERNS = {
@@ -19,12 +20,18 @@ _PATTERNS = {
     "manning": re.compile(r"^ManningN_.+\.(tif|asc|gpkg)$"),
     "lulc": re.compile(r"^LULC_.+\.(tif|asc|gpkg)$"),
     "flow": re.compile(r"^(nwm_retro|nwm_forecast|usgs_discharge)_.+\.csv$"),
+    "flowline": re.compile(r"^(all_flowlines|main_river)_.+\.(shp|gpkg|csv|tif)$"),
 }
+#: a shapefile is several files; these travel with the .shp (.cpg optional)
+SHAPEFILE_PARTS = (".shx", ".dbf", ".prj")
+SHAPEFILE_OPTIONAL = (".cpg",)
+#: the reach-id columns fimcore's A2F flowline accepts (arc_flowline._ID_CANDIDATES)
+FLOWLINE_ID_COLUMNS = ("comid", "linkno", "featureid", "feature_id", "nhdplusid")
 _FORMAT_NAMES = {"asc": "an ESRI ASCII grid", "gpkg": "a GeoPackage"}
 _TOOL_NAMES = {"dem": "DEM", "manning": "LULC & Manning", "lulc": "LULC & Manning",
-               "flow": "Streamflow Data"}
+               "flow": "Streamflow Data", "flowline": "Flowline"}
 _KIND_NAMES = {"dem": "DEM", "manning": "Manning's n", "lulc": "land-cover",
-               "flow": "streamflow"}
+               "flow": "streamflow", "flowline": "flowline"}
 GONE = "that prepared run no longer exists — refresh the list"
 
 
@@ -51,9 +58,21 @@ def classify(name: str, kind: str):
         return False, ("HAND is height above the nearest stream, not ground "
                        "elevation — use a USGS 3DEP DEM for Terrain")
     ext = name.rsplit(".", 1)[1]
+    if kind == "flowline":
+        return _classify_flowline(m.group(1), ext)
     if ext in _FORMAT_NAMES:
         return False, (f"saved as {_FORMAT_NAMES[ext]} — re-run the "
                        f"{_TOOL_NAMES[kind]} tool with GeoTIFF")
+    return True, None
+
+
+def _classify_flowline(which: str, ext: str):
+    if which == "main_river":
+        return False, ("the main river has no stream IDs — re-run the Flowline "
+                       "tool with \"Save all flowlines\" ticked")
+    if ext not in ("shp", "gpkg"):
+        return False, (f"saved as {ext.upper()} — re-run the Flowline tool with "
+                       f"all flowlines as a Shapefile or GeoPackage")
     return True, None
 
 
@@ -65,6 +84,20 @@ def covers(bounds, aoi_geom) -> bool:
     from shapely.geometry import box
     outside = aoi_geom.difference(box(*bounds)).area
     return outside <= COVER_TOLERANCE * aoi_geom.area
+
+
+def area_covers(tool_area, aoi_geom) -> bool:
+    """True when the tool run's own area polygon contains the AOI (within
+    COVER_TOLERANCE). A flowline network is clipped to that polygon — not its
+    bounding box — so the polygon is what has to contain this AOI."""
+    if tool_area is None:
+        return False
+    outside = aoi_geom.difference(tool_area).area
+    return outside <= COVER_TOLERANCE * aoi_geom.area
+
+
+NOT_COVERED = ("the prepared file does not cover this area — re-run the "
+               "tool on an area that contains it")
 
 
 def run_detail(step_key: str, config: dict) -> str:
@@ -80,6 +113,8 @@ def run_detail(step_key: str, config: dict) -> str:
         else:
             source = f"Sentinel-2 {cfg['sentinel2_year']}"
         return f"{source} · {cfg['cell_size_m']:g} m"
+    if step_key == "flowline_tool":
+        return "NHD flowlines"
     source = {"usgs": "USGS gage", "nwm_retro": "NWM retrospective",
               "nwm_forecast": "NWM forecast"}.get(cfg["source"], cfg["source"])
     start, end = cfg.get("start_dt"), cfg.get("end_dt")
@@ -88,11 +123,14 @@ def run_detail(step_key: str, config: dict) -> str:
     return source
 
 
-def prepared_rows(runs, kind: str, aoi_geom, bounds_fn) -> list:
+def prepared_rows(runs, kind: str, aoi_geom, bounds_fn, tool_area_fn=None) -> list:
     """One row per output file of *kind* across *runs* (succeeded tool runs,
-    newest first). *bounds_fn(key)* returns a raster's EPSG:4326 bounds."""
+    newest first). *bounds_fn(key)* returns a raster's EPSG:4326 bounds;
+    *tool_area_fn(run)* the tool run's own area polygon (flowlines)."""
     if kind not in KIND_STEP:
         raise ValueError(f"unknown kind {kind!r}; one of {', '.join(KIND_STEP)}")
+    if kind == "flowline" and tool_area_fn is None:
+        raise ValueError("flowlines need tool_area_fn (the tool run's area)")
     rows = []
     for run in sorted(runs, key=lambda r: r.finished, reverse=True):
         detail = run_detail(run.step_key, run.config)
@@ -104,6 +142,11 @@ def prepared_rows(runs, kind: str, aoi_geom, bounds_fn) -> list:
             cover = None
             if usable and kind == "flow":
                 cover = True               # a flow series has no footprint
+            elif usable and kind == "flowline":
+                try:
+                    cover = area_covers(tool_area_fn(run), aoi_geom)
+                except Exception:
+                    usable, reason = False, "the tool run's area could not be read"
             elif usable:
                 try:
                     cover = covers(bounds_fn(m["key"]), aoi_geom)
@@ -147,6 +190,37 @@ def check_pick(run, username: str, file: str, kind: str) -> str:
     return entry["key"]
 
 
+def shapefile_part_keys(key: str, parts=SHAPEFILE_PARTS + SHAPEFILE_OPTIONAL) -> list:
+    """The storage keys of a .shp key's side files (same prefix and stem)."""
+    stem = key[:-len(".shp")]
+    return [stem + ext for ext in parts]
+
+
+def _flowline_problem(path, aoi_geom) -> str:
+    """Reason a picked flowline can't feed A2F, or None: a readable vector of
+    lines with a reach-id column that reaches into this area."""
+    import geopandas as gpd
+
+    try:
+        gdf = gpd.read_file(path)
+    except Exception:
+        return "the file could not be read as a vector"
+    if gdf.empty or not gdf.geom_type.isin(["LineString", "MultiLineString"]).any():
+        return "it has no stream lines"
+    if not {c.lower() for c in gdf.columns} & set(FLOWLINE_ID_COLUMNS):
+        return ("it has no stream-ID column (COMID, LINKNO or feature_id), "
+                "which A2F needs to look up flows")
+    if gdf.crs is None:
+        return "it has no coordinate system (.prj)"
+    try:
+        reaches = gdf.to_crs(4326).intersects(aoi_geom).any()
+    except Exception:
+        return "its geometry could not be reprojected or compared with this area"
+    if not reaches:
+        return "none of its streams reach this area"
+    return None
+
+
 def _csv_problem(path) -> str:
     import csv
     with open(path, newline="", encoding="utf-8-sig") as fh:
@@ -156,29 +230,76 @@ def _csv_problem(path) -> str:
     return None
 
 
-def copy_prepared(storage, src_key: str, dest_key: str, kind: str, aoi_geom) -> dict:
+def _fetch_parts(storage, src_key: str, dest_key: str, tmp) -> list:
+    """Download a picked shapefile's side files next to it; returns the
+    (local path, dest key) of each. A missing required part refuses the pick."""
+    parts = []
+    for src_part, dest_part in zip(shapefile_part_keys(src_key),
+                                   shapefile_part_keys(dest_key)):
+        if storage.exists(src_part):
+            local = Path(tmp) / Path(dest_part).name
+            storage.download_to_path(src_part, local)
+            parts.append((local, dest_part))
+        elif not src_part.endswith(SHAPEFILE_OPTIONAL):
+            raise PickError(400, f"'{Path(src_key).name}': its {Path(src_part).suffix} "
+                                 f"file is missing — re-run the Flowline tool")
+    return parts
+
+
+def _save_parts(storage, items: list, clear: list) -> None:
+    """Store every (local path, key) in *items* as one unit: first remove each
+    key in *clear* (a previous pick's parts, e.g. a stale .cpg), and if any save
+    fails remove what was written, so a shapefile is never left half-stored."""
+    for key in clear:
+        if storage.exists(key):
+            storage.delete(key)
+    written = []
+    try:
+        for local, key in items:
+            with open(local, "rb") as fh:
+                storage.save(key, fh)
+            written.append(key)
+    except Exception as exc:
+        for key in written:
+            try:
+                storage.delete(key)
+            except Exception:  # best effort — the pick is already failing
+                pass
+        raise PickError(503, "the prepared file could not be stored — try again") from exc
+
+
+def copy_prepared(storage, src_key: str, dest_key: str, kind: str, aoi_geom,
+                  tool_area=None) -> dict:
     """Copy a picked file into the modeling AOI's storage after re-checking
-    it (a GeoTIFF that covers the area, or a CSV with the flow columns).
+    it (a GeoTIFF that covers the area, a CSV with the flow columns, or a
+    flowline network whose tool area — *tool_area*, its polygon — contains
+    this AOI). A shapefile travels with its side files.
     Returns the upload-shaped {key, name, bytes}; raises PickError."""
     name = Path(dest_key).name
+    shapefile = kind == "flowline" and name.endswith(".shp")
     with tempfile.TemporaryDirectory() as tmp:
         local = Path(tmp) / name
         if not storage.exists(src_key):
             raise PickError(404, GONE)
         storage.download_to_path(src_key, local)
+        parts = _fetch_parts(storage, src_key, dest_key, tmp) if shapefile else []
         if kind == "flow":
             reason = _csv_problem(local)
+        elif kind == "flowline":
+            reason = _flowline_problem(local, aoi_geom)
+            if reason is None and not area_covers(tool_area, aoi_geom):
+                reason = NOT_COVERED
         else:
             from tethysapp.fimsim_gui.dem_upload import validate_geotiff
             reason = validate_geotiff(local)
             if reason is None and not covers(_bounds_4326(local), aoi_geom):
-                reason = ("the prepared file does not cover this area — re-run the "
-                          "tool on an area that contains it")
+                reason = NOT_COVERED
         if reason:
             raise PickError(400, f"'{name}': {reason}")
-        with open(local, "rb") as fh:
-            storage.save(dest_key, fh)
-    return {"key": dest_key, "name": name, "bytes": storage.size(dest_key)}
+        clear = shapefile_part_keys(dest_key) if shapefile else []
+        _save_parts(storage, [(local, dest_key)] + parts, clear)
+    size = storage.size(dest_key) + sum(storage.size(k) for _l, k in parts)
+    return {"key": dest_key, "name": name, "bytes": size}
 
 
 def gdal_path(storage, key) -> str:

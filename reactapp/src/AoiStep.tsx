@@ -21,11 +21,13 @@ interface Props {
   projectId: number;
   aois: ServerAoi[];
   setAois: (updater: (prev: ServerAoi[]) => ServerAoi[]) => void;
+  /** the model accepts any polygon (A2F): free drawing, no rectangle rule */
+  anyShape?: boolean;
 }
 
 const LOOKUP_POLL_MS = 4000;
 
-export default function AoiStep({ projectId, aois, setAois }: Props) {
+export default function AoiStep({ projectId, aois, setAois, anyShape = false }: Props) {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -218,11 +220,21 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
         Zipped shapefile (.zip), GeoPackage (.gpkg), or GeoJSON, validated on
         the server. <strong>One study area per project</strong> — a file with
         several polygons lets you pick one; for many areas at once, use the
-        desktop FIMsim.
-        LISFLOOD-FP and TRITON require <strong>rectangular</strong> areas: click
-        the corners on the map and the drawn shape closes into its smallest
-        enclosing rectangle; non-rectangular uploads can be converted to their
-        bounding box.
+        desktop FIMsim.{' '}
+        {anyShape ? (
+          <>
+            ARC-Curve2Flood accepts <strong>any shape</strong>: click the
+            outline on the map and close it on the first point (or
+            double-click), or upload a watershed or any other polygon.
+          </>
+        ) : (
+          <>
+            LISFLOOD-FP and TRITON require <strong>rectangular</strong> areas: click
+            the corners on the map and the drawn shape closes into its smallest
+            enclosing rectangle; non-rectangular uploads can be converted to their
+            bounding box.
+          </>
+        )}
       </p>
 
       {busy && <div className="as-busy" role="status">{busy}</div>}
@@ -282,6 +294,7 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
         onDrawComplete={onDrawComplete}
         onDrawCancel={() => setDrawing(false)}
         zoomTo={zoomTo}
+        drawMode={anyShape ? 'polygon' : 'rectangle'}
       />
 
       {aois.length > 0 && (
@@ -308,7 +321,7 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
                     <span className="as-card-resolving">Resolving river &amp; gages…</span>
                   )}
                 </span>
-                {!a.is_rectangular && (
+                {!a.is_rectangular && !anyShape && (
                   <span className="as-card-warn">
                     Not rectangular — LISFLOOD-FP/TRITON require rectangular areas
                   </span>
@@ -319,7 +332,7 @@ export default function AoiStep({ projectId, aois, setAois }: Props) {
                   Retry lookup
                 </button>
               )}
-              {!a.is_rectangular && (
+              {!a.is_rectangular && !anyShape && (
                 <button
                   type="button" className="as-card-fix"
                   onClick={() => void replaceWithBbox(a)}

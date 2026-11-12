@@ -17,6 +17,8 @@ adapter re-reads StepRun.status at most every 2 s and raises inside log_fn
 when a cancel was requested. Timeouts ride the same check.
 """
 import json
+import logging
+import os
 import re
 import shutil
 import tempfile
@@ -24,6 +26,8 @@ import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 # Job-level deadline. It used to be 2 h, which silently killed every 3–4 h
@@ -311,8 +315,32 @@ def derived_config(job_type, submitted: dict, cfg: dict):
     return {**submitted, **derived}
 
 
+def nwm_api_key() -> str:
+    """The CIROH NWM key from the app's secret setting, or "" (A2F)."""
+    try:
+        from tethysapp.fimsim_gui.app import App
+        return str(App.get_custom_setting("nwm_api_key") or "").strip()
+    except Exception as exc:
+        # e.g. the secret can't be decrypted — say so (never the value)
+        log.warning("nwm_api_key setting could not be read (%s); A2F offers "
+                    "GEOGLOWS only", type(exc).__name__)
+        return ""
+
+
+def job_env_for(job_type) -> dict:
+    """Environment the worker sets for this job: the NWM key (fimcore reads
+    FIMSIM_NWM_API_KEY) for the A2F steps that call CIROH, nothing otherwise.
+    Passed as a job argument — never stored in the StepRun's config."""
+    if not job_type.needs_nwm_key:
+        return {}
+    from fimcore.api_keys import NWM_KEY_ENV
+    # always sent for these steps: "" clears a key the admin removed, so a
+    # warm worker never keeps using (or passing to subprocesses) an old one
+    return {NWM_KEY_ENV: nwm_api_key()}
+
+
 def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
-                 timeout_s: int = DEFAULT_TIMEOUT_S) -> dict:
+                 timeout_s: int = DEFAULT_TIMEOUT_S, job_env: dict = None) -> dict:
     """Executed on the Dask worker. Owns the StepRun lifecycle end to end."""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -321,6 +349,13 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
     from tethysapp.fimsim_gui.storage import build_key, service_from_config
 
     _ensure_django()
+    # A2F: e.g. the NWM key — the same for every job, so it stays set for
+    # later jobs on this worker process until the admin changes or removes it.
+    for name, value in (job_env or {}).items():
+        if not value:
+            os.environ.pop(name, None)
+        elif os.environ.get(name) != value:   # setenv only on a change
+            os.environ[name] = value
 
     engine = create_engine(db_url)
     session = sessionmaker(bind=engine)()
@@ -481,7 +516,10 @@ def submit_step(step_run, user, *, timeout_s: int = DEFAULT_TIMEOUT_S):
         "step_key": step_run.step_key,
     }
     job.save()
-    job.execute(delayed(run_step_job)(db_url, storage_config, step_run.id, timeout_s))
+    from tethysapp.fimsim_gui.job_types import REGISTRY
+    job_env = job_env_for(REGISTRY[step_run.step_key])
+    job.execute(delayed(run_step_job)(db_url, storage_config, step_run.id, timeout_s,
+                                      job_env))
     step_run.status = "queued"
     step_run.job_id = str(job.id)
     return job

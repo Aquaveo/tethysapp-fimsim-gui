@@ -17,8 +17,8 @@ import ProjectStep from './ProjectStep';
 import ResultsStep from './ResultsStep';
 import StepPanel from './StepPanel';
 import {
-  MODELS, RUN_SKIPPED_TIP, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep,
-  runSkipped, stepDone, wizardPath,
+  MODELS, RUN_SKIPPED_TIP, headerModel, isRunStep, modelFromSlug, needsRunConfirm,
+  resolveActiveStep, runSkipped, runStepOf, stepDone, wizardPath,
   type ModelId, type StepId,
   modelBadgeClass, resultsKind,
 } from './steps';
@@ -37,6 +37,7 @@ export default function NewSimulation() {
   const model: ModelId = project && project.id === projectId
     ? modelFromSlug(project.model) : modelFromSlug(params.model);
   const STEPS = MODELS[model].steps;
+  const runStep = runStepOf(STEPS);
   const JOB_STEPS = new Set(
     STEPS.map((s) => s.id as string).filter((id) => !NON_JOB_STEPS.has(id)));
   const stepOrder = STEPS
@@ -145,7 +146,7 @@ export default function NewSimulation() {
         {STEPS.map((s, i) => {
           // ✓ means the step really completed (FE55), not merely "behind you";
           // ⚠ on Run means the user went past it without a run (FE70)
-          const skipped = s.id === 'run' && runSkipped(STEPS, activeStep, aois);
+          const skipped = isRunStep(s.id) && runSkipped(STEPS, activeStep, aois);
           const state = i === idx ? 'active'
             : skipped ? 'skipped'
             : stepDone(s.id, aois, !!projectId) ? 'done' : 'todo';
@@ -191,13 +192,14 @@ export default function NewSimulation() {
         {activeStep === 'project' ? (
           <ProjectStep />
         ) : activeStep === 'aoi' && projectId ? (
-          <AoiStep projectId={projectId} aois={aois} setAois={setAois} />
+          <AoiStep projectId={projectId} aois={aois} setAois={setAois}
+            anyShape={!!MODELS[model].anyAoiShape} />
         ) : activeStep === 'results' && projectId ? (
           <ResultsStep
             aois={aois}
             kind={resultsKind(model)}
             modelStepKeys={[...JOB_STEPS]}
-            onGoToRun={JOB_STEPS.has('run') ? () => goTo('run') : undefined}
+            onGoToRun={runStep ? () => goTo(runStep) : undefined}
           />
         ) : JOB_STEPS.has(activeStep) && projectId ? (
           <StepPanel
@@ -209,7 +211,7 @@ export default function NewSimulation() {
             schema={schemas?.[step] ?? null}
             onSubmitted={() =>
               getProjectStatus(projectId).then((r) => setAoisState(r.aois)).catch(() => undefined)}
-            submitSlot={activeStep === 'run' ? submitSlot : null}
+            submitSlot={isRunStep(activeStep) ? submitSlot : null}
           />
         ) : (
           <div className="ns-placeholder">Coming soon — this panel is being built.</div>
