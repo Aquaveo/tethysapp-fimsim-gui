@@ -86,7 +86,8 @@ PER_AOI_KEY_HOMES = {
 # not this order — the tuple orders zips/summaries and namespaces storage keys.
 STEP_KEYS = ("dem", "manning", "bci", "bdy", "par", "run",
              "tdem", "tfric", "tbc", "thyg", "tcfg",
-             "dem_tool", "lulc_tool", "flowline_tool", "flow_tool")
+             "dem_tool", "lulc_tool", "flowline_tool", "flow_tool",
+             "adem", "aflow")
 
 #: FIMSIM-FE48 — the model is a property of the PROJECT (chosen at creation,
 #: shown throughout), not a URL mode. Mirrors reactapp/src/steps.ts MODELS.
@@ -94,7 +95,10 @@ STEP_KEYS = ("dem", "manning", "bci", "bdy", "par", "run",
 #: desktop landing page's second category): Project → Area → options →
 #: Downloads, no simulation.
 TOOL_MODELS = ("dem-tool", "lulc-tool", "flowline-tool", "flow-tool")
-MODELS = ("lisflood-fp", "triton") + TOOL_MODELS
+#: A2F = ARC-Curve2Flood (its step keys start with 'a', never 't' — see
+#: TRITON_STEP_KEYS below)
+A2F_MODEL = "arc-curve2flood"
+MODELS = ("lisflood-fp", "triton", A2F_MODEL) + TOOL_MODELS
 DEFAULT_MODEL = "lisflood-fp"
 #: tool slug → its single job step
 TOOL_STEP_FOR_MODEL = {

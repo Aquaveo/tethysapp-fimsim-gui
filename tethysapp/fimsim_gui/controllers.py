@@ -630,7 +630,7 @@ def api_step_submit(request, session, project_id, step_key):
                             'reason': 'a supplied input file does not belong to this area'})
             continue
         guard_reason = None
-        if step_key in ('dem', 'tdem', 'dem_tool', 'lulc_tool', 'flowline_tool'):
+        if step_key in ('dem', 'tdem', 'adem', 'dem_tool', 'lulc_tool', 'flowline_tool'):
             guard_reason = guards.check_dem_submit(
                 aoi, jt.merged(merged_config),
                 _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS))
