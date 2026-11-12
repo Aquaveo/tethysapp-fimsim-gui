@@ -88,6 +88,11 @@ def write_dem_preview(ctx, outputs, log_fn=lambda *_: None):
         bounds = _wgs84_bounds(src)
         corners = _wgs84_corners(src)
         res = float(abs(src.res[0]))
+        if src.crs is not None and src.crs.is_geographic:
+            # A2F DEMs are EPSG:4326: report the cell size in metres, not degrees
+            import math
+            mid_lat = (bounds["south"] + bounds["north"]) / 2
+            res *= 111320.0 * math.cos(math.radians(mid_lat))
         size = (src.width, src.height)
         crs = str(src.crs)
 

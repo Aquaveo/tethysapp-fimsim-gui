@@ -102,3 +102,33 @@ def test_a2f_flowline_collect_ships_the_shapefile_and_a_preview(tmp_path):
     assert "preview_features.geojson" in names
     assert "nencarta.json" not in names
     assert outputs == str(tmp_path / "work" / "outputs")
+
+
+def test_a2f_dem_tile_cache_is_inside_the_aoi_folder():
+    # run_arc_dem_all makes the AOI folder the project dir, so fimcore keeps
+    # the 3DEP tiles there — the shared-cache hooks must stage them there too
+    ctx = {"aoi_features": [{"folder_path": "/scratch/job/T2_04", "folder_name": "T2_04"}]}
+    assert str(REGISTRY["adem"]._tiles_dir(ctx)) == "/scratch/job/T2_04/DEM_raw_T2_04"
+
+
+def test_a2f_dem_preview_reports_the_cell_size_in_metres(tmp_path):
+    import json
+
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    from tethysapp.fimsim_gui.job_types.previews import write_dem_preview
+
+    deg = 1 / 10800                                    # 1/3 arc-second
+    with rasterio.open(tmp_path / "DEM_T2_04.tif", "w", driver="GTiff", width=20,
+                       height=20, count=1, dtype="float32", crs="EPSG:4326",
+                       transform=from_origin(-96.8, 43.6, deg, deg)) as dst:
+        dst.write(np.linspace(400, 450, 400).reshape(20, 20).astype("float32"), 1)
+    out = tmp_path / "outputs"
+    out.mkdir()
+
+    write_dem_preview({"aoi_features": [{"folder_path": str(tmp_path)}]}, out)
+
+    res_m = json.loads((out / "preview_dem.json").read_text())["stats"]["res_m"]
+    assert 7 < res_m < 8          # 10.3 m of longitude × cos(43.6°)

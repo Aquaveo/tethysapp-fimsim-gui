@@ -34,7 +34,16 @@ class A2FDEMJobType(DEMStepJobType):
 
     step_key = "adem"
     requires = ()
-    clean_patterns = ("DEM_*.tif", "dem*.ascii", "dem*.prj")
+    # dem_clip_to_* is fimcore's clip of an uploaded / picked DEM
+    clean_patterns = ("DEM_*.tif", "dem*.ascii", "dem*.prj", "dem_clip_to_*.tif")
+
+    @staticmethod
+    def _tiles_dir(ctx) -> Path:
+        # run_arc_dem_all sets project_dir = the AOI folder and aoi_name =
+        # its folder name, so fimcore.dem keeps the full 3DEP tiles INSIDE the
+        # AOI folder (the shared-cache hooks must stage them right there)
+        feat = ctx["aoi_features"][0]
+        return Path(feat["folder_path"]) / f"DEM_raw_{feat['folder_name']}"
 
     def defaults(self) -> dict:
         return {"dem_res_m": 10, "dem_input": "download"}

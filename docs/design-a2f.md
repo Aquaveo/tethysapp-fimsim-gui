@@ -105,10 +105,10 @@ one clear message. The portal server will need the same install.
 
 | Ticket | Hours | What |
 |--------|------:|------|
-| BE A2F-1 | 10 | Model + step keys + `adem` / `aflow` job types; worker env check |
+| BE A2F-1 | 10 | Model + step keys + `adem` / `aflow` job types |
 | BE A2F-2 | 8 | `flowline` prepared kind (shapefile side files, COMID check, picker hint); fimcore: keep a user flowline with NWM |
 | BE A2F-3 | 10 | `astream` job type; NWM key as server secret → worker env; GEOGLOWS-only when no key |
-| BE A2F-4 | 12 | `arun` job type: presets + fallback; key scrubbing; collect + overlay |
+| BE A2F-4 | 12 | `arun` job type: presets + fallback; key scrubbing; collect + overlay; worker env check (NenCarta CLI) |
 | BE A2F-5 | 6 | Test Case 3 acceptance on the portal; tests |
 | FE A2F-1 | 8 | A2F model in Project creation; AOI step allows any polygon for A2F; steps 3–6 fields |
 | FE A2F-2 | 8 | DEM + Flowline pickers, Streamflow and Run fields, fallback notice on Results |
