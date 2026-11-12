@@ -298,6 +298,19 @@ def _load_step_run(session, steprun_id, attempts=STEP_RUN_FETCH_ATTEMPTS,
     return None
 
 
+def derived_config(job_type, submitted: dict, cfg: dict):
+    """The run config to save back after prestage_inputs, or None.
+
+    Only the job type's declared derived_config_keys are copied from the
+    staged cfg (never a staged worker path such as file_path). Returns a new
+    dict, so assigning it to the run's JSON column registers the change.
+    """
+    derived = {k: cfg[k] for k in job_type.derived_config_keys if k in cfg}
+    if not derived:
+        return None
+    return {**submitted, **derived}
+
+
 def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
                  timeout_s: int = DEFAULT_TIMEOUT_S) -> dict:
     """Executed on the Dask worker. Owns the StepRun lifecycle end to end."""
@@ -352,11 +365,9 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         cfg = run.config or {}
         submitted = dict(cfg)
         job_type.prestage_inputs(storage, ctx, cfg, adapter)
-        derived = {k: cfg[k] for k in job_type.derived_config_keys if k in cfg}
-        if derived:
-            # only the declared keys (never a staged worker path); a new dict,
-            # so the JSON column registers the change
-            run.config = {**submitted, **derived}
+        updated = derived_config(job_type, submitted, cfg)
+        if updated is not None:
+            run.config = updated
             session.commit()
         job_type.execute(ctx_path, ctx, cfg, adapter)
 
