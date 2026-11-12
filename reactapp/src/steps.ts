@@ -22,6 +22,10 @@ export type StepId =
   | 'lulc_tool'
   | 'flowline_tool'
   | 'flow_tool'
+  | 'adem'
+  | 'aflow'
+  | 'astream'
+  | 'arun'
   | 'results';
 
 export interface StepDef {
@@ -37,7 +41,7 @@ export interface StepDef {
 }
 
 export type ModelId =
-  | 'lisflood-fp' | 'triton'
+  | 'lisflood-fp' | 'triton' | 'arc-curve2flood'
   | 'dem-tool' | 'lulc-tool' | 'flowline-tool' | 'flow-tool';
 
 /** The desktop landing page's two categories (FIMSIM-FE60). */
@@ -51,6 +55,8 @@ export interface ModelDef {
   category: CategoryId;
   /** one-line note under the name on the Project step card */
   note: string;
+  /** the study area may be any polygon (A2F) — no rectangle rule */
+  anyAoiShape?: boolean;
 }
 
 const PROJECT_STEP: StepDef = {
@@ -165,6 +171,41 @@ const TRITON_STEPS: StepDef[] = [
   },
 ];
 
+// ── A2F = ARC-Curve2Flood (docs/design-a2f.md): the desktop's six steps —
+// Project, AOI, DEM, Flowline, Streamflow, Run — plus Results. NenCarta runs
+// ARC + Curve2Flood on the portal; any AOI shape works.
+const A2F_STEPS: StepDef[] = [
+  PROJECT_STEP,
+  AOI_STEP,
+  {
+    id: 'adem',
+    label: 'DEM',
+    title: 'DEM (elevation)',
+    blurb: 'Download USGS 3DEP elevation for each area — or use your own GeoTIFF or a DEM from the DEM tool. A2F maps on a latitude/longitude grid.',
+    produces: 'DEM_<area>.tif',
+  },
+  {
+    id: 'aflow',
+    label: 'Flowline',
+    title: 'Flowline (stream network)',
+    blurb: 'The streams A2F maps along: NHDPlus (NWM stream IDs), GEOGLOWS, or the network from the Flowline tool.',
+    produces: 'flowline.shp',
+  },
+  {
+    id: 'astream',
+    label: 'Streamflow',
+    title: 'Streamflow',
+    blurb: 'The river flows to map, at one date and hour — from the National Water Model or GEOGLOWS.',
+  },
+  {
+    id: 'arun',
+    label: 'Run',
+    title: 'Run A2F',
+    blurb: 'NenCarta builds the ARC rating curves and maps the flood with Curve2Flood — on the portal, one job per study area.',
+  },
+  RESULTS_STEP,
+];
+
 // ── Preparing Input Data (desktop Track A, FIMSIM-FE60): each tool is one
 // job step between Area and Downloads; the step id IS the backend step key.
 const DOWNLOADS_STEP: StepDef = {
@@ -213,6 +254,11 @@ export const MODELS: Record<ModelId, ModelDef> = {
   triton: {
     label: 'TRITON', category: 'flood-mapping', steps: TRITON_STEPS, runsOnPortal: false,
     note: 'Deck only — builds the input files to run on your own GPU/HPC.',
+  },
+  'arc-curve2flood': {
+    label: 'ARC-Curve2Flood', category: 'flood-mapping', steps: A2F_STEPS, runsOnPortal: true,
+    note: 'Runs on the portal — rating-curve flood maps from NWM or GEOGLOWS flows; any area shape.',
+    anyAoiShape: true,
   },
   'dem-tool': {
     label: 'DEM', category: 'input-data', steps: DEM_TOOL_STEPS, runsOnPortal: true,
@@ -311,6 +357,19 @@ export function resolveActiveStep(
   return hasProject ? 'aoi' : 'project';
 }
 
+/** The steps that run a model and make the flood map: LISFLOOD-FP's `run`
+ *  and A2F's `arun` (same Run behaviors: footer button, ⚠ when skipped,
+ *  Results overlay, "Results" files). */
+const RUN_STEP_IDS: readonly string[] = ['run', 'arun'];
+export function isRunStep(id: string): boolean {
+  return RUN_STEP_IDS.includes(id);
+}
+
+/** A model's Run step, or null (TRITON, the tools). */
+export function runStepOf(steps: StepDef[]): StepId | null {
+  return steps.find((s) => isRunStep(s.id))?.id ?? null;
+}
+
 /** Back-compat export — the LISFLOOD wizard (existing imports/tests). */
 export const STEPS: StepDef[] = LISFLOOD_STEPS;
 
@@ -324,11 +383,11 @@ export function needsRunConfirm(
   steps: StepDef[], from: StepId, to: StepId,
   aois: { steps?: Record<string, { status: string }> }[],
 ): boolean {
-  if (from !== 'run') return false;
+  if (!isRunStep(from)) return false;
   const fromIdx = steps.findIndex((s) => s.id === from);
   const toIdx = steps.findIndex((s) => s.id === to);
   if (fromIdx < 0 || toIdx <= fromIdx) return false;
-  return !aois.some((a) => a.steps?.run?.status === 'succeeded');
+  return !aois.some((a) => a.steps?.[from]?.status === 'succeeded');
 }
 
 /**
@@ -369,9 +428,10 @@ export function runSkipped(
   steps: StepDef[], activeStep: StepId,
   aois: { steps?: Record<string, { status: string }> }[],
 ): boolean {
-  const runIdx = steps.findIndex((s) => s.id === 'run');
+  const runIdx = steps.findIndex((s) => isRunStep(s.id));
   if (runIdx < 0) return false;
   const cur = steps.findIndex((s) => s.id === activeStep);
   if (cur <= runIdx) return false;
-  return !aois.some((a) => a.steps?.run?.status === 'succeeded');
+  const runId = steps[runIdx].id;
+  return !aois.some((a) => a.steps?.[runId]?.status === 'succeeded');
 }

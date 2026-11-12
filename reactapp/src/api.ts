@@ -230,7 +230,7 @@ export const uploadDem = async (aoiId: number, files: File[]) => {
 
 // ── prepared inputs (round 2: BE20 list, BE21 pick) ─────────────────────────
 
-export type PreparedKind = 'dem' | 'manning' | 'lulc' | 'flow';
+export type PreparedKind = 'dem' | 'manning' | 'lulc' | 'flow' | 'flowline';
 
 /** One file of one of the user's succeeded tool runs (BE20). */
 export interface PreparedRow {
@@ -261,6 +261,9 @@ export const listPrepared = (aoiId: number, kind: PreparedKind) =>
 export const pickPrepared = (
   aoiId: number, pick: { steprun_id: number; file: string; kind: PreparedKind },
 ) => request<PickedInput>(`/aois/${aoiId}/prepared/`, json(pick));
+
+/** A2F portal capabilities (never the key itself). */
+export const getA2fConfig = () => request<{ nwm_api_key: boolean }>('/a2f/config/');
 
 export const getProjectStatus = (projectId: number) =>
   request<{ aois: ServerAoi[] }>(`/projects/${projectId}/status/`);

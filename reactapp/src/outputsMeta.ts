@@ -1,6 +1,8 @@
 // reactapp/src/outputsMeta.ts
 // Human descriptions for output files (Results table). Pattern-matched by
 // filename; unknown files get a generic row rather than being hidden.
+import { isRunStep } from './steps';
+
 export interface OutputMeta {
   label: string;
   description: string;
@@ -165,7 +167,7 @@ export function splitResultFiles<T extends { step: string }>(
 ): { inputs: T[]; results: T[] } {
   const inputs: T[] = [];
   const results: T[] = [];
-  for (const f of files) (f.step === 'run' ? results : inputs).push(f);
+  for (const f of files) (isRunStep(f.step) ? results : inputs).push(f);
   return { inputs, results };
 }
 

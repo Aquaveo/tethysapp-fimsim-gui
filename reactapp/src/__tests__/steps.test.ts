@@ -81,9 +81,9 @@ describe('headerModel', () => {
 
 // FIMSIM-FE60 — the desktop landing page's two categories, as project modes.
 describe('MODELS categories', () => {
-  it('splits the six modes into the two desktop categories, input data first', () => {
+  it('splits the seven modes into the two desktop categories, input data first', () => {
     expect(CATEGORIES.map((c) => c.id)).toEqual(['input-data', 'flood-mapping']);
-    expect(modelsInCategory('flood-mapping')).toEqual(['lisflood-fp', 'triton']);
+    expect(modelsInCategory('flood-mapping')).toEqual(['lisflood-fp', 'triton', 'arc-curve2flood']);
     expect(modelsInCategory('input-data'))
       .toEqual(['dem-tool', 'lulc-tool', 'flowline-tool', 'flow-tool']);
     expect(CATEGORIES[0].description)

@@ -15,7 +15,10 @@ export function preparedKindFor(
   switch (stepKey) {
     case 'dem':
     case 'tdem':
+    case 'adem':
       return get('dem_input') === 'prepared' ? 'dem' : null;
+    case 'aflow':   // A2F-2: the Flowline tool's "all flowlines" network
+      return get('source') === 'prepared' ? 'flowline' : null;
     case 'manning':
     case 'tfric': {
       const input = get('manning_input');
@@ -33,6 +36,7 @@ export function preparedKindFor(
 /** What the user picks, in the "Pick a prepared … for:" submit message. */
 export const PICK_NOUN: Record<PreparedKind, string> = {
   dem: 'DEM', manning: "Manning's n grid", lulc: 'land cover', flow: 'streamflow series',
+  flowline: 'stream network',
 };
 
 export type RowState = 'ready' | 'uncovered' | 'unusable';

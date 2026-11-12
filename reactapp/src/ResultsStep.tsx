@@ -17,7 +17,7 @@ import {
   summarizeSelection, zipFilename, zipSelection,
 } from './outputsMeta';
 import { previewKind } from './stepFields';
-import type { ResultsKind } from './steps';
+import { isRunStep, type ResultsKind } from './steps';
 import './StepPanel.css';
 import './ResultsStep.css';
 
@@ -48,7 +48,11 @@ interface AoiResult {
   runStatus: string | null;
   files: FileRow[];
   overlay?: MapOverlay;
-  stats?: { max_depth_m: number; wet_area_km2: number; wet_fraction: number };
+  stats?: {
+    max_depth_m: number; wet_area_km2: number; wet_fraction: number;
+    /** A2F: which settings mapped it ("the FIMsim classic settings" after a fallback) */
+    settings_used?: string | null;
+  };
   bdyRun?: ServerStepRun;
 }
 
@@ -236,10 +240,10 @@ export default function ResultsStep({
           const [step] = entries[k];
           const run = runs[k];
           if (!run || run.status !== 'succeeded') {
-            if (step === 'run') res.runStatus = run?.status ?? null;
+            if (isRunStep(step)) res.runStatus = run?.status ?? null;
             continue;
           }
-          if (step === 'run') res.runStatus = 'succeeded';
+          if (isRunStep(step)) res.runStatus = 'succeeded';
           if (previewKind(step) === 'hydrograph') res.bdyRun = run;  // flow step (both models) + the Streamflow tool
           for (const m of (Array.isArray(run.manifest) ? run.manifest : [])) {
             // manifests are cumulative (each step re-ships the whole deck) —
@@ -248,7 +252,7 @@ export default function ResultsStep({
               res.files.push({ step, runId: run.id, name: m.name, bytes: m.bytes });
             }
           }
-          if (step === 'run') {
+          if (isRunStep(step)) {
             const bounds = (Array.isArray(run.manifest) ? run.manifest : [])
               .find((m) => m.name === 'overlay_bounds.json');
             const png = (Array.isArray(run.manifest) ? run.manifest : [])
@@ -365,6 +369,11 @@ export default function ResultsStep({
                         max depth {r.stats.max_depth_m.toFixed(2)} m ·{' '}
                         {r.stats.wet_area_km2.toFixed(1)} km² wet ·{' '}
                         {(100 * r.stats.wet_fraction).toFixed(0)}% of area
+                      </span>
+                    )}
+                    {r.stats?.settings_used && (
+                      <span className="rs-stats">
+                        {' · '}mapped with {r.stats.settings_used}
                       </span>
                     )}
                   </div>
