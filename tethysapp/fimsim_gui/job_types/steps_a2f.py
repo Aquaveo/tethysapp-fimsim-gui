@@ -6,11 +6,13 @@ engine is fimcore.arc_orchestrate (NenCarta under the hood); every
 orchestrator keeps its state in the AOI's own workflow_context.json, which the
 job wrapper persists with the workspace, so the steps chain across Dask jobs.
 """
+import json
+import re
 import shutil
 from pathlib import Path
 
 from tethysapp.fimsim_gui.job_types.registry import (
-    UniformStepJobType, _check_choice,
+    UniformStepJobType, _check_choice, _check_number,
 )
 from tethysapp.fimsim_gui.job_types.steps import DEMStepJobType, stage_one_pick
 
@@ -20,6 +22,49 @@ A2F_DEM_RES_M = (10, 30)
 #: where the flowline comes from: an NHDPlus download, the GEOGLOWS v2
 #: streams, or (A2F-2) the network picked from the Flowline tool
 A2F_FLOWLINE_SOURCES = ("nhd", "geoglows", "prepared")
+
+
+#: A2F-3: where the river flows come from. NWM uses the CIROH key (flows +
+#: the return periods NenCarta sizes channels with); GEOGLOWS needs none.
+A2F_STREAMFLOW_SOURCES = ("nwm", "geoglows")
+#: which NWM record to read at that time; "auto" lets fimcore choose by date
+#: (retrospective reanalysis ≤ 2023-02, analysis & assimilation, forecast)
+A2F_NWM_RECORDS = ("auto", "retrospective", "analysis_assim", "forecast")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def scrub_nwm_key(ctx, ctx_path=None) -> int:
+    """Remove the NWM key fimcore saves into the context files — the AOI's
+    workflow_context.json (nencarta_streamflow) and the project's
+    (arc_flow_per_aoi) — before the workspace is persisted. The Run step reads
+    it back from the worker environment instead. Returns copies removed."""
+    removed = 0
+    paths = [Path(f["folder_path"]) / "workflow_context.json"
+             for f in ctx.get("aoi_features") or []]
+    if ctx_path:
+        paths.append(Path(ctx_path))
+    for path in paths:
+        if not path.exists():
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        removed += _drop_key(data)
+        path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+    removed += _drop_key(ctx)
+    return removed
+
+
+def _drop_key(obj) -> int:
+    """Delete every 'nwm_api_key' entry anywhere inside *obj* (dicts/lists)."""
+    n = 0
+    if isinstance(obj, dict):
+        if obj.pop("nwm_api_key", None) is not None:
+            n += 1
+        for v in obj.values():
+            n += _drop_key(v)
+    elif isinstance(obj, list):
+        for v in obj:
+            n += _drop_key(v)
+    return n
 
 
 def _arc_files(ctx) -> Path:
@@ -137,3 +182,63 @@ class A2FFlowlineJobType(UniformStepJobType):
             return
         write_flowline_preview(None, gpd.read_file(shp), [],
                                Path(outputs) / "preview_features.geojson")
+
+
+class A2FStreamflowJobType(UniformStepJobType):
+    """Streamflow for A2F: the river flows to map, at one date + hour.
+    fimcore checks the settings (and the NWM key) and, for NWM, fetches the
+    flow at that time for every reach; NenCarta reads it in the Run step."""
+
+    step_key = "astream"
+    requires = ("aflow",)
+    orchestrator = "run_arc_flowfile_for_all_aois"
+    orchestrator_module = "fimcore.arc_orchestrate"
+    clean_patterns = ("flow_series",)
+    #: the worker gets FIMSIM_NWM_API_KEY (jobs.job_env_for)
+    needs_nwm_key = True
+
+    def defaults(self) -> dict:
+        # Test Case 3 (Big Sioux): NWM, 2019-09-19 17:00 UTC
+        return {"source": "nwm", "nwm_record": "auto",
+                "date": None, "hour_utc": 12}
+
+    def check_values(self, config: dict) -> list:
+        problems = []
+        _check_choice(config, "source", A2F_STREAMFLOW_SOURCES, problems)
+        _check_choice(config, "nwm_record", A2F_NWM_RECORDS, problems)
+        _check_number(config, "hour_utc", 0, 23, problems)
+        if "hour_utc" in config and isinstance(config["hour_utc"], float):
+            problems.append("'hour_utc' must be a whole hour (0–23)")
+        date = config.get("date")
+        if not (isinstance(date, str) and _ISO_DATE.match(date)):
+            problems.append("'date' must be the day to map, as YYYY-MM-DD")
+        return problems
+
+    def transform_config(self, cfg: dict, ctx) -> dict:
+        """UI fields → fimcore's NenCarta streamflow settings (a snapshot)."""
+        out = {
+            "streamflow_source": "GEOGLOWS" if cfg["source"] == "geoglows"
+            else "NWM_short_range",
+            "forensic_forecast_date": cfg["date"].replace("-", ""),
+            "forensic_forecast_hour": int(cfg["hour_utc"]),
+            "period_mode": "snapshot",
+        }
+        if cfg["source"] == "nwm":
+            out["record"] = cfg["nwm_record"]
+        return out
+
+    def execute(self, ctx_path, ctx, config, log_fn):
+        try:
+            super().execute(ctx_path, ctx, config, log_fn)
+        finally:
+            # never persist the key with the workspace, even after a failure
+            scrub_nwm_key(ctx, ctx_path)
+
+    def collect(self, ctx, workdir) -> str:
+        outputs = Path(workdir) / "outputs"
+        outputs.mkdir(exist_ok=True)
+        series = _arc_files(ctx) / "flow_series"
+        if series.is_dir():
+            for p in sorted(series.glob("*.csv")):
+                shutil.copy2(p, outputs / p.name)
+        return str(outputs)

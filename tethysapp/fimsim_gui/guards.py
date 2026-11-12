@@ -242,3 +242,21 @@ def evict_shared_cache(storage, max_age_days: int = 90,
             freed += size
             total -= size
     return freed
+
+
+def check_a2f_streamflow_submit(aoi, config: dict, nwm_key_set: bool):
+    """A2F Streamflow (reason or None): NWM needs the portal's CIROH key, and
+    a network picked from the Flowline tool is NHD — NWM flows only (fimcore
+    would otherwise silently replace it with a GEOGLOWS network)."""
+    source = config.get("source")
+    if source == "nwm" and not nwm_key_set:
+        return ("NWM streamflow needs the CIROH NWM API key, and this portal "
+                "doesn't have one yet — choose GEOGLOWS, or ask the "
+                "administrator to add the key.")
+    if source == "geoglows":
+        flowline = aoi.current_step_run("aflow")
+        if flowline is not None and (flowline.config or {}).get("source") == "prepared":
+            return (f"'{aoi.name}' uses a stream network from the Flowline tool, "
+                    "which has NHD stream IDs and works with NWM flows only — "
+                    "choose NWM, or re-run the Flowline step with GEOGLOWS.")
+    return None

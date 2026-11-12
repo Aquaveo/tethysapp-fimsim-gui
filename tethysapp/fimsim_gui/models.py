@@ -87,7 +87,7 @@ PER_AOI_KEY_HOMES = {
 STEP_KEYS = ("dem", "manning", "bci", "bdy", "par", "run",
              "tdem", "tfric", "tbc", "thyg", "tcfg",
              "dem_tool", "lulc_tool", "flowline_tool", "flow_tool",
-             "adem", "aflow")
+             "adem", "aflow", "astream")
 
 #: FIMSIM-FE48 — the model is a property of the PROJECT (chosen at creation,
 #: shown throughout), not a URL mode. Mirrors reactapp/src/steps.ts MODELS.

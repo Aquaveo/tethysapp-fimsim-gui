@@ -519,6 +519,14 @@ def api_steps(request):
     })
 
 
+@controller(url='api/a2f/config', name='api_a2f_config')
+def api_a2f_config(request):
+    """A2F portal capabilities for the wizard — never the key itself:
+    {"nwm_api_key": true} when NWM streamflow is available."""
+    from tethysapp.fimsim_gui.jobs import nwm_api_key
+    return JsonResponse({'nwm_api_key': bool(nwm_api_key())})
+
+
 @controller(url='api/projects/{project_id}/steps/{step_key}/submit',
             name='api_step_submit')
 @with_session
@@ -638,6 +646,10 @@ def api_step_submit(request, session, project_id, step_key):
             guard_reason = guards.check_dem_submit(
                 aoi, jt.merged(merged_config),
                 _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS))
+        elif step_key == 'astream':
+            from tethysapp.fimsim_gui.jobs import nwm_api_key
+            guard_reason = guards.check_a2f_streamflow_submit(
+                aoi, jt.merged(merged_config), bool(nwm_api_key()))
         elif step_key == 'run':
             timeout = float(jt.merged(merged_config).get('solver_timeout_s') or 3600)
             guard_reason = guards.check_run_submit(aoi, merged_config, timeout)

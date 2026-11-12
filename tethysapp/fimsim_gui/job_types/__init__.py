@@ -8,7 +8,7 @@ from tethysapp.fimsim_gui.job_types.steps_triton import (
     TritonFrictionJobType, TritonHydroJobType,
 )
 from tethysapp.fimsim_gui.job_types.steps_a2f import (
-    A2FDEMJobType, A2FFlowlineJobType,
+    A2FDEMJobType, A2FFlowlineJobType, A2FStreamflowJobType,
 )
 from tethysapp.fimsim_gui.job_types.steps_tools import (
     DemToolJobType, FlowToolJobType, FlowlineToolJobType, LulcToolJobType,
@@ -26,6 +26,6 @@ REGISTRY = {
         # Preparing Input Data tools (desktop Track A — FIMSIM-BE25)
         DemToolJobType(), LulcToolJobType(), FlowlineToolJobType(), FlowToolJobType(),
         # A2F = ARC-Curve2Flood (NenCarta; runs on the portal — docs/design-a2f.md)
-        A2FDEMJobType(), A2FFlowlineJobType(),
+        A2FDEMJobType(), A2FFlowlineJobType(), A2FStreamflowJobType(),
     )
 }
