@@ -11,7 +11,8 @@ from pathlib import Path
 
 # what each modeling input is picked from
 KIND_STEP = {"dem": "dem_tool", "manning": "lulc_tool",
-             "lulc": "lulc_tool", "flow": "flow_tool"}
+             "lulc": "lulc_tool", "flow": "flow_tool",
+             "flowline": "flowline_tool"}   # A2F-2: the A2F Flowline step
 
 # the tool output names (fimcore run_dem_mode / run_lulc_mode / run_streamflow_mode)
 _PATTERNS = {
@@ -19,12 +20,18 @@ _PATTERNS = {
     "manning": re.compile(r"^ManningN_.+\.(tif|asc|gpkg)$"),
     "lulc": re.compile(r"^LULC_.+\.(tif|asc|gpkg)$"),
     "flow": re.compile(r"^(nwm_retro|nwm_forecast|usgs_discharge)_.+\.csv$"),
+    "flowline": re.compile(r"^(all_flowlines|main_river)_.+\.(shp|gpkg|csv|tif)$"),
 }
+#: a shapefile is several files; these travel with the .shp (.cpg optional)
+SHAPEFILE_PARTS = (".shx", ".dbf", ".prj")
+SHAPEFILE_OPTIONAL = (".cpg",)
+#: the reach-id columns fimcore's A2F flowline accepts (arc_flowline._ID_CANDIDATES)
+FLOWLINE_ID_COLUMNS = ("comid", "linkno", "featureid", "feature_id", "nhdplusid")
 _FORMAT_NAMES = {"asc": "an ESRI ASCII grid", "gpkg": "a GeoPackage"}
 _TOOL_NAMES = {"dem": "DEM", "manning": "LULC & Manning", "lulc": "LULC & Manning",
-               "flow": "Streamflow Data"}
+               "flow": "Streamflow Data", "flowline": "Flowline"}
 _KIND_NAMES = {"dem": "DEM", "manning": "Manning's n", "lulc": "land-cover",
-               "flow": "streamflow"}
+               "flow": "streamflow", "flowline": "flowline"}
 GONE = "that prepared run no longer exists — refresh the list"
 
 
@@ -51,9 +58,21 @@ def classify(name: str, kind: str):
         return False, ("HAND is height above the nearest stream, not ground "
                        "elevation — use a USGS 3DEP DEM for Terrain")
     ext = name.rsplit(".", 1)[1]
+    if kind == "flowline":
+        return _classify_flowline(m.group(1), ext)
     if ext in _FORMAT_NAMES:
         return False, (f"saved as {_FORMAT_NAMES[ext]} — re-run the "
                        f"{_TOOL_NAMES[kind]} tool with GeoTIFF")
+    return True, None
+
+
+def _classify_flowline(which: str, ext: str):
+    if which == "main_river":
+        return False, ("the main river has no stream IDs — re-run the Flowline "
+                       "tool with \"Save all flowlines\" ticked")
+    if ext not in ("shp", "gpkg"):
+        return False, (f"saved as {ext.upper()} — re-run the Flowline tool with "
+                       f"all flowlines as a Shapefile or GeoPackage")
     return True, None
 
 
@@ -80,6 +99,8 @@ def run_detail(step_key: str, config: dict) -> str:
         else:
             source = f"Sentinel-2 {cfg['sentinel2_year']}"
         return f"{source} · {cfg['cell_size_m']:g} m"
+    if step_key == "flowline_tool":
+        return "NHD flowlines"
     source = {"usgs": "USGS gage", "nwm_retro": "NWM retrospective",
               "nwm_forecast": "NWM forecast"}.get(cfg["source"], cfg["source"])
     start, end = cfg.get("start_dt"), cfg.get("end_dt")
@@ -88,9 +109,10 @@ def run_detail(step_key: str, config: dict) -> str:
     return source
 
 
-def prepared_rows(runs, kind: str, aoi_geom, bounds_fn) -> list:
+def prepared_rows(runs, kind: str, aoi_geom, bounds_fn, aoi_bounds_fn=None) -> list:
     """One row per output file of *kind* across *runs* (succeeded tool runs,
-    newest first). *bounds_fn(key)* returns a raster's EPSG:4326 bounds."""
+    newest first). *bounds_fn(key)* returns a raster's EPSG:4326 bounds;
+    *aoi_bounds_fn(run)* the tool run's own area's (flowlines only)."""
     if kind not in KIND_STEP:
         raise ValueError(f"unknown kind {kind!r}; one of {', '.join(KIND_STEP)}")
     rows = []
@@ -104,6 +126,10 @@ def prepared_rows(runs, kind: str, aoi_geom, bounds_fn) -> list:
             cover = None
             if usable and kind == "flow":
                 cover = True               # a flow series has no footprint
+            elif usable and kind == "flowline":
+                # the network is clipped to the tool's own area, so the area
+                # (not the lines' bounding box) is what must contain this AOI
+                cover = covers(aoi_bounds_fn(run), aoi_geom)
             elif usable:
                 try:
                     cover = covers(bounds_fn(m["key"]), aoi_geom)
@@ -147,6 +173,33 @@ def check_pick(run, username: str, file: str, kind: str) -> str:
     return entry["key"]
 
 
+def shapefile_part_keys(key: str, parts=SHAPEFILE_PARTS + SHAPEFILE_OPTIONAL) -> list:
+    """The storage keys of a .shp key's side files (same prefix and stem)."""
+    stem = key[:-len(".shp")]
+    return [stem + ext for ext in parts]
+
+
+def _flowline_problem(path, aoi_geom) -> str:
+    """Reason a picked flowline can't feed A2F, or None: a readable vector of
+    lines with a reach-id column that reaches into this area."""
+    import geopandas as gpd
+
+    try:
+        gdf = gpd.read_file(path)
+    except Exception:
+        return "the file could not be read as a vector"
+    if gdf.empty or not gdf.geom_type.isin(["LineString", "MultiLineString"]).any():
+        return "it has no stream lines"
+    if not {c.lower() for c in gdf.columns} & set(FLOWLINE_ID_COLUMNS):
+        return ("it has no stream-ID column (COMID, LINKNO or feature_id), "
+                "which A2F needs to look up flows")
+    if gdf.crs is None:
+        return "it has no coordinate system (.prj)"
+    if not gdf.to_crs(4326).intersects(aoi_geom).any():
+        return "none of its streams reach this area"
+    return None
+
+
 def _csv_problem(path) -> str:
     import csv
     with open(path, newline="", encoding="utf-8-sig") as fh:
@@ -166,8 +219,20 @@ def copy_prepared(storage, src_key: str, dest_key: str, kind: str, aoi_geom) -> 
         if not storage.exists(src_key):
             raise PickError(404, GONE)
         storage.download_to_path(src_key, local)
+        parts = []          # (src, dest) of a shapefile's side files
+        if kind == "flowline" and name.endswith(".shp"):
+            for src_part, dest_part in zip(shapefile_part_keys(src_key),
+                                           shapefile_part_keys(dest_key)):
+                if storage.exists(src_part):
+                    storage.download_to_path(src_part, Path(tmp) / Path(dest_part).name)
+                    parts.append((src_part, dest_part))
+                elif not src_part.endswith(SHAPEFILE_OPTIONAL):
+                    raise PickError(400, f"'{name}': its {Path(src_part).suffix} "
+                                         f"file is missing — re-run the Flowline tool")
         if kind == "flow":
             reason = _csv_problem(local)
+        elif kind == "flowline":
+            reason = _flowline_problem(local, aoi_geom)
         else:
             from tethysapp.fimsim_gui.dem_upload import validate_geotiff
             reason = validate_geotiff(local)
@@ -178,7 +243,11 @@ def copy_prepared(storage, src_key: str, dest_key: str, kind: str, aoi_geom) -> 
             raise PickError(400, f"'{name}': {reason}")
         with open(local, "rb") as fh:
             storage.save(dest_key, fh)
-    return {"key": dest_key, "name": name, "bytes": storage.size(dest_key)}
+        for _src_part, dest_part in parts:
+            with open(Path(tmp) / Path(dest_part).name, "rb") as fh:
+                storage.save(dest_part, fh)
+    size = storage.size(dest_key) + sum(storage.size(d) for _s, d in parts)
+    return {"key": dest_key, "name": name, "bytes": size}
 
 
 def gdal_path(storage, key) -> str:

@@ -386,7 +386,7 @@ def api_aoi_prepared(request, session, aoi_id):
     """Prepared tool outputs for a modeling step (round 2 of Preparing Input
     Data, docs/design-input-prep-round2.md).
 
-    GET ?kind=dem|manning|lulc|flow (FIMSIM-BE20) → one row per output file
+    GET ?kind=dem|manning|lulc|flow|flowline (FIMSIM-BE20, A2F-2) → one row per output file
     of that kind from the user's succeeded, current tool runs (any project),
     newest first, each flagged `covers` (the raster contains this AOI) and
     `usable` (GeoTIFF / CSV, readable; HAND is never a terrain).
@@ -424,7 +424,8 @@ def _list_prepared(session, request, aoi):
             .limit(PREPARED_LIST_LIMIT).all())
     storage = get_storage()
     rows = prepared_rows(runs, kind, to_shape(aoi.geometry),
-                         lambda key: raster_bounds_4326(storage, key))
+                         lambda key: raster_bounds_4326(storage, key),
+                         lambda run: to_shape(run.aoi.geometry).bounds)
     return JsonResponse({'prepared': rows})
 
 

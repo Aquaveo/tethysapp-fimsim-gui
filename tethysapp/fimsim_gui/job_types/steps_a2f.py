@@ -12,14 +12,14 @@ from pathlib import Path
 from tethysapp.fimsim_gui.job_types.registry import (
     UniformStepJobType, _check_choice,
 )
-from tethysapp.fimsim_gui.job_types.steps import DEMStepJobType
+from tethysapp.fimsim_gui.job_types.steps import DEMStepJobType, stage_one_pick
 
 #: 3DEP 1/3 arc-second is ≈ 10 m; fimcore converts metres to degrees
 #: (NenCarta needs a geographic DEM)
 A2F_DEM_RES_M = (10, 30)
 #: where the flowline comes from: an NHDPlus download, the GEOGLOWS v2
-#: streams, or (FIMSIM A2F-2) a network picked from the Flowline tool
-A2F_FLOWLINE_SOURCES = ("nhd", "geoglows")
+#: streams, or (A2F-2) the network picked from the Flowline tool
+A2F_FLOWLINE_SOURCES = ("nhd", "geoglows", "prepared")
 
 
 def _arc_files(ctx) -> Path:
@@ -71,6 +71,11 @@ class A2FFlowlineJobType(UniformStepJobType):
     orchestrator = "run_arc_flowline_for_all_aois"
     orchestrator_module = "fimcore.arc_orchestrate"
     clean_patterns = ("flowline.*", "preview_features.geojson")
+    # A2F-2: a picked Flowline-tool network arrives as user_flowline_keys (its
+    # .shp or .gpkg key; a shapefile's side files sit next to it); the local
+    # path is SERVER-ONLY, set by prestage_inputs
+    extra_config_keys = ("user_flowline_keys",)
+    server_only_keys = ("user_path",)
 
     def defaults(self) -> dict:
         return {"source": "nhd"}
@@ -79,6 +84,26 @@ class A2FFlowlineJobType(UniformStepJobType):
         problems = []
         _check_choice(config, "source", A2F_FLOWLINE_SOURCES, problems)
         return problems
+
+    def prestage_inputs(self, storage, ctx, config, log_fn):
+        if self.merged(config)["source"] != "prepared":
+            return
+        from tethysapp.fimsim_gui.job_types.steps import stage_supplied
+        from tethysapp.fimsim_gui.prepared import shapefile_part_keys
+
+        path = stage_one_pick(storage, ctx, config, "flowline", "flowline", log_fn)
+        if path.endswith(".shp"):
+            [key] = config["user_flowline_keys"]
+            parts = [k for k in shapefile_part_keys(key) if storage.exists(k)]
+            stage_supplied(storage, ctx, parts, "flowline")
+        config["user_path"] = path
+
+    def transform_config(self, cfg: dict, ctx) -> dict:
+        # fimcore calls a supplied network source="user"
+        cfg = {k: v for k, v in cfg.items() if k != "user_flowline_keys"}
+        if cfg["source"] == "prepared":
+            cfg["source"] = "user"
+        return cfg
 
     def collect(self, ctx, workdir) -> str:
         outputs = Path(workdir) / "outputs"
