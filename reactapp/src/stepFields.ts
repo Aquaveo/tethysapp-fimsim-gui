@@ -181,6 +181,14 @@ const PREVIEW_STEPS: Record<PreviewKind, readonly string[]> = {
   boundary: ['bci', 'tbc', 'aflow', 'flowline_tool'],
   hydrograph: ['bdy', 'thyg', 'flow_tool'],
 };
+/** Which map the 'boundary' preview draws: LISFLOOD/TRITON boundary markers,
+ *  the Flowline tool's river + gages, or A2F's stream network. */
+export function boundaryVariant(stepKey: string): 'boundaries' | 'flowlines' | 'network' {
+  if (stepKey === 'flowline_tool') return 'flowlines';
+  if (stepKey === 'aflow') return 'network';
+  return 'boundaries';
+}
+
 export function previewKind(stepKey: string): PreviewKind | null {
   for (const kind of Object.keys(PREVIEW_STEPS) as PreviewKind[]) {
     if (PREVIEW_STEPS[kind].includes(stepKey)) return kind;

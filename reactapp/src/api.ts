@@ -45,7 +45,7 @@ export interface ServerProject {
   name: string;
   created: string;
   aoi_count: number;
-  /** FE48: which wizard this project belongs to ('lisflood-fp' | 'triton') */
+  /** FE48: which wizard this project belongs to (a steps.ts ModelId) */
   model?: string;
   aois?: ServerAoi[];
 }

@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { preparedKindFor } from '../prepared';
 import { summarizeStep } from '../StepOverview';
-import { expandEventDates, previewKind, STEP_FIELDS } from '../stepFields';
+import { boundaryVariant, expandEventDates, previewKind, STEP_FIELDS } from '../stepFields';
 import { splitResultFiles } from '../outputsMeta';
 import {
   MODELS, isRunStep, modelFromSlug, needsRunConfirm, resultsKind, runSkipped, runStepOf,
@@ -25,10 +25,33 @@ describe('A2F model', () => {
     expect(MODELS['lisflood-fp'].anyAoiShape).toBeUndefined();
   });
 
-  it('gives every job step a form (the backend keys)', () => {
-    for (const id of ['adem', 'aflow', 'astream', 'arun']) expect(STEP_FIELDS[id]).toBeDefined();
+  // The backend REJECTS unknown keys (job_types/steps_a2f.py defaults +
+  // extra_config_keys): every form field must be one it accepts.
+  const BACKEND_KEYS: Record<string, string[]> = {
+    adem: ['dem_res_m', 'dem_input', 'user_dem_keys'],
+    aflow: ['source', 'user_flowline_keys'],
+    astream: ['source', 'nwm_record', 'date', 'hour_utc'],
+    arun: ['preset'],
+  };
+  it.each(Object.entries(BACKEND_KEYS))('%s sends only keys the backend accepts', (id, keys) => {
+    const fields = STEP_FIELDS[id].map((f) => f.key);
+    expect(fields.length).toBeGreaterThan(0);
+    for (const k of fields) expect(keys).toContain(k);
+  });
+
+  it('numeric choices are numbers (the backend compares 10 / 0, not "10" / "0")', () => {
+    const opts = (id: string, key: string) =>
+      STEP_FIELDS[id].find((f) => f.key === key)!.options!.map((o) => o.value);
+    expect(opts('adem', 'dem_res_m')).toEqual([10, 30]);
+    expect(opts('astream', 'hour_utc')).toEqual(Array.from({ length: 24 }, (_, h) => h));
+  });
+
+  it('previews: terrain for DEM, the stream network (not boundaries) for Flowline', () => {
     expect(previewKind('adem')).toBe('dem');
     expect(previewKind('aflow')).toBe('boundary');
+    expect(boundaryVariant('aflow')).toBe('network');
+    expect(boundaryVariant('flowline_tool')).toBe('flowlines');
+    expect(boundaryVariant('bci')).toBe('boundaries');
   });
 });
 

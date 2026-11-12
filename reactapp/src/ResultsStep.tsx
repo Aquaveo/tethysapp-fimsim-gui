@@ -27,6 +27,7 @@ const STEP_LABELS: Record<string, string> = {
   tdem: 'Terrain', tfric: 'Friction', tbc: 'Boundaries',
   thyg: 'Hydrograph', tcfg: 'Config',
   dem_tool: 'DEM', lulc_tool: 'LULC & Manning', flowline_tool: 'Flowline', flow_tool: 'Streamflow',
+  adem: 'DEM', aflow: 'Flowline', astream: 'Streamflow', arun: 'Flood map',
 };
 
 type Tab = 'results' | 'inputs';

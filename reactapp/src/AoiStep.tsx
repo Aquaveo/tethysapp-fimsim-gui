@@ -220,7 +220,7 @@ export default function AoiStep({ projectId, aois, setAois, anyShape = false }: 
         Zipped shapefile (.zip), GeoPackage (.gpkg), or GeoJSON, validated on
         the server. <strong>One study area per project</strong> — a file with
         several polygons lets you pick one; for many areas at once, use the
-        desktop FIMsim.
+        desktop FIMsim.{' '}
         {anyShape ? (
           <>
             ARC-Curve2Flood accepts <strong>any shape</strong>: click the

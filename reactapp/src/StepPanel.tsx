@@ -22,7 +22,8 @@ import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
 import {
-  STEP_FIELDS, applyLinkedDefaults, coerceConfigNumbers, expandEventDates, fieldVisible,
+  STEP_FIELDS, applyLinkedDefaults, boundaryVariant, coerceConfigNumbers, expandEventDates,
+  fieldVisible,
   manningTableSource, previewKind, rangeProblems, type FieldSpec,
 } from './stepFields';
 import { prefillIds, shouldReseed, type FlowSource } from './flowTool';
@@ -481,7 +482,7 @@ export default function StepPanel({
                   {run.status === 'succeeded' && preview === 'boundary' && (
                     <BoundaryPreview
                       aoi={a} run={run} defaultOpen={aois.length === 1}
-                      variant={stepKey === 'flowline_tool' ? 'flowlines' : 'boundaries'}
+                      variant={boundaryVariant(stepKey)}
                     />
                   )}
                   {run.status === 'succeeded' && preview === 'dem' && (
