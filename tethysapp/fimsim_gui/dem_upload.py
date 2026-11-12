@@ -8,14 +8,26 @@ workspace and passes them to fimcore as ``user_dem_path`` with ``has_dem=True``.
 from pathlib import Path
 
 
-def rejected_dem_keys(keys, prefix: str) -> list:
-    """Uploaded-DEM keys that are NOT under *prefix* (the AOI's own user_dem
-    path). A client must not reference another AOI's or user's stored DEM."""
-    return [k for k in (keys or []) if not str(k).startswith(prefix)]
+# the supplied-input kinds a step config can name as user_<kind>_keys
+# (BE17 uploaded DEMs; FIMSIM-BE21 picked prepared files)
+INPUT_KINDS = ("dem", "manning", "lulc", "flow")
 
 
-def validate_dem_geotiff(path) -> str:
-    """Reason an uploaded DEM is unusable, or None if it's a valid GeoTIFF.
+def rejected_input_keys(config: dict, aoi_prefix: str) -> list:
+    """Supplied-input keys in *config* that are NOT under this AOI's own
+    ``<aoi_prefix>/user_<kind>/`` folder. A client must not reference another
+    AOI's or user's stored file."""
+    bad = []
+    for kind in INPUT_KINDS:
+        prefix = f"{aoi_prefix.rstrip('/')}/user_{kind}/"
+        bad += [k for k in (config.get(f"user_{kind}_keys") or [])
+                if not str(k).startswith(prefix)]
+    return bad
+
+
+def validate_geotiff(path) -> str:
+    """Reason a supplied raster (uploaded DEM, picked prepared file) is
+    unusable, or None if it's a valid GeoTIFF.
 
     Mirrors fimcore._validate_raster: readable raster, at least one band, a CRS
     defined (fimcore reprojects/merges to the AOI grid, but it needs a CRS to

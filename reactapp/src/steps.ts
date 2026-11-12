@@ -241,10 +241,18 @@ export const CATEGORIES: { id: CategoryId; title: string; description: string }[
   },
   {
     id: 'flood-mapping',
-    title: 'Flood Mapping',
+    title: 'Flood Modeling',   // FE66: "modeling", not "mapping" — it builds and runs the model (Sagy, 2026-10-22)
     description: 'Build a complete input package for a supported 2D flood simulation model.',
   },
 ];
+
+// FIMSIM-FE67 (Sagy, 2026-10-22: "do I have to prepare inputs first?"). One
+// sentence shared by the Project step and the docs; round 2 (reusing a tool's
+// output inside a modeling project) will soften it.
+export const INDEPENDENCE_NOTE =
+  'The two categories are independent: a Flood Modeling project prepares its own inputs '
+  + '(terrain, roughness, flowlines, flows), so you never need the Preparing Input Data tools '
+  + 'first. Use the tools when you want one of those inputs on its own, in a format you choose.';
 
 export function modelsInCategory(category: CategoryId): ModelId[] {
   return (Object.keys(MODELS) as ModelId[]).filter((m) => MODELS[m].category === category);
@@ -346,4 +354,24 @@ export function stepDone(
  */
 export function headerModel(projectId: number | null, model: ModelId): ModelId | null {
   return projectId ? model : null;
+}
+
+/**
+ * FIMSIM-FE70 — Nathan (2026-10-22): a bare number on the Run node hides that
+ * the model was skipped. Once the user is PAST Run with no succeeded run on
+ * any area, the node shows a warning with an informational tooltip. Never on
+ * a model without a Run step (TRITON, the tools).
+ */
+export const RUN_SKIPPED_TIP =
+  'The model was not run — Results has no flood map. Go to Run to start it.';
+
+export function runSkipped(
+  steps: StepDef[], activeStep: StepId,
+  aois: { steps?: Record<string, { status: string }> }[],
+): boolean {
+  const runIdx = steps.findIndex((s) => s.id === 'run');
+  if (runIdx < 0) return false;
+  const cur = steps.findIndex((s) => s.id === activeStep);
+  if (cur <= runIdx) return false;
+  return !aois.some((a) => a.steps?.run?.status === 'succeeded');
 }

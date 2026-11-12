@@ -142,6 +142,13 @@ class StorageService:
         except Exception:
             return None
 
+    def local_path(self, key: str):
+        """The object's filesystem path on the local backend; None on S3."""
+        try:
+            return self._backend.path(key)
+        except NotImplementedError:
+            return None
+
     def download_to_path(self, key: str, dest_path) -> None:
         dest_path = Path(dest_path)
         dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -194,6 +201,17 @@ class StorageService:
         if not self.supports_presign:
             return None
         return self._public_client.generate_presigned_url(
+            "get_object", Params={"Bucket": self._bucket, "Key": key},
+            ExpiresIn=expiry_seconds,
+        )
+
+    def internal_url(self, key: str, expiry_seconds: int = 300):
+        """A presigned GET the SERVER can reach (the server-side client, not
+        the browser-facing one) — for GDAL /vsicurl header reads. None on the
+        local backend."""
+        if self._client is None or self._bucket is None:
+            return None
+        return self._client.generate_presigned_url(
             "get_object", Params={"Bucket": self._bucket, "Key": key},
             ExpiresIn=expiry_seconds,
         )

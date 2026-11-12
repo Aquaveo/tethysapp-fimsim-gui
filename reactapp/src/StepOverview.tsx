@@ -15,6 +15,12 @@ export function summarizeStep(step: string, cfg: Record<string, unknown>): strin
       return `${s('dem_source') === 'hand' ? 'HAND' : '3DEP'} @ ${s('dem_res_m') || '30'} m`;
     case 'manning':
     case 'tfric':
+      // BE22: a file from the LULC & Manning tool
+      if (s('manning_input') === 'prepared_manning') return "Manning's n grid from the LULC & Manning tool";
+      if (s('manning_input') === 'prepared_lulc') {
+        return `${(s('lulc_download_source') || s('lulc_source') || 'esri').includes('nlcd') ? 'NLCD' : 'Esri'}`
+          + ' land cover from the LULC & Manning tool';
+      }
       return s('fric_mode') === 'fixed'
         ? `fixed n = ${s('fpfric_val') || '?'}`
         : `${(s('lulc_download_source') || s('lulc_source') || 'esri').includes('nlcd') ? 'NLCD' : 'Esri'} land cover`;
@@ -31,7 +37,8 @@ export function summarizeStep(step: string, cfg: Record<string, unknown>): strin
     case 'bdy':
     case 'thyg': {
       const src = s('bdy_source') === 'usgs' ? `USGS ${s('gage_id')}`
-        : s('bdy_source') === 'nwm_forecast' ? 'NWM forecast' : 'NWM retrospective';
+        : s('bdy_source') === 'nwm_forecast' ? 'NWM forecast'
+          : s('bdy_source') === 'prepared' ? 'Streamflow Data tool series' : 'NWM retrospective';
       const win = s('start_dt') && s('end_dt')
         ? ` · ${s('start_dt').slice(0, 10)} → ${s('end_dt').slice(0, 10)}` : '';
       return src + win;
@@ -42,7 +49,10 @@ export function summarizeStep(step: string, cfg: Record<string, unknown>): strin
     case 'tcfg':
       return `Δt ${s('time_step') || '10'} s · output every ${s('print_interval') || '3600'} s`;
     case 'run':
-      return `time limit ${s('solver_timeout_s') || '3600'} s`;
+      // FE75: the limit is server-only (FIMSIM_RUN_TIMEOUT_S, 6 h default)
+      return s('solver_timeout_s')
+        ? `time limit ${Number(s('solver_timeout_s')) / 3600} h`
+        : 'time limit 6 h (portal default)';
     default:
       return '';
   }

@@ -2,8 +2,8 @@
 // forward with no successful run asks for confirmation.
 import { describe, expect, it } from 'vitest';
 import {
-  CATEGORIES, MODELS, headerModel, isToolModel, modelBadgeClass, modelFromSlug,
-  modelsInCategory, needsRunConfirm, resultsKind, stepDone, wizardPath,
+  CATEGORIES, INDEPENDENCE_NOTE, MODELS, headerModel, isToolModel, modelBadgeClass, modelFromSlug,
+  modelsInCategory, needsRunConfirm, resultsKind, runSkipped, stepDone, wizardPath,
 } from '../steps';
 import type { ServerAoi } from '../api';
 
@@ -90,6 +90,18 @@ describe('MODELS categories', () => {
       .toBe('Download and process the geospatial data needed to configure a flood model.');
   });
 
+  it('calls the blue category Flood Modeling (FIMSIM-FE66, Sagy 2026-10-22)', () => {
+    const blue = CATEGORIES.find((c) => c.id === 'flood-mapping');
+    expect(blue?.title).toBe('Flood Modeling');
+    expect(blue?.description)
+      .toBe('Build a complete input package for a supported 2D flood simulation model.');
+  });
+
+  it('says the two categories are independent (FIMSIM-FE67, Sagy 2026-10-22)', () => {
+    expect(INDEPENDENCE_NOTE).toMatch(/independent/);
+    expect(INDEPENDENCE_NOTE).toMatch(/Flood Modeling project prepares its own inputs/);
+  });
+
   it('round-trips every tool slug through wizardPath / modelFromSlug', () => {
     for (const m of modelsInCategory('input-data')) {
       expect(modelFromSlug(m)).toBe(m);
@@ -123,5 +135,26 @@ describe('MODELS categories', () => {
     expect(resultsKind('lisflood-fp')).toBe('simulation');
     expect(resultsKind('triton')).toBe('deck');
     for (const m of modelsInCategory('input-data')) expect(resultsKind(m)).toBe('tools');
+  });
+});
+
+// FIMSIM-FE70 — Nathan, 2026-10-22: once the user has gone past Run without a
+// successful run, the Run node shows a warning instead of a bare number.
+describe('runSkipped', () => {
+  it('is true past the Run step with no succeeded run on any area', () => {
+    expect(runSkipped(STEPS, 'results', [aoi()])).toBe(true);
+    expect(runSkipped(STEPS, 'results', [aoi('failed')])).toBe(true);
+    expect(runSkipped(STEPS, 'results', [])).toBe(true);
+  });
+
+  it('is false on or before the Run step, and once any area ran', () => {
+    expect(runSkipped(STEPS, 'run', [aoi()])).toBe(false);
+    expect(runSkipped(STEPS, 'par', [aoi()])).toBe(false);
+    expect(runSkipped(STEPS, 'results', [aoi('failed'), aoi('succeeded')])).toBe(false);
+  });
+
+  it('is never true on a model without a Run step (TRITON, the tools)', () => {
+    expect(runSkipped(TRITON, 'results', [aoi()])).toBe(false);
+    expect(runSkipped(MODELS['dem-tool'].steps, 'results', [aoi()])).toBe(false);
   });
 });

@@ -27,3 +27,20 @@ const PHASES: Record<string, string> = {
 export function phaseLabel(status: string): string {
   return PHASES[status] ?? status;
 }
+
+/** FIMSIM-FE75: failed status polls in a row before the page says so. */
+export const POLL_FAILS_BEFORE_BANNER = 3;
+
+/**
+ * The banner text once the status polls keep failing, else null. An
+ * occasional failure is ignored; 401/403 means the portal session expired.
+ */
+export function pollProblem(failures: number, lastStatus: number | null): string | null {
+  if (failures < POLL_FAILS_BEFORE_BANNER) return null;
+  if (lastStatus === 401 || lastStatus === 403) {
+    return 'Your session has expired, so this page has stopped updating. Reload the page '
+      + 'and sign in again; runs keep going on the server.';
+  }
+  return 'Lost contact with the server, so this page has stopped updating. Reload the page '
+    + '(your session may have expired); runs keep going on the server.';
+}

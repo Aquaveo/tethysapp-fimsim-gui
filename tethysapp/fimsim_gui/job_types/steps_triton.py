@@ -17,9 +17,12 @@ from tethysapp.fimsim_gui.job_types.registry import (
     UniformStepJobType, _check_choice, _check_number,
 )
 from tethysapp.fimsim_gui.job_types.steps import (
-    BDYStepJobType, DEMStepJobType, _check_lulc_years, _check_manning_mapping,
-    _check_manning_n,
+    ROUGHNESS_INPUTS, BDYStepJobType, DEMStepJobType, _check_lulc_years,
+    _check_manning_mapping, _check_manning_n, roughness_pick, strip_roughness_ui,
 )
+
+# BE22: fimcore's TRITON friction builder names a supplied file by lulc_source
+TRITON_PICK_SOURCE = {"manning": "user_manning", "lulc": "user_lulc"}
 
 
 class TritonDeckMixin:
@@ -100,10 +103,13 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
     orchestrator = "run_triton_manning_for_all_aois"
     orchestrator_module = "fimcore.triton_orchestrate"
     clean_patterns = ("friction*.asc", "lulc*.asc", "LULC_*.tif", "ManningN_*.tif")
-    extra_config_keys = ("fpfric_val", "manning_mapping", "lulc_class_to_n")
+    extra_config_keys = ("fpfric_val", "manning_mapping", "lulc_class_to_n",
+                         "user_manning_keys", "user_lulc_keys")
+    server_only_keys = ("user_manning_path", "user_lulc_path")
 
     def defaults(self) -> dict:
         return {
+            "manning_input": "download",   # BE22: | prepared_manning | prepared_lulc
             "fric_mode": "varying",
             "lulc_source": "download",   # esri | "download_nlcd" for NLCD
             "lulc_year": 2023,
@@ -115,6 +121,7 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
 
     def check_values(self, config: dict) -> list:
         problems = []
+        _check_choice(config, "manning_input", ROUGHNESS_INPUTS, problems)
         _check_choice(config, "fric_mode", ("fixed", "varying"), problems)
         _check_choice(config, "lulc_source", ("download", "download_nlcd"), problems)
         _check_manning_n(config, "fpfric_val", problems)
@@ -127,14 +134,27 @@ class TritonFrictionJobType(TritonDeckMixin, UniformStepJobType):
         # LISFLOOD step, so the frontend table is shared); the TRITON builder
         # calls it lulc_class_to_n and the orchestrator splats the config, so
         # the key MUST be renamed, not duplicated (bug-round #iv).
-        cfg = dict(cfg)
+        cfg = strip_roughness_ui(cfg)
         mapping = cfg.pop("manning_mapping", None)
         if mapping is not None:
             cfg["lulc_class_to_n"] = mapping
         if ctx is not None:
+            # the preview colours classes by the user's choice (Esri / NLCD),
+            # read before a picked file renames the source below
             ctx["_preview_lulc_source"] = cfg.get("lulc_source", "download")
             ctx["_preview_manning_mapping"] = cfg.get("lulc_class_to_n")
+        if cfg.get("user_manning_path"):
+            cfg["lulc_source"] = TRITON_PICK_SOURCE["manning"]
+        elif cfg.get("user_lulc_path"):
+            cfg["lulc_source"] = TRITON_PICK_SOURCE["lulc"]
         return cfg
+
+    def prestage_inputs(self, storage, ctx, config, log_fn):
+        # BE22: a picked LULC & Manning tool file → the builder's user path
+        picked = roughness_pick(storage, ctx, config, log_fn)
+        if picked is not None:
+            kind, path = picked
+            config[f"user_{kind}_path"] = path
 
     def collect(self, ctx, workdir) -> str:
         from tethysapp.fimsim_gui.job_types.previews import write_manning_preview

@@ -250,3 +250,54 @@ def test_load_step_run_gives_up_after_the_attempts(monkeypatch):
                         lambda session, steprun_id: None)
     monkeypatch.setattr(jobs.time, "sleep", lambda *_: None)
     assert jobs._load_step_run(sess, 255, attempts=3, delay_s=0) is None
+
+
+# ── FIMSIM-BE23: dates a picked flow series brings are saved back onto the
+#    run's config (for the summary line and the hydrograph date axis) ─────────
+
+def test_derived_config_saves_only_the_declared_keys():
+    from tethysapp.fimsim_gui.jobs import derived_config
+    jt = SimpleNamespace(derived_config_keys=("start_dt", "end_dt"))
+    submitted = {"bdy_source": "prepared", "prepared_id": 12}
+    # prestage_inputs mutated cfg: dates from the CSV + the staged worker path
+    cfg = {**submitted, "start_dt": "2016-10-08T00:00:00",
+           "end_dt": "2016-10-12T00:00:00", "file_path": "/tmp/fimsim-job-7/q.csv"}
+    saved = derived_config(jt, submitted, cfg)
+    assert saved == {"bdy_source": "prepared", "prepared_id": 12,
+                     "start_dt": "2016-10-08T00:00:00",
+                     "end_dt": "2016-10-12T00:00:00"}
+    assert "file_path" not in saved          # a worker path never reaches the DB
+    assert saved is not submitted and submitted == {"bdy_source": "prepared",
+                                                    "prepared_id": 12}
+
+
+def test_derived_config_overrides_submitted_dates():
+    # a picked series' own window wins over dates left in the submitted config
+    from tethysapp.fimsim_gui.jobs import derived_config
+    jt = SimpleNamespace(derived_config_keys=("start_dt", "end_dt"))
+    submitted = {"start_dt": "2020-01-01", "end_dt": "2020-01-02"}
+    cfg = {"start_dt": "2016-10-08T00:00:00", "end_dt": "2016-10-12T00:00:00"}
+    assert derived_config(jt, submitted, cfg) == cfg
+
+
+def test_derived_config_is_none_when_nothing_was_derived():
+    # no save (and no extra commit) for steps without derived keys, or when
+    # staging set none of them
+    from tethysapp.fimsim_gui.jobs import derived_config
+    cfg = {"bdy_source": "nwm_retro", "file_path": "/tmp/x.csv"}
+    assert derived_config(SimpleNamespace(derived_config_keys=()), cfg, cfg) is None
+    jt = SimpleNamespace(derived_config_keys=("start_dt", "end_dt"))
+    assert derived_config(jt, {"bdy_source": "nwm_retro"}, cfg) is None
+
+
+def test_bdy_step_saves_its_series_dates_but_not_the_staged_path():
+    from tethysapp.fimsim_gui.job_types import REGISTRY
+    from tethysapp.fimsim_gui.jobs import derived_config
+    jt = REGISTRY["bdy"]
+    submitted = {"bdy_source": "prepared"}
+    cfg = {**submitted, "file_path": "/w/q.csv",
+           "start_dt": "2016-10-08T00:00:00", "end_dt": "2016-10-12T00:00:00"}
+    saved = derived_config(jt, submitted, cfg)
+    assert saved["start_dt"] == "2016-10-08T00:00:00"
+    assert saved["end_dt"] == "2016-10-12T00:00:00"
+    assert "file_path" not in saved

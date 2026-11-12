@@ -65,3 +65,10 @@
   .dc-wrap { flex-direction: column; }
   .dc-toc { position: static; flex-direction: row; flex-wrap: wrap; }
 }
+
+/* FE67 — same independence notice as the Project step */
+.dc-note {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #f6e05e; border-left-width: 4px; border-radius: var(--radius-md);
+  background: #fffff0; color: var(--color-text);
+}

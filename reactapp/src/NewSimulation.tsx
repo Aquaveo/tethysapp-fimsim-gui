@@ -6,17 +6,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  getProject, getProjectStatus, getStepSchemas,
+  ApiError, getProject, getProjectStatus, getStepSchemas,
   type ServerAoi, type ServerProject, type StepSchema,
 } from './api';
 import AoiStep from './AoiStep';
 import ConfirmDialog from './ConfirmDialog';
 import { useActiveModel } from './activeModel';
+import { pollProblem } from './runProgress';
 import ProjectStep from './ProjectStep';
 import ResultsStep from './ResultsStep';
 import StepPanel from './StepPanel';
 import {
-  MODELS, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep, stepDone, wizardPath,
+  MODELS, RUN_SKIPPED_TIP, headerModel, modelFromSlug, needsRunConfirm, resolveActiveStep,
+  runSkipped, stepDone, wizardPath,
   type ModelId, type StepId,
   modelBadgeClass, resultsKind,
 } from './steps';
@@ -43,6 +45,9 @@ export default function NewSimulation() {
 
   const [step, setStep] = useState<StepId>(projectId ? 'aoi' : 'project');
   const [aois, setAoisState] = useState<ServerAoi[]>([]);
+  const [pollFail, setPollFail] = useState<{ count: number; status: number | null }>(
+    { count: 0, status: null });
+  const pollBanner = pollProblem(pollFail.count, pollFail.status);
   const [schemas, setSchemas] = useState<Record<string, StepSchema> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   // FE56: where the Run step's button renders (footer, beside Next), and the
@@ -67,8 +72,14 @@ export default function NewSimulation() {
     if (!projectId || !JOB_STEPS.has(step)) return;
     const t = setInterval(() => {
       getProjectStatus(projectId)
-        .then((r) => setAoisState(r.aois))
-        .catch(() => undefined);
+        .then((r) => {
+          setAoisState(r.aois);
+          setPollFail({ count: 0, status: null });
+        })
+        // FE75: count failures in a row instead of hiding them
+        .catch((e) => setPollFail((p) => ({
+          count: p.count + 1, status: e instanceof ApiError ? e.status : null,
+        })));
     }, 5000);
     return () => clearInterval(t);
     // JOB_STEPS derives from `model`, so model stands in for it here
@@ -132,8 +143,11 @@ export default function NewSimulation() {
       {/* The river stepper: dots are reaches; the line fills as flow moves downstream. */}
       <ol className="ns-stepper" aria-label="Simulation steps">
         {STEPS.map((s, i) => {
-          // ✓ means the step really completed (FE55), not merely "behind you"
+          // ✓ means the step really completed (FE55), not merely "behind you";
+          // ⚠ on Run means the user went past it without a run (FE70)
+          const skipped = s.id === 'run' && runSkipped(STEPS, activeStep, aois);
           const state = i === idx ? 'active'
+            : skipped ? 'skipped'
             : stepDone(s.id, aois, !!projectId) ? 'done' : 'todo';
           return (
             <li key={s.id} className="ns-step-wrap">
@@ -142,10 +156,12 @@ export default function NewSimulation() {
                 type="button"
                 className={`ns-step ${state}`}
                 aria-current={state === 'active' ? 'step' : undefined}
+                aria-label={skipped ? `${s.label}: ${RUN_SKIPPED_TIP}` : undefined}
+                data-tip={skipped ? RUN_SKIPPED_TIP : undefined}
                 onClick={() => tryGoTo(s.id)}
               >
                 <span className="ns-dot" aria-hidden="true">
-                  {state === 'done' ? '✓' : i + 1}
+                  {state === 'done' ? '✓' : skipped ? '⚠' : i + 1}
                 </span>
                 <span className="ns-step-label">{s.label}</span>
               </button>
@@ -156,6 +172,7 @@ export default function NewSimulation() {
       </div>
 
       <section className="ns-card" aria-labelledby="ns-title">
+        {pollBanner && <div className="ns-poll-banner" role="alert">{pollBanner}</div>}
         <p className="ns-eyebrow">
           <span className={'ns-model-badge' + modelBadgeClass(model)}>
             {MODELS[model].label}

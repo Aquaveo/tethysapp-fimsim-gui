@@ -3,10 +3,10 @@
 // Selecting a project navigates to its wizard (wizardPath — the model is a
 // property of the project, chosen here at creation: FIMSIM-FE48).
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ApiError, createProject, deleteProject, listProjects, type ServerProject } from './api';
 import {
-  CATEGORIES, DEFAULT_MODEL, MODELS, modelBadgeClass, modelFromSlug, modelsInCategory, wizardPath,
+  CATEGORIES, DEFAULT_MODEL, INDEPENDENCE_NOTE, MODELS, modelBadgeClass, modelFromSlug, modelsInCategory, wizardPath,
   type ModelId,
 } from './steps';
 import './ProjectStep.css';
@@ -61,6 +61,10 @@ export default function ProjectStep() {
       >
         <fieldset className="ps-models">
           <legend className="ps-label">What would you like to do?</legend>
+          <p className="ps-note" role="note">
+            {INDEPENDENCE_NOTE}{' '}
+            <Link to="/docs#input-data">More in the docs</Link>
+          </p>
           <div className="ps-cats">
             {CATEGORIES.map((c) => (
               <div key={c.id} className={`ps-cat is-${c.id}`}>

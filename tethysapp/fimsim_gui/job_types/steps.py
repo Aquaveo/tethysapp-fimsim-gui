@@ -42,6 +42,83 @@ def _check_lulc_years(config: dict, problems: list, s2_key: str = "lulc_year") -
             f"'nlcd_year' {ny!r}: NLCD publishes {', '.join(NLCD_YEARS)}")
 
 
+def stage_supplied(storage, ctx, keys, kind) -> list:
+    """Download supplied-input keys (BE17 uploads, BE21 picks) into this AOI's
+    folder as ``user_<kind>/<name>``; returns the local paths. The keys were
+    already checked to belong to this AOI at submit (rejected_input_keys)."""
+    dest_dir = Path(ctx["aoi_features"][0]["folder_path"]) / f"user_{kind}"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for k in keys:
+        dest = dest_dir / Path(k).name
+        storage.download_to_path(k, dest)
+        paths.append(str(dest))
+    return paths
+
+
+def stage_one_pick(storage, ctx, config, kind, what, log_fn) -> str:
+    """The one prepared file a step's input choice names (FE72), staged
+    locally. A missing pick fails the job with a reason the user can act on."""
+    keys = config.get(f"user_{kind}_keys") or []
+    if len(keys) != 1:
+        raise ValueError(
+            f"pick one prepared {what} for this area in the step panel "
+            f"(\"Use this\"), then run the step again")
+    path = stage_supplied(storage, ctx, keys, kind)[0]
+    log_fn(f"staged prepared {what}: {Path(path).name}")
+    return path
+
+
+# FIMSIM-BE22: Roughness can download land cover (as before) or use a file
+# from the LULC & Manning tool — its Manning's n grid (used as is) or its land
+# cover (the class table is applied). Shared by LISFLOOD-FP and TRITON.
+ROUGHNESS_INPUTS = ("download", "prepared_manning", "prepared_lulc")
+ROUGHNESS_PICK = {"prepared_manning": ("manning", "Manning's n grid"),
+                  "prepared_lulc": ("lulc", "land cover")}
+ROUGHNESS_UI_KEYS = ("manning_input", "user_manning_keys", "user_lulc_keys")
+
+
+def roughness_pick(storage, ctx, config, log_fn):
+    """(kind, local path) of the picked Roughness file, or None to download."""
+    pick = ROUGHNESS_PICK.get(config.get("manning_input"))
+    if pick is None:
+        return None
+    kind, what = pick
+    return kind, stage_one_pick(storage, ctx, config, kind, what, log_fn)
+
+
+def strip_roughness_ui(cfg: dict) -> dict:
+    """Drop the UI-only keys (the orchestrator splats the config into fimcore's
+    keyword-only builder); a prepared file always means varying friction."""
+    cfg = dict(cfg)
+    mode = cfg.get("manning_input", "download")
+    for key in ROUGHNESS_UI_KEYS:
+        cfg.pop(key, None)
+    if mode in ROUGHNESS_PICK:
+        cfg["fric_mode"] = "varying"
+    return cfg
+
+
+def csv_window(path) -> tuple:
+    """(start, end) ISO strings (naive UTC) of a dated discharge CSV, as the
+    Streamflow Data tool writes it (time_hours holds timestamps)."""
+    import pandas as pd
+    from fimcore.bdy import _read_user_discharge_table
+
+    _df, has_dates, start, end = _read_user_discharge_table(path)
+    if not has_dates or start is None or end is None:
+        raise ValueError(
+            f"{Path(path).name}: the series has no dates — time_hours must hold "
+            f"timestamps, as the Streamflow Data tool writes them")
+
+    def iso(t):
+        ts = pd.Timestamp(t)
+        if ts.tzinfo is not None:
+            ts = ts.tz_convert("UTC").tz_localize(None)
+        return ts.isoformat()
+    return iso(start), iso(end)
+
+
 class DEMStepJobType(StepJobType):
     # wildcards also sweep up "dem (1).ascii"-style versioned leftovers
     clean_patterns = ("dem*.ascii", "dem*.prj", "DEM_*.tif")
@@ -62,13 +139,7 @@ class DEMStepJobType(StepJobType):
         keys = config.get("user_dem_keys") or []
         if not keys:
             return
-        dem_dir = Path(ctx["aoi_features"][0]["folder_path"]) / "user_dem"
-        dem_dir.mkdir(parents=True, exist_ok=True)
-        paths = []
-        for k in keys:
-            dest = dem_dir / Path(k).name
-            storage.download_to_path(k, dest)
-            paths.append(str(dest))
+        paths = stage_supplied(storage, ctx, keys, "dem")
         # execute() reads user_dem_path and derives has_dem from it
         config["user_dem_path"] = paths
         log_fn(f"staged {len(paths)} user-supplied DEM(s)")
@@ -200,7 +271,20 @@ class ManningStepJobType(UniformStepJobType):
     requires = ("dem",)
     orchestrator = "run_lisflood_manning_for_all_aois"
 
+    def prestage_inputs(self, storage, ctx, config, log_fn):
+        # BE22: a picked LULC & Manning tool file → prepare_manning's own
+        # user-raster arguments (server-only, so a client can't name a path)
+        picked = roughness_pick(storage, ctx, config, log_fn)
+        if picked is None:
+            return
+        kind, path = picked
+        if kind == "manning":
+            config.update(have_manning_raster=True, manning_src_path=path)
+        else:
+            config.update(have_lulc=True, lulc_src_path=path)
+
     def transform_config(self, cfg: dict, ctx) -> dict:
+        cfg = strip_roughness_ui(cfg)
         # stash what the preview needs (collect() doesn't see the config)
         if ctx is not None:
             ctx["_preview_lulc_source"] = cfg.get("lulc_download_source", "esri")
@@ -220,10 +304,14 @@ class ManningStepJobType(UniformStepJobType):
             pass
         return outputs
 
-    extra_config_keys = ("fpfric_val", "manning_mapping")
+    extra_config_keys = ("fpfric_val", "manning_mapping",
+                         "user_manning_keys", "user_lulc_keys")
+    server_only_keys = ("have_manning_raster", "manning_src_path",
+                        "have_lulc", "lulc_src_path")
 
     def defaults(self) -> dict:
         return {
+            "manning_input": "download",       # BE22: | prepared_manning | prepared_lulc
             "fric_mode": "varying",            # "fixed" | "varying"
             "lulc_download_source": "esri",    # "esri" | "nlcd"
             "lulc_year": 2023,                 # Esri Sentinel-2 vintage
@@ -232,6 +320,7 @@ class ManningStepJobType(UniformStepJobType):
 
     def check_values(self, config: dict) -> list:
         problems = []
+        _check_choice(config, "manning_input", ROUGHNESS_INPUTS, problems)
         _check_choice(config, "fric_mode", ("fixed", "varying"), problems)
         _check_choice(config, "lulc_download_source", ("esri", "nlcd"), problems)
         _check_manning_n(config, "fpfric_val", problems)
@@ -347,7 +436,12 @@ class BDYStepJobType(UniformStepJobType):
             shutil.copy2(p, Path(outputs) / p.name)
         return outputs
 
-    extra_config_keys = ("start_dt", "end_dt", "gage_id")
+    extra_config_keys = ("start_dt", "end_dt", "gage_id", "user_flow_keys")
+    # BE23: the staged path of a picked Streamflow Data tool CSV
+    server_only_keys = ("file_path",)
+    # a picked series brings its own dates; kept on the run for the summary
+    # line and the hydrograph's date axis
+    derived_config_keys = ("start_dt", "end_dt")
 
     NWM_RETRO_START = NWM_RETRO_START  # aliases of the module constants
     NWM_RETRO_END = NWM_RETRO_END
@@ -362,14 +456,16 @@ class BDYStepJobType(UniformStepJobType):
     def check_values(self, config: dict) -> list:
         problems = []
         _check_choice(config, "bdy_source",
-                      ("nwm_retro", "nwm_forecast", "usgs"), problems)
+                      ("nwm_retro", "nwm_forecast", "usgs", "prepared"), problems)
         _check_choice(config, "interval_hours",
                       (0.5, 1, 1.0, 3, 3.0, 6, 6.0, 12, 12.0, 24, 24.0), problems)
         _check_choice(config, "gap_handling", ("interpolate", "zero", "hold"),
                       problems)
 
-        _check_window(config, problems,
-                      nwm_retro=config.get("bdy_source", "nwm_retro") == "nwm_retro")
+        # a picked series carries its own dates (set when it is staged)
+        if config.get("bdy_source") != "prepared":
+            _check_window(config, problems,
+                          nwm_retro=config.get("bdy_source", "nwm_retro") == "nwm_retro")
         if config.get("bdy_source") == "usgs":
             gage = config.get("gage_id")
             if not (isinstance(gage, str) and gage.isdigit() and
@@ -378,7 +474,20 @@ class BDYStepJobType(UniformStepJobType):
                                 "(8–15 digits) when the source is a USGS gage")
         return problems
 
+    def prestage_inputs(self, storage, ctx, config, log_fn):
+        # BE23: a picked Streamflow Data tool CSV → fimcore's "csv" source
+        if config.get("bdy_source") != "prepared":
+            return
+        path = stage_one_pick(storage, ctx, config, "flow", "streamflow series", log_fn)
+        config["file_path"] = path
+        config["start_dt"], config["end_dt"] = csv_window(path)
+        log_fn(f"series covers {config['start_dt']} → {config['end_dt']}")
+
     def transform_config(self, cfg: dict, ctx) -> dict:
+        cfg = dict(cfg)
+        cfg.pop("user_flow_keys", None)
+        if cfg.get("bdy_source") == "prepared":
+            cfg["bdy_source"] = "csv"
         for key in ("start_dt", "end_dt"):
             if isinstance(cfg.get(key), str):
                 cfg[key] = datetime.fromisoformat(cfg[key])
