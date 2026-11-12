@@ -17,6 +17,7 @@ adapter re-reads StepRun.status at most every 2 s and raises inside log_fn
 when a cancel was requested. Timeouts ride the same check.
 """
 import json
+import logging
 import os
 import re
 import shutil
@@ -25,6 +26,8 @@ import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 # Job-level deadline. It used to be 2 h, which silently killed every 3–4 h
@@ -317,7 +320,10 @@ def nwm_api_key() -> str:
     try:
         from tethysapp.fimsim_gui.app import App
         return str(App.get_custom_setting("nwm_api_key") or "").strip()
-    except Exception:
+    except Exception as exc:
+        # e.g. the secret can't be decrypted — say so (never the value)
+        log.warning("nwm_api_key setting could not be read (%s); A2F offers "
+                    "GEOGLOWS only", type(exc).__name__)
         return ""
 
 
@@ -325,10 +331,11 @@ def job_env_for(job_type) -> dict:
     """Environment the worker sets for this job: the NWM key (fimcore reads
     FIMSIM_NWM_API_KEY) for the A2F steps that call CIROH, nothing otherwise.
     Passed as a job argument — never stored in the StepRun's config."""
-    if not getattr(job_type, "needs_nwm_key", False):
+    if not job_type.needs_nwm_key:
         return {}
+    from fimcore.api_keys import NWM_KEY_ENV
     key = nwm_api_key()
-    return {"FIMSIM_NWM_API_KEY": key} if key else {}
+    return {NWM_KEY_ENV: key} if key else {}
 
 
 def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
@@ -343,7 +350,9 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
     _ensure_django()
     # A2F: e.g. the NWM key. The key is the same for every job, so leaving it
     # set for later jobs on this worker process is harmless.
-    os.environ.update(job_env or {})
+    for name, value in (job_env or {}).items():
+        if os.environ.get(name) != value:   # setenv only on a change
+            os.environ[name] = value
 
     engine = create_engine(db_url)
     session = sessionmaker(bind=engine)()

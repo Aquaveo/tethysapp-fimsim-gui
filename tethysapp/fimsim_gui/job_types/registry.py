@@ -102,6 +102,9 @@ class StepJobType:
     #: keys prestage_inputs derives from a supplied file (e.g. a picked flow
     #: series' dates) that are saved back onto the run's config for the UI
     derived_config_keys: tuple = ()
+    #: A2F steps that call CIROH get the NWM key in the worker environment
+    #: (jobs.job_env_for) — never in their config
+    needs_nwm_key: bool = False
 
     def defaults(self) -> dict:
         return {}
