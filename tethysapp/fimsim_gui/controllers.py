@@ -388,8 +388,10 @@ def api_aoi_prepared(request, session, aoi_id):
 
     GET ?kind=dem|manning|lulc|flow|flowline (FIMSIM-BE20, A2F-2) → one row per output file
     of that kind from the user's succeeded, current tool runs (any project),
-    newest first, each flagged `covers` (the raster contains this AOI) and
-    `usable` (GeoTIFF / CSV, readable; HAND is never a terrain).
+    newest first, each flagged `covers` (the raster — for a flowline, the
+    Flowline tool's area — contains this AOI) and `usable` (GeoTIFF / CSV /
+    Shapefile or GeoPackage of all flowlines, readable; HAND is never a
+    terrain).
 
     POST {steprun_id, file, kind} (FIMSIM-BE21) → re-checks the pick, copies
     the file to this AOI's user_<kind>/ prefix and returns the upload shape
@@ -425,7 +427,7 @@ def _list_prepared(session, request, aoi):
     storage = get_storage()
     rows = prepared_rows(runs, kind, to_shape(aoi.geometry),
                          lambda key: raster_bounds_4326(storage, key),
-                         lambda run: to_shape(run.aoi.geometry).bounds)
+                         lambda run: to_shape(run.aoi.geometry))
     return JsonResponse({'prepared': rows})
 
 
@@ -451,7 +453,8 @@ def _pick_prepared(session, request, aoi):
         src_key = check_pick(run, request.user.username, file, kind)
         dest_key = build_key(request.user.username, aoi.project_id, aoi.id,
                              f'user_{kind}', file)
-        out = copy_prepared(get_storage(), src_key, dest_key, kind, to_shape(aoi.geometry))
+        out = copy_prepared(get_storage(), src_key, dest_key, kind, to_shape(aoi.geometry),
+                            tool_area=to_shape(run.aoi.geometry))
     except PickError as exc:
         return JsonResponse({'error': exc.message}, status=exc.status)
     out['source'] = {'steprun_id': run.id, 'project': run.aoi.project.name,

@@ -86,6 +86,20 @@ def covers(bounds, aoi_geom) -> bool:
     return outside <= COVER_TOLERANCE * aoi_geom.area
 
 
+def area_covers(tool_area, aoi_geom) -> bool:
+    """True when the tool run's own area polygon contains the AOI (within
+    COVER_TOLERANCE). A flowline network is clipped to that polygon — not its
+    bounding box — so the polygon is what has to contain this AOI."""
+    if tool_area is None:
+        return False
+    outside = aoi_geom.difference(tool_area).area
+    return outside <= COVER_TOLERANCE * aoi_geom.area
+
+
+NOT_COVERED = ("the prepared file does not cover this area — re-run the "
+               "tool on an area that contains it")
+
+
 def run_detail(step_key: str, config: dict) -> str:
     """One line naming the run's source and cell size (or window)."""
     from tethysapp.fimsim_gui.job_types import REGISTRY
@@ -109,12 +123,14 @@ def run_detail(step_key: str, config: dict) -> str:
     return source
 
 
-def prepared_rows(runs, kind: str, aoi_geom, bounds_fn, aoi_bounds_fn=None) -> list:
+def prepared_rows(runs, kind: str, aoi_geom, bounds_fn, tool_area_fn=None) -> list:
     """One row per output file of *kind* across *runs* (succeeded tool runs,
     newest first). *bounds_fn(key)* returns a raster's EPSG:4326 bounds;
-    *aoi_bounds_fn(run)* the tool run's own area's (flowlines only)."""
+    *tool_area_fn(run)* the tool run's own area polygon (flowlines)."""
     if kind not in KIND_STEP:
         raise ValueError(f"unknown kind {kind!r}; one of {', '.join(KIND_STEP)}")
+    if kind == "flowline" and tool_area_fn is None:
+        raise ValueError("flowlines need tool_area_fn (the tool run's area)")
     rows = []
     for run in sorted(runs, key=lambda r: r.finished, reverse=True):
         detail = run_detail(run.step_key, run.config)
@@ -127,9 +143,10 @@ def prepared_rows(runs, kind: str, aoi_geom, bounds_fn, aoi_bounds_fn=None) -> l
             if usable and kind == "flow":
                 cover = True               # a flow series has no footprint
             elif usable and kind == "flowline":
-                # the network is clipped to the tool's own area, so the area
-                # (not the lines' bounding box) is what must contain this AOI
-                cover = covers(aoi_bounds_fn(run), aoi_geom)
+                try:
+                    cover = area_covers(tool_area_fn(run), aoi_geom)
+                except Exception:
+                    usable, reason = False, "the tool run's area could not be read"
             elif usable:
                 try:
                     cover = covers(bounds_fn(m["key"]), aoi_geom)
@@ -195,7 +212,11 @@ def _flowline_problem(path, aoi_geom) -> str:
                 "which A2F needs to look up flows")
     if gdf.crs is None:
         return "it has no coordinate system (.prj)"
-    if not gdf.to_crs(4326).intersects(aoi_geom).any():
+    try:
+        reaches = gdf.to_crs(4326).intersects(aoi_geom).any()
+    except Exception:
+        return "its geometry could not be reprojected or compared with this area"
+    if not reaches:
         return "none of its streams reach this area"
     return None
 
@@ -209,44 +230,75 @@ def _csv_problem(path) -> str:
     return None
 
 
-def copy_prepared(storage, src_key: str, dest_key: str, kind: str, aoi_geom) -> dict:
+def _fetch_parts(storage, src_key: str, dest_key: str, tmp) -> list:
+    """Download a picked shapefile's side files next to it; returns the
+    (local path, dest key) of each. A missing required part refuses the pick."""
+    parts = []
+    for src_part, dest_part in zip(shapefile_part_keys(src_key),
+                                   shapefile_part_keys(dest_key)):
+        if storage.exists(src_part):
+            local = Path(tmp) / Path(dest_part).name
+            storage.download_to_path(src_part, local)
+            parts.append((local, dest_part))
+        elif not src_part.endswith(SHAPEFILE_OPTIONAL):
+            raise PickError(400, f"'{Path(src_key).name}': its {Path(src_part).suffix} "
+                                 f"file is missing — re-run the Flowline tool")
+    return parts
+
+
+def _save_parts(storage, items: list, clear: list) -> None:
+    """Store every (local path, key) in *items* as one unit: first remove each
+    key in *clear* (a previous pick's parts, e.g. a stale .cpg), and if any save
+    fails remove what was written, so a shapefile is never left half-stored."""
+    for key in clear:
+        if storage.exists(key):
+            storage.delete(key)
+    written = []
+    try:
+        for local, key in items:
+            with open(local, "rb") as fh:
+                storage.save(key, fh)
+            written.append(key)
+    except Exception as exc:
+        for key in written:
+            try:
+                storage.delete(key)
+            except Exception:  # best effort — the pick is already failing
+                pass
+        raise PickError(503, "the prepared file could not be stored — try again") from exc
+
+
+def copy_prepared(storage, src_key: str, dest_key: str, kind: str, aoi_geom,
+                  tool_area=None) -> dict:
     """Copy a picked file into the modeling AOI's storage after re-checking
-    it (a GeoTIFF that covers the area, or a CSV with the flow columns).
+    it (a GeoTIFF that covers the area, a CSV with the flow columns, or a
+    flowline network whose tool area — *tool_area*, its polygon — contains
+    this AOI). A shapefile travels with its side files.
     Returns the upload-shaped {key, name, bytes}; raises PickError."""
     name = Path(dest_key).name
+    shapefile = kind == "flowline" and name.endswith(".shp")
     with tempfile.TemporaryDirectory() as tmp:
         local = Path(tmp) / name
         if not storage.exists(src_key):
             raise PickError(404, GONE)
         storage.download_to_path(src_key, local)
-        parts = []          # (src, dest) of a shapefile's side files
-        if kind == "flowline" and name.endswith(".shp"):
-            for src_part, dest_part in zip(shapefile_part_keys(src_key),
-                                           shapefile_part_keys(dest_key)):
-                if storage.exists(src_part):
-                    storage.download_to_path(src_part, Path(tmp) / Path(dest_part).name)
-                    parts.append((src_part, dest_part))
-                elif not src_part.endswith(SHAPEFILE_OPTIONAL):
-                    raise PickError(400, f"'{name}': its {Path(src_part).suffix} "
-                                         f"file is missing — re-run the Flowline tool")
+        parts = _fetch_parts(storage, src_key, dest_key, tmp) if shapefile else []
         if kind == "flow":
             reason = _csv_problem(local)
         elif kind == "flowline":
             reason = _flowline_problem(local, aoi_geom)
+            if reason is None and not area_covers(tool_area, aoi_geom):
+                reason = NOT_COVERED
         else:
             from tethysapp.fimsim_gui.dem_upload import validate_geotiff
             reason = validate_geotiff(local)
             if reason is None and not covers(_bounds_4326(local), aoi_geom):
-                reason = ("the prepared file does not cover this area — re-run the "
-                          "tool on an area that contains it")
+                reason = NOT_COVERED
         if reason:
             raise PickError(400, f"'{name}': {reason}")
-        with open(local, "rb") as fh:
-            storage.save(dest_key, fh)
-        for _src_part, dest_part in parts:
-            with open(Path(tmp) / Path(dest_part).name, "rb") as fh:
-                storage.save(dest_part, fh)
-    size = storage.size(dest_key) + sum(storage.size(d) for _s, d in parts)
+        clear = shapefile_part_keys(dest_key) if shapefile else []
+        _save_parts(storage, [(local, dest_key)] + parts, clear)
+    size = storage.size(dest_key) + sum(storage.size(k) for _l, k in parts)
     return {"key": dest_key, "name": name, "bytes": size}
 
 
