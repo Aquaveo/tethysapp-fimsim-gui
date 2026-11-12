@@ -650,6 +650,9 @@ def api_step_submit(request, session, project_id, step_key):
             from tethysapp.fimsim_gui.jobs import nwm_api_key
             guard_reason = guards.check_a2f_streamflow_submit(
                 aoi, jt.merged(merged_config), bool(nwm_api_key()))
+        elif step_key == 'arun':
+            from tethysapp.fimsim_gui.jobs import nwm_api_key
+            guard_reason = guards.check_a2f_run_submit(aoi, bool(nwm_api_key()))
         elif step_key == 'run':
             timeout = float(jt.merged(merged_config).get('solver_timeout_s') or 3600)
             guard_reason = guards.check_run_submit(aoi, merged_config, timeout)

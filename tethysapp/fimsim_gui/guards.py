@@ -244,6 +244,18 @@ def evict_shared_cache(storage, max_age_days: int = 90,
     return freed
 
 
+def check_a2f_run_submit(aoi, nwm_key_set: bool):
+    """A2F Run (reason or None): NWM flows still need the portal's key at run
+    time (NenCarta fetches the return periods) — e.g. after it was removed."""
+    stream = aoi.current_step_run("astream")
+    if (not nwm_key_set and stream is not None
+            and (stream.config or {}).get("source", "nwm") == "nwm"):
+        return ("This run uses NWM streamflow, which needs the CIROH NWM API key, "
+                "and this portal doesn't have one now — re-run Streamflow with "
+                "GEOGLOWS, or ask the administrator to add the key.")
+    return None
+
+
 def check_a2f_streamflow_submit(aoi, config: dict, nwm_key_set: bool):
     """A2F Streamflow (reason or None): NWM needs the portal's CIROH key, and
     a network picked from the Flowline tool is NHD — NWM flows only (fimcore

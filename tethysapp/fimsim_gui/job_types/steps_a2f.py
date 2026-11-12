@@ -105,12 +105,15 @@ class A2FKeyMixin:
     def execute(self, ctx_path, ctx, config, log_fn):
         def masked_log(msg, *a, **kw):
             return log_fn(self._mask(msg), *a, **kw)
+        from tethysapp.fimsim_gui.jobs import JobCancelled, JobTimeout
         try:
             self.run_engine(ctx_path, ctx, config, masked_log)
+        except (JobCancelled, JobTimeout):
+            raise   # the job wrapper's own control flow; fixed text, no key
         except Exception as exc:
             # StepRun.error stores the message + traceback: mask it, and drop
             # the original (from None) so its unmasked text isn't chained in
-            raise RuntimeError(self._mask(exc)) from None
+            raise RuntimeError(f"{type(exc).__name__}: {self._mask(exc)}") from None
         finally:
             self.clean_secrets(ctx, ctx_path)
 
@@ -316,7 +319,10 @@ class A2FRunJobType(A2FKeyMixin, UniformStepJobType):
 
     def transform_config(self, cfg: dict, ctx) -> dict:
         from fimcore.arc_presets import preset
-        return preset(cfg["preset"])
+        out = preset(cfg["preset"])
+        # maps on the DEM's own grid (fimcore defaults to 10 m whatever the DEM)
+        out["output_res_m"] = _dem_res_m(ctx)
+        return out
 
     def run_engine(self, ctx_path, ctx, config, log_fn):
         from fimcore.deps import FIX_HINT
@@ -340,6 +346,11 @@ class A2FRunJobType(A2FKeyMixin, UniformStepJobType):
         for place in places:
             for p in place.glob("nencarta*.json"):
                 p.unlink(missing_ok=True)
+        # NenCarta's own working folder: ARC's intermediates, which nothing
+        # reads afterwards (Results use FloodMaps/), and which we can't vouch
+        # are key-free — never persist it
+        for feat in ctx.get("aoi_features") or []:
+            shutil.rmtree(Path(feat["folder_path"]) / "nencarta-output", ignore_errors=True)
 
     def collect(self, ctx, workdir) -> str:
         import rasterio
@@ -350,6 +361,8 @@ class A2FRunJobType(A2FKeyMixin, UniformStepJobType):
         outputs.mkdir(exist_ok=True)
         for p in _floodmaps(ctx, "*.tif"):
             shutil.copy2(p, outputs / p.name)
+        # v1 maps one moment, so one depth map; a duration run (later) would
+        # want the cell-wise maximum here rather than the first timestep
         depth_tif = _floodmaps(ctx, "depth_*.tif")[0]
         with rasterio.open(depth_tif) as src:
             depth = src.read(1, masked=True).filled(0).astype("float32")
@@ -362,6 +375,17 @@ class A2FRunJobType(A2FKeyMixin, UniformStepJobType):
 def _floodmaps(ctx, pattern) -> list:
     folder = Path(ctx["aoi_features"][0]["folder_path"]) / "FloodMaps"
     return sorted(folder.glob(pattern)) if folder.is_dir() else []
+
+
+def _dem_res_m(ctx) -> float:
+    """The A2F DEM's cell size in metres (fimcore stores it in degrees in the
+    AOI context); 10 m when it can't be read."""
+    path = Path(ctx["aoi_features"][0]["folder_path"]) / "workflow_context.json"
+    try:
+        deg = float(json.loads(path.read_text(encoding="utf-8"))["dem_res_m"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return 10.0
+    return float(round(deg * 111320.0)) if deg < 1 else deg
 
 
 def _settings_used(ctx):

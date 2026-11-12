@@ -334,8 +334,9 @@ def job_env_for(job_type) -> dict:
     if not job_type.needs_nwm_key:
         return {}
     from fimcore.api_keys import NWM_KEY_ENV
-    key = nwm_api_key()
-    return {NWM_KEY_ENV: key} if key else {}
+    # always sent for these steps: "" clears a key the admin removed, so a
+    # warm worker never keeps using (or passing to subprocesses) an old one
+    return {NWM_KEY_ENV: nwm_api_key()}
 
 
 def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
@@ -348,10 +349,12 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
     from tethysapp.fimsim_gui.storage import build_key, service_from_config
 
     _ensure_django()
-    # A2F: e.g. the NWM key. The key is the same for every job, so leaving it
-    # set for later jobs on this worker process is harmless.
+    # A2F: e.g. the NWM key — the same for every job, so it stays set for
+    # later jobs on this worker process until the admin changes or removes it.
     for name, value in (job_env or {}).items():
-        if os.environ.get(name) != value:   # setenv only on a change
+        if not value:
+            os.environ.pop(name, None)
+        elif os.environ.get(name) != value:   # setenv only on a change
             os.environ[name] = value
 
     engine = create_engine(db_url)

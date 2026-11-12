@@ -56,11 +56,25 @@ def test_depth_overlay_png_and_stats(tmp_path):
 # ── Run step ─────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("name", ["recommended", "classic"])
-def test_presets_come_from_fimcore(name):
+def test_presets_come_from_fimcore_on_the_dems_grid(tmp_path, name):
     from fimcore.arc_presets import preset
+    folder = tmp_path / "T2_04"
+    folder.mkdir()
+    # fimcore stores the A2F DEM cell size in degrees (30 m here)
+    (folder / "workflow_context.json").write_text(json.dumps({"dem_res_m": 30 / 111320}))
+    ctx = {"aoi_features": [{"folder_path": str(folder)}]}
     jt = REGISTRY["arun"]
+
+    out = jt.transform_config(jt.merged({"preset": name}), ctx)
+
     assert jt.validate_config({"preset": name}) == []
-    assert jt.transform_config(jt.merged({"preset": name}), ctx=None) == preset(name)
+    assert out == {**preset(name), "output_res_m": 30.0}
+
+
+def test_maps_default_to_10_m_when_the_dem_size_is_unknown(tmp_path):
+    ctx = {"aoi_features": [{"folder_path": str(tmp_path)}]}
+    jt = REGISTRY["arun"]
+    assert jt.transform_config(jt.merged({}), ctx)["output_res_m"] == 10.0
 
 
 def test_unknown_preset_is_refused():
@@ -80,6 +94,9 @@ def _job(tmp_path, monkeypatch):
 
 def _fake_nencarta(folder, ctx_path, *, maps=True, fail=False):
     def run(path, ctx, per_aoi_configs=None, log_fn=None):
+        # NenCarta's working folder — not proven key-free, never persisted
+        (folder / "nencarta-output" / "T2_04").mkdir(parents=True)
+        (folder / "nencarta-output" / "T2_04" / "run.log").write_text(f"key={KEY}")
         (ctx_path.parent / "nencarta.json").write_text(json.dumps({"nwm_api_key": KEY}))
         (folder / "nencarta_fallback1.json").write_text(json.dumps({"nwm_api_key": KEY}))
         (folder / "workflow_context.json").write_text(json.dumps({
@@ -129,11 +146,13 @@ def test_the_key_is_gone_after_the_run_even_when_it_fails(tmp_path, monkeypatch,
                                  lambda *a: None)
     except RuntimeError as exc:
         assert fail and KEY not in str(exc) and exc.__cause__ is None
+        assert str(exc).startswith("RuntimeError: HTTP 500")   # the original type is named
 
     leftovers = [p for p in tmp_path.rglob("*") if p.is_file() and KEY in p.read_text(
         errors="ignore")]
     assert leftovers == []
     assert not list(tmp_path.rglob("nencarta*.json"))
+    assert not (folder / "nencarta-output").exists()
 
 
 def test_no_depth_map_fails_the_step_with_a_reason(tmp_path, monkeypatch):
@@ -153,5 +172,22 @@ def test_a_worker_without_nencarta_says_how_to_fix_it(tmp_path, monkeypatch):
     monkeypatch.setattr(nr, "flood_mapping_cli", lambda: None)
 
     with pytest.raises(RuntimeError, match="flood-mapping command is not installed"):
+        REGISTRY["arun"].execute(str(ctx_path), ctx, {"preset": "classic"},
+                                 lambda *a: None)
+
+
+@pytest.mark.parametrize("control", ["JobCancelled", "JobTimeout"])
+def test_cancel_and_timeout_pass_through_unchanged(tmp_path, monkeypatch, control):
+    import fimcore.arc_orchestrate as arc
+
+    from tethysapp.fimsim_gui import jobs
+    folder, ctx_path, ctx = _job(tmp_path, monkeypatch)
+    exc_type = getattr(jobs, control)
+
+    def stopped(*a, **kw):
+        raise exc_type()
+    monkeypatch.setattr(arc, "run_arc_curve2flood_for_all_aois", stopped)
+
+    with pytest.raises(exc_type):
         REGISTRY["arun"].execute(str(ctx_path), ctx, {"preset": "classic"},
                                  lambda *a: None)
