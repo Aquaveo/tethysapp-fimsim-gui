@@ -25,8 +25,9 @@ def test_test_case_3_settings_are_accepted():
 
 
 @pytest.mark.parametrize("bad", [
-    {"date": None}, {"date": "19-09-2019"}, {"source": "usgs"},
-    {"hour_utc": 24}, {"hour_utc": 17.5}, {"nwm_record": "medium_range"},
+    {"date": None}, {"date": "19-09-2019"}, {"date": "2019-02-30"}, {"source": "usgs"},
+    {"hour_utc": 24}, {"hour_utc": 17.5}, {"hour_utc": None},
+    {"nwm_record": "medium_range"},
 ])
 def test_bad_streamflow_settings_are_refused(bad):
     assert REGISTRY["astream"].validate_config({**OK, **bad})
@@ -50,6 +51,7 @@ def test_geoglows_has_no_nwm_record():
 def test_only_a2f_streamflow_jobs_get_the_key(monkeypatch):
     monkeypatch.setattr(jobs, "nwm_api_key", lambda: KEY)
     assert jobs.job_env_for(REGISTRY["astream"]) == {"FIMSIM_NWM_API_KEY": KEY}
+    assert jobs.job_env_for(REGISTRY["arun"]) == {"FIMSIM_NWM_API_KEY": KEY}
     assert jobs.job_env_for(REGISTRY["adem"]) == {}
     assert jobs.job_env_for(REGISTRY["dem"]) == {}
 
@@ -127,3 +129,13 @@ def test_geoglows_after_a_picked_nhd_network_is_refused():
 ])
 def test_allowed_combinations_pass(flowline, cfg, key):
     assert guards.check_a2f_streamflow_submit(_aoi_with_flowline(flowline), cfg, key) is None
+
+
+def test_an_unreadable_context_file_is_removed_not_left_with_the_key(tmp_path):
+    from tethysapp.fimsim_gui.job_types.steps_a2f import scrub_nwm_key
+    ctx_path, ctx, feat_ctx_path = _job(tmp_path)
+    feat_ctx_path.write_text('{"nencarta_streamflow": {"nwm_api_key": "' + KEY)  # truncated
+
+    scrub_nwm_key(ctx, str(ctx_path))
+
+    assert not feat_ctx_path.exists()

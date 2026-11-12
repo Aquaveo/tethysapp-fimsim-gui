@@ -7,9 +7,12 @@ orchestrator keeps its state in the AOI's own workflow_context.json, which the
 job wrapper persists with the workspace, so the steps chain across Dask jobs.
 """
 import json
+import os
 import re
 import shutil
 from pathlib import Path
+
+from fimcore.api_keys import NWM_KEY_ENV   # "FIMSIM_NWM_API_KEY"
 
 from tethysapp.fimsim_gui.job_types.registry import (
     UniformStepJobType, _check_choice, _check_number,
@@ -33,6 +36,18 @@ A2F_NWM_RECORDS = ("auto", "retrospective", "analysis_assim", "forecast")
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
+def _real_date(value) -> bool:
+    """A real calendar day written YYYY-MM-DD (2019-02-30 is not)."""
+    from datetime import date
+    if not (isinstance(value, str) and _ISO_DATE.match(value)):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
 def scrub_nwm_key(ctx, ctx_path=None) -> int:
     """Remove the NWM key fimcore saves into the context files — the AOI's
     workflow_context.json (nencarta_streamflow) and the project's
@@ -46,7 +61,13 @@ def scrub_nwm_key(ctx, ctx_path=None) -> int:
     for path in paths:
         if not path.exists():
             continue
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            # unreadable (e.g. truncated by a failed write): the key can't be
+            # cut out, so the file goes — and the step's own error survives
+            path.unlink(missing_ok=True)
+            continue
         removed += _drop_key(data)
         path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
     removed += _drop_key(ctx)
@@ -65,6 +86,39 @@ def _drop_key(obj) -> int:
         for v in obj:
             n += _drop_key(v)
     return n
+
+
+class A2FKeyMixin:
+    """For A2F steps that call CIROH with the NWM key (needs_nwm_key): the
+    key is masked in every log line and error message, and removed from the
+    context files when the step ends — fimcore saves it there — so it never
+    reaches the database or the persisted workspace."""
+
+    needs_nwm_key = True
+
+    @staticmethod
+    def _mask(text) -> str:
+        key = os.environ.get(NWM_KEY_ENV) or ""
+        text = str(text)
+        return text.replace(key, "***") if key else text
+
+    def execute(self, ctx_path, ctx, config, log_fn):
+        def masked_log(msg, *a, **kw):
+            return log_fn(self._mask(msg), *a, **kw)
+        try:
+            self.run_engine(ctx_path, ctx, config, masked_log)
+        except Exception as exc:
+            # StepRun.error stores the message + traceback: mask it, and drop
+            # the original (from None) so its unmasked text isn't chained in
+            raise RuntimeError(self._mask(exc)) from None
+        finally:
+            self.clean_secrets(ctx, ctx_path)
+
+    def run_engine(self, ctx_path, ctx, config, log_fn):
+        super().execute(ctx_path, ctx, config, log_fn)
+
+    def clean_secrets(self, ctx, ctx_path):
+        scrub_nwm_key(ctx, ctx_path)
 
 
 def _arc_files(ctx) -> Path:
@@ -184,7 +238,7 @@ class A2FFlowlineJobType(UniformStepJobType):
                                Path(outputs) / "preview_features.geojson")
 
 
-class A2FStreamflowJobType(UniformStepJobType):
+class A2FStreamflowJobType(A2FKeyMixin, UniformStepJobType):
     """Streamflow for A2F: the river flows to map, at one date + hour.
     fimcore checks the settings (and the NWM key) and, for NWM, fetches the
     flow at that time for every reach; NenCarta reads it in the Run step."""
@@ -194,8 +248,6 @@ class A2FStreamflowJobType(UniformStepJobType):
     orchestrator = "run_arc_flowfile_for_all_aois"
     orchestrator_module = "fimcore.arc_orchestrate"
     clean_patterns = ("flow_series",)
-    #: the worker gets FIMSIM_NWM_API_KEY (jobs.job_env_for)
-    needs_nwm_key = True
 
     def defaults(self) -> dict:
         # Test Case 3 (Big Sioux): NWM, 2019-09-19 17:00 UTC
@@ -207,10 +259,10 @@ class A2FStreamflowJobType(UniformStepJobType):
         _check_choice(config, "source", A2F_STREAMFLOW_SOURCES, problems)
         _check_choice(config, "nwm_record", A2F_NWM_RECORDS, problems)
         _check_number(config, "hour_utc", 0, 23, problems)
-        if "hour_utc" in config and isinstance(config["hour_utc"], float):
+        if "hour_utc" in config and (config["hour_utc"] is None
+                                     or isinstance(config["hour_utc"], float)):
             problems.append("'hour_utc' must be a whole hour (0–23)")
-        date = config.get("date")
-        if not (isinstance(date, str) and _ISO_DATE.match(date)):
+        if not _real_date(config.get("date")):
             problems.append("'date' must be the day to map, as YYYY-MM-DD")
         return problems
 
@@ -227,13 +279,6 @@ class A2FStreamflowJobType(UniformStepJobType):
             out["record"] = cfg["nwm_record"]
         return out
 
-    def execute(self, ctx_path, ctx, config, log_fn):
-        try:
-            super().execute(ctx_path, ctx, config, log_fn)
-        finally:
-            # never persist the key with the workspace, even after a failure
-            scrub_nwm_key(ctx, ctx_path)
-
     def collect(self, ctx, workdir) -> str:
         outputs = Path(workdir) / "outputs"
         outputs.mkdir(exist_ok=True)
@@ -242,3 +287,88 @@ class A2FStreamflowJobType(UniformStepJobType):
             for p in sorted(series.glob("*.csv")):
                 shutil.copy2(p, outputs / p.name)
         return str(outputs)
+
+
+#: A2F-4: run settings — Recommended (Joseph Gutenson's, with an automatic
+#: rerun on the FIMsim classic settings when it fails) or Classic only
+A2F_PRESETS = ("recommended", "classic")
+
+
+class A2FRunJobType(A2FKeyMixin, UniformStepJobType):
+    """Run for A2F: NenCarta (ARC + Curve2Flood) maps the flood for the
+    Streamflow step's flows; fimcore reprojects the maps to the AOI's UTM grid
+    (<AOI>/FloodMaps/depth_*.tif + FIM_*.tif). Results get the same depth
+    overlay as LISFLOOD-FP, plus which settings actually ran."""
+
+    step_key = "arun"
+    requires = ("astream",)
+    orchestrator = "run_arc_curve2flood_for_all_aois"
+    orchestrator_module = "fimcore.arc_orchestrate"
+    clean_patterns = ("nencarta-output", "FloodMaps", "nencarta*.json")
+
+    def defaults(self) -> dict:
+        return {"preset": "recommended"}
+
+    def check_values(self, config: dict) -> list:
+        problems = []
+        _check_choice(config, "preset", A2F_PRESETS, problems)
+        return problems
+
+    def transform_config(self, cfg: dict, ctx) -> dict:
+        from fimcore.arc_presets import preset
+        return preset(cfg["preset"])
+
+    def run_engine(self, ctx_path, ctx, config, log_fn):
+        from fimcore.deps import FIX_HINT
+        from fimcore.nencarta_run import flood_mapping_cli
+
+        if flood_mapping_cli() is None:
+            raise RuntimeError("NenCarta's flood-mapping command is not installed "
+                               "on this worker.\n" + FIX_HINT)
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # NenCarta imports PyQt5
+        super().run_engine(ctx_path, ctx, config, log_fn)
+        if not _floodmaps(ctx, "depth_*.tif"):
+            raise RuntimeError("NenCarta finished but produced no flood depth map — "
+                               "the log above says why")
+
+    def clean_secrets(self, ctx, ctx_path):
+        super().clean_secrets(ctx, ctx_path)
+        # the NenCarta JSON files carry the key in plain text
+        places = [Path(f["folder_path"]) for f in ctx.get("aoi_features") or []]
+        if ctx_path:
+            places.append(Path(ctx_path).parent)
+        for place in places:
+            for p in place.glob("nencarta*.json"):
+                p.unlink(missing_ok=True)
+
+    def collect(self, ctx, workdir) -> str:
+        import rasterio
+
+        from tethysapp.fimsim_gui.job_types.previews import write_depth_overlay
+
+        outputs = Path(workdir) / "outputs"
+        outputs.mkdir(exist_ok=True)
+        for p in _floodmaps(ctx, "*.tif"):
+            shutil.copy2(p, outputs / p.name)
+        depth_tif = _floodmaps(ctx, "depth_*.tif")[0]
+        with rasterio.open(depth_tif) as src:
+            depth = src.read(1, masked=True).filled(0).astype("float32")
+            depth[depth < 0] = 0.0
+            write_depth_overlay(depth, src.transform, src.crs, src.bounds, outputs,
+                                extra={"settings_used": _settings_used(ctx)})
+        return str(outputs)
+
+
+def _floodmaps(ctx, pattern) -> list:
+    folder = Path(ctx["aoi_features"][0]["folder_path"]) / "FloodMaps"
+    return sorted(folder.glob(pattern)) if folder.is_dir() else []
+
+
+def _settings_used(ctx):
+    """Which settings mapped the flood ("the FIMsim classic settings" after a
+    fallback) — fimcore records it in the AOI's workflow_context.json."""
+    path = Path(ctx["aoi_features"][0]["folder_path"]) / "workflow_context.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("arc_settings_used")
+    except (OSError, ValueError):
+        return None

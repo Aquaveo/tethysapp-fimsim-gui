@@ -113,7 +113,7 @@ def test_step_keys_cover_every_model_in_wizard_order():
     assert STEP_KEYS == ("dem", "manning", "bci", "bdy", "par", "run",
                          "tdem", "tfric", "tbc", "thyg", "tcfg",
                          "dem_tool", "lulc_tool", "flowline_tool", "flow_tool",
-                         "adem", "aflow", "astream")
+                         "adem", "aflow", "astream", "arun")
 
 
 def test_supersede_is_graph_based_not_order_based():

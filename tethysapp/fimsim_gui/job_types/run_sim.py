@@ -7,7 +7,6 @@ reported upstream), runs the solver with cooperative cancel + progress from
 the results-file count, and post-processes res.max into a GeoTIFF plus a
 web overlay (PNG + WGS84 bounds) for FE8's map.
 """
-import json
 import re
 import shutil
 import subprocess
@@ -161,9 +160,7 @@ class RunSimJobType(StepJobType):
         ctx["_run_keep_snapshots"] = str(cfg.get("keep_snapshots")).lower() == "true"
 
     def collect(self, ctx, workdir) -> str:
-        import numpy as np
         import rasterio
-        from rasterio.warp import transform_bounds
 
         folder = Path(ctx["aoi_features"][0]["folder_path"])
         results_dir = Path(ctx["_run_results_dir"])
@@ -202,35 +199,6 @@ class RunSimJobType(StepJobType):
         with rasterio.open(outputs / "max_depth.tif", "w", **profile) as dst:
             dst.write(depth, 1)
 
-        # Web overlay: blue ramp PNG + WGS84 bounds for MapLibre's image source
-        wet = depth > 0.01
-        top = np.percentile(depth[wet], 98) if wet.any() else 1.0
-        norm = np.clip(depth / max(top, 0.01), 0, 1)
-        rgba = np.zeros((4, *depth.shape), dtype="uint8")
-        rgba[0] = (30 + 20 * (1 - norm)).astype("uint8")          # R
-        rgba[1] = (100 + 60 * (1 - norm)).astype("uint8")         # G
-        rgba[2] = (140 + 115 * norm).astype("uint8")              # B
-        rgba[3] = np.where(wet, (120 + 135 * norm), 0).astype("uint8")  # A
-        png_profile = dict(driver="PNG", width=depth.shape[1],
-                           height=depth.shape[0], count=4, dtype="uint8")
-        with rasterio.open(outputs / "max_depth_overlay.png", "w", **png_profile) as dst:
-            dst.write(rgba)
-
-        w, s, e, n = transform_bounds(crs, "EPSG:4326", *bounds)
-        # true 4-corner quad (TL,TR,BR,BL) so the overlay matches a rotated AOI
-        # instead of the flattened W/S/E/N envelope (FIMSIM-FE33)
-        from pyproj import Transformer
-        _tf = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-        _left, _bottom, _right, _top = bounds
-        corners = [list(_tf.transform(x, y)) for x, y in
-                   ((_left, _top), (_right, _top), (_right, _bottom), (_left, _bottom))]
-        stats = {
-            "bounds": {"west": w, "south": s, "east": e, "north": n},
-            "corners": corners,
-            "max_depth_m": float(depth.max()),
-            "wet_fraction": float(wet.mean()),
-            "wet_area_km2": float(wet.sum() * abs(profile["transform"].a
-                                                  * profile["transform"].e) / 1e6),
-        }
-        (outputs / "overlay_bounds.json").write_text(json.dumps(stats, indent=2))
+        from tethysapp.fimsim_gui.job_types.previews import write_depth_overlay
+        write_depth_overlay(depth, profile["transform"], crs, bounds, outputs)
         return str(outputs)
