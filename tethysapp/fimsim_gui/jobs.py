@@ -360,6 +360,7 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
     engine = create_engine(db_url)
     session = sessionmaker(bind=engine)()
     scratch = None
+    adapter = None
     try:
         # inside the try: a PROJ failure must mark the run failed, not
         # strand it in "queued"
@@ -438,11 +439,13 @@ def run_step_job(db_url: str, storage_config: dict, steprun_id: int,
         _finalize(session, steprun_id, "cancelled", None)
         return {"status": "cancelled", "steprun_id": steprun_id}
     except JobTimeout:
+        _save_pending_log(adapter, session)
         _finalize(session, steprun_id, "failed",
                   f"Job exceeded its {timeout_s}s time limit and was stopped.")
         return {"status": "failed", "steprun_id": steprun_id, "error": "timeout"}
     except Exception as exc:
         tb_tail = traceback.format_exc()[-4000:]
+        _save_pending_log(adapter, session)
         _finalize(session, steprun_id, "failed",
                   f"{type(exc).__name__}: {exc}\n{tb_tail}")
         if isinstance(exc, ProjBroken):
@@ -467,6 +470,25 @@ def _exit_poisoned_worker(session, engine):
     except Exception:
         pass
     _os._exit(70)
+
+
+def _save_pending_log(adapter, session):
+    """Write the log lines still buffered when a job fails.
+
+    The adapter writes every few seconds, so the last lines before an error —
+    usually the ones that explain it — are still in memory, and _finalize's
+    rollback would drop them.  Best effort: a failure here (e.g. the database
+    is what broke) must not replace the job's own error.
+    """
+    if adapter is None:
+        return
+    try:
+        adapter.flush()  # commits; nothing else is pending on a failed run
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass  # _finalize reports the job's error, or fails on its own
 
 
 def _finalize(session, steprun_id, status, error):

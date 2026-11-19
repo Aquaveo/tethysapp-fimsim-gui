@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from tethysapp.fimsim_gui.jobs import (
-    JobCancelled, JobTimeout, LogAdapter, parse_marker,
+    JobCancelled, JobTimeout, LogAdapter, _save_pending_log, parse_marker,
 )
 
 
@@ -111,6 +111,113 @@ def test_adapter_records_failure_markers():
     a("▶ Manning [1/1]: 'Neuse' …")
     a("✗ Manning [1/1] ERROR for 'Neuse': lulc.ascii not found")
     assert a.failure_messages and "lulc.ascii" in a.failure_messages[0]
+
+
+def _buffering_adapter():
+    """An adapter that has not written its latest lines yet (as between the
+    worker's periodic flushes)."""
+    run = SimpleNamespace(status="running", progress=None, log=None)
+    session = FakeSession(run)
+    a = LogAdapter(session, run, flush_interval=3600, cancel_interval=3600,
+                   clock=lambda: 0.0)
+    return a, run, session
+
+
+def test_a_failing_job_keeps_the_lines_that_explain_it():
+    a, run, session = _buffering_adapter()
+    a("  ⚠ could not reproject the flood maps: aoi.geojson: No such file")
+    assert run.log is None
+
+    _save_pending_log(a, session)
+
+    assert "could not reproject" in run.log
+
+
+def test_a_failed_log_save_never_replaces_the_jobs_error():
+    a, run, session = _buffering_adapter()
+    a("line")
+    rolled_back = []
+
+    def broken_commit():
+        raise RuntimeError("database gone")
+    session.commit = broken_commit
+    session.rollback = lambda: rolled_back.append(True)
+
+    _save_pending_log(a, session)  # must not raise
+    assert rolled_back == [True]
+
+
+def test_a_dead_connection_never_replaces_the_jobs_error():
+    a, run, session = _buffering_adapter()
+    a("line")
+
+    def gone():
+        raise RuntimeError("connection closed")
+    session.commit = gone
+    session.rollback = gone
+
+    _save_pending_log(a, session)  # must not raise
+
+
+def test_no_adapter_yet_is_fine():
+    _save_pending_log(None, FakeSession(None))
+
+
+def test_run_step_job_saves_the_last_lines_before_it_marks_the_run_failed(monkeypatch):
+    """The wiring: a job that logs and then raises has its last line in the
+    run's log by the time the run is finalized (which rolls back)."""
+    import sqlalchemy
+    import sqlalchemy.orm
+
+    from tethysapp.fimsim_gui import jobs, job_types, storage
+
+    run = SimpleNamespace(status="queued", progress=None, log=None, config={},
+                          step_key="fake_step", started=None,
+                          aoi=SimpleNamespace(id=1, project=SimpleNamespace(
+                              username="u", id=1)))
+    session = FakeSession(run)
+    session.rollback = lambda: None
+    session.close = lambda: None
+
+    class FailingStep:
+        derived_config_keys = ()
+
+        def prepare(self, scratch, aoi_file, log_fn):
+            return str(scratch / "ctx.json"), {}
+
+        def clean_workspace(self, ctx, log_fn):
+            pass
+
+        def prestage_shared_cache(self, storage, ctx, log_fn):
+            pass
+
+        def prestage_inputs(self, storage, ctx, cfg, log_fn):
+            pass
+
+        def execute(self, ctx_path, ctx, cfg, log_fn):
+            log_fn("starting NenCarta")  # the first line is written at once
+            log_fn("⚠ could not reproject the flood maps")  # still buffered
+            raise RuntimeError("produced no flood depth map")
+
+    logged_at_finalize = []
+    monkeypatch.setattr(sqlalchemy, "create_engine",
+                        lambda url: SimpleNamespace(dispose=lambda: None))
+    monkeypatch.setattr(sqlalchemy.orm, "sessionmaker",
+                        lambda bind: lambda: session)
+    monkeypatch.setattr(jobs, "_ensure_django", lambda: None)
+    monkeypatch.setattr(jobs, "_sanity_check_proj", lambda: None)
+    monkeypatch.setattr(jobs, "_load_step_run", lambda s, i: run)
+    monkeypatch.setattr(jobs, "_write_aoi_geojson", lambda aoi, dest: dest)
+    monkeypatch.setattr(jobs, "_restore_workspace", lambda *a: None)
+    monkeypatch.setattr(jobs, "_finalize",
+                        lambda s, i, status, error: logged_at_finalize.append(run.log))
+    monkeypatch.setattr(storage, "service_from_config", lambda cfg: None)
+    monkeypatch.setitem(job_types.REGISTRY, "fake_step", FailingStep())
+
+    result = jobs.run_step_job("sqlite://", {}, 7)
+
+    assert result["status"] == "failed"
+    assert "could not reproject" in logged_at_finalize[0]
 
 
 def test_adapter_cancel_latches():
