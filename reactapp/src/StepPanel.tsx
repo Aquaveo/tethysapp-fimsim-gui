@@ -8,12 +8,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ApiError, cancelStepRun, downloadSelectedZip, getStepRun, getStepRunOutputs, submitStep,
-  uploadDem, type OutputEntry, type ServerAoi, type ServerStepRun, type StepSchema,
+  uploadDem, type OutputEntry, type PickedInput, type ServerAoi, type ServerStepRun,
+  type StepSchema,
 } from './api';
 import { fileProxyUrl, formatBytes, saveBlob, stepZipFiles, zipFilename } from './outputsMeta';
 import BoundaryPreview from './BoundaryPreview';
 import HydrographChart from './HydrographChart';
 import RasterPreview from './RasterPreview';
+import PreparedPicker from './PreparedPicker';
+import { PICK_NOUN, preparedKindFor } from './prepared';
 import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
@@ -135,11 +138,19 @@ export default function StepPanel({
   // BE17: per-AOI uploaded DEMs (keys) for the "upload my DEM" path
   const [demKeys, setDemKeys] = useState<Record<number, { key: string; name: string }[]>>({});
   const [demBusy, setDemBusy] = useState<number | null>(null);
+  // FE72: per-AOI file picked from a Preparing Input Data tool (copied into
+  // the AOI by BE21), keyed "<kind>:<aoiId>" so switching the input choice
+  // never sends a pick of the wrong kind
+  const [picks, setPicks] = useState<Record<string, PickedInput | null>>({});
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
   const visible = (f: FieldSpec) => fieldVisible(f.showIf, value, f.hideIf);
   const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
     && value('dem_input') === 'upload';
+  const pickKind = preparedKindFor(stepKey, value);
+  const pickOf = (aoiId: number) => (pickKind ? picks[`${pickKind}:${aoiId}`] ?? null : null);
+  const setPick = (aoiId: number, p: PickedInput | null) =>
+    setPicks((prev) => ({ ...prev, [`${pickKind}:${aoiId}`]: p }));
   // the editable per-class table, on BOTH Roughness steps (bug-round #iv)
   const tableSource = manningTableSource(stepKey, value);
   const preview = previewKind(stepKey);
@@ -236,6 +247,17 @@ export default function StepPanel({
         aoiConfigs = {};
         for (const a of aois) {
           aoiConfigs[String(a.id)] = { user_dem_keys: demKeys[a.id].map((d) => d.key) };
+        }
+      }
+      if (pickKind) {
+        const missing = aois.filter((a) => !pickOf(a.id));
+        if (missing.length) {
+          throw new Error(`Pick a prepared ${PICK_NOUN[pickKind]} for: `
+            + missing.map((a) => a.name).join(', '));
+        }
+        aoiConfigs = {};
+        for (const a of aois) {
+          aoiConfigs[String(a.id)] = { [`user_${pickKind}_keys`]: [pickOf(a.id)!.key] };
         }
       }
       const { results } = await submitStep(projectId, stepKey, merged, aoiConfigs);
@@ -404,6 +426,12 @@ export default function StepPanel({
                   )}
                 </div>
               )}
+              {pickKind && (
+                <PreparedPicker
+                  key={pickKind} aoiId={a.id} kind={pickKind} picked={pickOf(a.id)}
+                  onPick={(p) => setPick(a.id, p)}
+                  onClear={() => setPick(a.id, null)} />
+              )}
               {stepKey === 'run' && (
                 <p className="sp-field-help">
                   Typical runtime: a 200–300 km² area at 10 m takes about 3–4
@@ -424,7 +452,7 @@ export default function StepPanel({
                 <>
                   {ACTIVE.includes(run.status) && <ProgressBar run={run} />}
                   {run.status === 'succeeded' && preview === 'hydrograph' && (
-                    <HydrographChart run={run} />
+                    <HydrographChart run={run} aoiName={a.name} />
                   )}
                   {run.status === 'succeeded' && preview === 'boundary' && (
                     <BoundaryPreview

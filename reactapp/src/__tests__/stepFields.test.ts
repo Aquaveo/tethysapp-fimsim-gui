@@ -80,6 +80,26 @@ describe('STEP_FIELDS consistency', () => {
   });
 });
 
+// FIMSIM-FE68 (Sagy, 2026-10-22): the cell size resamples the 10 m 3DEP
+// source; it is not a choice of download product.
+describe('DEM cell size is labelled as a resampling (FIMSIM-FE68)', () => {
+  const field = (step: string) => STEP_FIELDS[step].find((f) => f.key === 'dem_res_m');
+
+  it('labels the Terrain selects "Resampling cell size" and keeps 10 m as native', () => {
+    for (const step of ['dem', 'tdem']) {
+      expect(field(step)?.label).toBe('Resampling cell size');
+      expect(field(step)?.options?.[0].label).toBe('10 m — native (default)');
+    }
+  });
+
+  it('labels the DEM tool field "Resampling cell size (m)", 10 m native, coarser resampled', () => {
+    const f = field('dem_tool');
+    expect(f?.label).toBe('Resampling cell size (m)');
+    expect(f?.help).toMatch(/10 m is the native/);
+    expect(f?.help).toMatch(/resampled from/);
+  });
+});
+
 describe('DEM resolution tooltip (FIMSIM-FE51)', () => {
   const help = (step: string) =>
     STEP_FIELDS[step].find((f) => f.key === 'dem_res_m')?.help ?? '';
@@ -179,5 +199,23 @@ describe('flow_tool fields (FIMSIM-FE64)', () => {
     expect(byKey.forecast_date.required).toBe(true);
     expect(byKey.interval_hours.options?.map((o) => o.value)).toEqual([0.25, 0.5, 1, 3, 6, 12, 24]);
     expect(byKey.forecast_hour.options?.[0]).toEqual({ value: '', label: 'Auto (latest cycle)' });
+  });
+});
+
+// FIMSIM-FE72 (round 2, Terrain part): a DEM made by the DEM tool can be
+// picked in Terrain instead of downloading or uploading one.
+describe('Terrain offers a prepared DEM (FIMSIM-FE72)', () => {
+  const input = (step: string) => STEP_FIELDS[step].find((f) => f.key === 'dem_input');
+
+  it('adds "prepared" after download and upload on both models', () => {
+    for (const step of ['dem', 'tdem']) {
+      expect(input(step)?.options?.map((o) => o.value)).toEqual(['download', 'upload', 'prepared']);
+      expect(input(step)?.options?.[2].label).toBe('Use a DEM from the DEM tool');
+    }
+  });
+
+  it('explains that a picked DEM is copied and must cover the area', () => {
+    expect(input('dem')?.help).toMatch(/DEM tool/);
+    expect(input('dem')?.help).toMatch(/cover/);
   });
 });

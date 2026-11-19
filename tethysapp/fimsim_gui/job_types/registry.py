@@ -99,6 +99,9 @@ class StepJobType:
     #: validation (e.g. run's solver_path: client-supplied would execute an
     #: arbitrary binary on the worker)
     server_only_keys: tuple = ()
+    #: keys prestage_inputs derives from a supplied file (e.g. a picked flow
+    #: series' dates) that are saved back onto the run's config for the UI
+    derived_config_keys: tuple = ()
 
     def defaults(self) -> dict:
         return {}

@@ -2,16 +2,24 @@
 // FE5's centerpiece: the event hydrograph, read from the ACTUAL .bdy file a
 // run produced (what you see is literally what LISFLOOD-FP consumes). The
 // echarts bundle is heavy, so the chart lazy-loads; parsing happens here.
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import type EChartsReact from 'echarts-for-react';
 import { getStepRunOutputs, type ServerStepRun } from './api';
 import { parseBdy, parseDischargeCsv, parseHyg, type Series } from './bdy';
 import { dischargeOutputs } from './flowTool';
-import { fileProxyUrl } from './outputsMeta';
+import { fileProxyUrl, pngFilename, saveBlob } from './outputsMeta';
 import { dateAxisMinInterval, formatDateTick, formatDateTime } from './hydrographAxis';
 
 const ReactECharts = lazy(() => import('echarts-for-react'));
 
-export default function HydrographChart({ run }: { run: ServerStepRun }) {
+export default function HydrographChart({ run, aoiName = 'area' }: {
+  run: ServerStepRun;
+  /** names the PNG download (FE69): `<area>_<step>_hydrograph.png` */
+  aoiName?: string;
+}) {
+  // echarts-for-react's instance, for the PNG export
+  const chartRef = useRef<EChartsReact | null>(null);
+  const [saving, setSaving] = useState(false);
   const [series, setSeries] = useState<Series[] | null>(null);
   const [unit, setUnit] = useState<'m³/s' | 'm²/s'>('m³/s');
   const [error, setError] = useState<string | null>(null);
@@ -161,20 +169,46 @@ export default function HydrographChart({ run }: { run: ServerStepRun }) {
     }),
   };
 
+  const caption = (sourceNote ? `${sourceNote} · ` : '')
+    + (series.length > 1 ? `${series.length} series · ` : `${s0.boundary} · `)
+    + `peak ${peak[1].toFixed(1)} ${unit} · ${durationH.toFixed(0)} h event`
+    + (startMs !== null ? ` from ${formatDateTime(s0.points[0][0])}` : '');
+
+  // FE69: the chart as a PNG (2× for slides), with the caption drawn in as a
+  // title for the export only — the on-screen caption stays below the chart.
+  const downloadPng = async () => {
+    const inst = chartRef.current?.getEchartsInstance();
+    if (!inst) return;
+    setSaving(true);
+    try {
+      inst.setOption({ title: { show: true, text: caption, left: 'center', top: 4,
+        textStyle: { fontSize: 11, fontWeight: 'normal', color: '#152428' } } });
+      const url = inst.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+      inst.setOption({ title: { show: false } });
+      saveBlob(await (await fetch(url)).blob(), pngFilename(aoiName, run.step_key));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="hg-wrap">
       <Suspense fallback={<span className="sp-muted">loading chart…</span>}>
-        <ReactECharts option={option} style={{ height: 230 }} notMerge />
+        <ReactECharts ref={chartRef} option={option} style={{ height: 230 }} notMerge />
       </Suspense>
-      <span className="sp-muted">
-        {sourceNote && <>{sourceNote} · </>}
-        {series.length > 1 ? `${series.length} series · ` : `${s0.boundary} · `}peak {peak[1].toFixed(1)} {unit} · {durationH.toFixed(0)} h event
-        {startMs !== null && ` from ${formatDateTime(s0.points[0][0])}`}
-        {unit === 'm³/s'
-          ? (toolRun ? ' — one series per ID, as downloaded.'
-            : ' — the solver receives this series scaled per metre of cell width.')
-          : ' — LISFLOOD per-metre-width values (raw discharge ÷ DEM cell size).'}
-      </span>
+      <div className="hg-caption">
+        <span className="sp-muted">
+          {caption}
+          {unit === 'm³/s'
+            ? (toolRun ? ' — one series per ID, as downloaded.'
+              : ' — the solver receives this series scaled per metre of cell width.')
+            : ' — LISFLOOD per-metre-width values (raw discharge ÷ DEM cell size).'}
+        </span>
+        <button type="button" className="button-secondary hg-png" disabled={saving}
+                onClick={() => void downloadPng()}>
+          {saving ? 'Saving…' : '⬇ PNG'}
+        </button>
+      </div>
     </div>
   );
 }

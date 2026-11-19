@@ -177,3 +177,15 @@ def test_live_minio_roundtrip_and_presign(tmp_path):
     finally:
         svc.delete(key)
         svc.delete(build_key("reshma", 999, 1, "dem", "put.bin"))
+
+
+# FIMSIM-BE20: a path GDAL can read without downloading the object
+def test_local_path_or_internal_url(storage):
+    key = build_key("reshma", 1, 1, "dem_tool", "DEM_3DEP_A.tif")
+    storage.save(key, b"tif")
+    path = storage.local_path(key)
+    if path is not None:                                   # local backend
+        assert path.endswith("reshma/1/1/dem_tool/DEM_3DEP_A.tif")
+        assert storage.internal_url(key) is None
+    else:                                                  # S3 backend
+        assert "DEM_3DEP_A.tif" in storage.internal_url(key)

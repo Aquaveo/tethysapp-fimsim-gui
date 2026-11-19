@@ -148,8 +148,8 @@ export const DEM_RES_HELP =
 
 /** The tools take any cell size ≥ 10 m (FE51 floor), not a 10/30/90 pick. */
 export const TOOL_CELL_HELP =
-  '10 m is the native USGS 3DEP resolution; coarser cells are resampled from '
-  + 'it. The web app does not go below 10 m — for finer grids use the desktop FIMsim.';
+  '10 m is the native USGS 3DEP resolution; any coarser cell size is resampled from '
+  + 'that 10 m source, not a separate download. The web app does not go below 10 m — for finer grids use the desktop FIMsim.';
 
 /** fimcore.export.export_raster formats (DEM, LULC and Manning exports). */
 export const RASTER_FORMAT_OPTIONS = [
@@ -201,12 +201,52 @@ export function manningTableSource(
     return String(get('lulc_source') || 'nlcd') === 'nlcd' ? 'nlcd' : 'esri';
   }
   if (stepKey !== 'manning' && stepKey !== 'tfric') return null;
+  if (get('manning_input') === 'prepared_manning') return null;   // values come from the file
   if (get('fric_mode') !== 'varying') return null;
   const src = stepKey === 'manning'
     ? String(get('lulc_download_source') || 'esri')
     : String(get('lulc_source') || 'download');
   return src === 'nlcd' || src === 'download_nlcd' ? 'nlcd' : 'esri';
 }
+
+const DEM_INPUT_HELP = 'Upload one or more GeoTIFFs (merged if several, resampled to the '
+  + 'cell size below) instead of downloading elevation, or use a DEM made by the '
+  + 'Preparing Input Data DEM tool: it is copied into this area and must cover it.';
+
+// FIMSIM-BE22 / FE72: Roughness can download land cover or use a file from
+// the LULC & Manning tool (a Manning's n grid as is, or its land cover with
+// the class table). Same field on LISFLOOD-FP (manning) and TRITON (tfric).
+const ROUGHNESS_INPUT: FieldSpec = {
+  key: 'manning_input', label: 'Roughness input', widget: 'select',
+  help: 'Download land cover for this area, or use a file made by the Preparing '
+    + "Input Data LULC & Manning tool: its Manning's n grid is used as is, its land "
+    + 'cover gets the class table below. The file is copied into this area and '
+    + 'must cover it.',
+  options: [
+    { value: 'download', label: 'Download land cover' },
+    { value: 'prepared_manning', label: "Use a Manning's n grid from the LULC & Manning tool" },
+    { value: 'prepared_lulc', label: 'Use land cover from the LULC & Manning tool' },
+  ],
+};
+const PREPARED_ROUGHNESS: Condition[] = [
+  { key: 'manning_input', value: 'prepared_manning' },
+  { key: 'manning_input', value: 'prepared_lulc' },
+];
+// a picked file always means varying friction
+const FRIC_FOLLOWS_INPUT = {
+  key: 'manning_input', values: { prepared_manning: 'varying', prepared_lulc: 'varying' },
+};
+const PICKED_LULC_HELP = 'For land cover from the tool, choose the source the tool '
+  + 'used, so the class table matches its classes.';
+
+// FIMSIM-BE23 / FE72: Flow Data can use a series from the Streamflow Data tool
+const FLOW_PREPARED_OPTION = {
+  value: 'prepared', label: 'Use a series from the Streamflow Data tool',
+};
+const FLOW_SOURCE_HELP = 'Download the inflow for an event window, or use a series '
+  + 'made by the Preparing Input Data Streamflow Data tool: it is copied into this '
+  + 'area and its own dates set the event window.';
+const PREPARED_FLOW: Condition = { key: 'bdy_source', value: 'prepared' };
 
 export const STEP_FIELDS: Record<string, FieldSpec[]> = {
   dem: [
@@ -215,14 +255,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: [
         { value: 'download', label: 'Download (USGS 3DEP)' },
         { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+        { value: 'prepared', label: 'Use a DEM from the DEM tool' },   // FE72
       ],
-      help: 'Upload one or more GeoTIFFs (merged if several, resampled to the '
-        + 'resolution below) instead of downloading elevation.',
+      help: DEM_INPUT_HELP,
     },
     {
-      key: 'dem_res_m', label: 'Resolution', widget: 'select',
+      key: 'dem_res_m', label: 'Resampling cell size', widget: 'select',   // FE68
       options: [
-        { value: 10, label: '10 m — default' },
+        { value: 10, label: '10 m — native (default)' },
         { value: 30, label: '30 m (faster, coarser)' },
         { value: 90, label: '90 m (fastest, coarsest)' },
       ],
@@ -230,6 +270,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
   ],
   manning: [
+    ROUGHNESS_INPUT,
     {
       key: 'fric_mode', label: 'Friction', widget: 'select',
       help: "Surface roughness (Manning's n) controls how much the ground slows "
@@ -239,6 +280,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'varying', label: 'From land cover (varying)' },
         { value: 'fixed', label: 'Single value everywhere (fixed)' },
       ],
+      hideIf: PREPARED_ROUGHNESS,
+      linkedDefault: FRIC_FOLLOWS_INPUT,
     },
     {
       key: 'fpfric_val', label: "Fixed Manning's n", widget: 'number',
@@ -251,6 +294,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'lulc_download_source', label: 'Land cover source', widget: 'select',
       showIf: { key: 'fric_mode', value: 'varying' },
+      hideIf: { key: 'manning_input', value: 'prepared_manning' },
+      help: PICKED_LULC_HELP,
       options: [
         { value: 'esri', label: 'Esri Sentinel-2 (10 m, global)' },
         { value: 'nlcd', label: 'NLCD (30 m, USA)' },
@@ -261,12 +306,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: SENTINEL2_YEAR_OPTIONS,
       showIf: [{ key: 'fric_mode', value: 'varying' },
                { key: 'lulc_download_source', value: 'esri' }],
+      hideIf: PREPARED_ROUGHNESS,
     },
     {
       key: 'nlcd_year', label: 'Land cover year', widget: 'select',
       options: NLCD_YEAR_OPTIONS,
       showIf: [{ key: 'fric_mode', value: 'varying' },
                { key: 'lulc_download_source', value: 'nlcd' }],
+      hideIf: PREPARED_ROUGHNESS,
     },
   ],
   bci: [
@@ -320,10 +367,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'nwm_retro', label: 'NWM retrospective (1979–2023)' },
         { value: 'nwm_forecast', label: 'NWM forecast (2023 onwards)' },
         { value: 'usgs', label: 'USGS gage' },
+        FLOW_PREPARED_OPTION,
       ],
+      help: FLOW_SOURCE_HELP,
     },
-    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true },
-    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true },
+    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true,
+      hideIf: PREPARED_FLOW },
+    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true,
+      hideIf: PREPARED_FLOW },
     { key: 'interval_hours', label: 'Interval (hours)', widget: 'number' },
     {
       key: 'gage_id', label: 'USGS gage ID', widget: 'text',
@@ -363,14 +414,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: [
         { value: 'download', label: 'Download (USGS 3DEP)' },
         { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+        { value: 'prepared', label: 'Use a DEM from the DEM tool' },   // FE72
       ],
-      help: 'Upload one or more GeoTIFFs (merged if several, resampled to the '
-        + 'resolution below) instead of downloading elevation.',
+      help: DEM_INPUT_HELP,
     },
     {
-      key: 'dem_res_m', label: 'Resolution', widget: 'select',
+      key: 'dem_res_m', label: 'Resampling cell size', widget: 'select',   // FE68
       options: [
-        { value: 10, label: '10 m — default' },
+        { value: 10, label: '10 m — native (default)' },
         { value: 30, label: '30 m (faster, coarser)' },
         { value: 90, label: '90 m (fastest, coarsest)' },
       ],
@@ -378,6 +429,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     },
   ],
   tfric: [
+    ROUGHNESS_INPUT,
     {
       key: 'fric_mode', label: 'Friction', widget: 'select',
       help: "Surface roughness (Manning's n) controls how much the ground slows "
@@ -387,6 +439,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'varying', label: 'From land cover (varying)' },
         { value: 'fixed', label: 'Single value everywhere (fixed)' },
       ],
+      hideIf: PREPARED_ROUGHNESS,
+      linkedDefault: FRIC_FOLLOWS_INPUT,
     },
     {
       key: 'fpfric_val', label: "Fixed Manning's n", widget: 'number',
@@ -399,6 +453,8 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
     {
       key: 'lulc_source', label: 'Land cover source', widget: 'select',
       showIf: { key: 'fric_mode', value: 'varying' },
+      hideIf: { key: 'manning_input', value: 'prepared_manning' },
+      help: PICKED_LULC_HELP,
       options: [
         { value: 'download', label: 'Esri Sentinel-2 (10 m, global)' },
         { value: 'download_nlcd', label: 'NLCD (30 m, USA)' },
@@ -409,12 +465,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: SENTINEL2_YEAR_OPTIONS,
       showIf: [{ key: 'fric_mode', value: 'varying' },
                { key: 'lulc_source', value: 'download' }],
+      hideIf: PREPARED_ROUGHNESS,
     },
     {
       key: 'nlcd_year', label: 'Land cover year', widget: 'select',
       options: NLCD_YEAR_OPTIONS,
       showIf: [{ key: 'fric_mode', value: 'varying' },
                { key: 'lulc_source', value: 'download_nlcd' }],
+      hideIf: PREPARED_ROUGHNESS,
     },
     // No resolution control: the friction grid is snapped to the terrain DEM
     // on the server, so a second resolution here would only mislead.
@@ -447,10 +505,14 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         { value: 'nwm_retro', label: 'NWM retrospective (1979–2023)' },
         { value: 'nwm_forecast', label: 'NWM forecast (2023 onwards)' },
         { value: 'usgs', label: 'USGS gage' },
+        FLOW_PREPARED_OPTION,
       ],
+      help: FLOW_SOURCE_HELP,
     },
-    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true },
-    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true },
+    { key: 'start_dt', label: 'Event start (date)', widget: 'date', required: true,
+      hideIf: PREPARED_FLOW },
+    { key: 'end_dt', label: 'Event end (date)', widget: 'date', required: true, endOfDay: true,
+      hideIf: PREPARED_FLOW },
     { key: 'interval_hours', label: 'Interval (hours)', widget: 'number' },
     {
       key: 'gage_id', label: 'USGS gage ID', widget: 'text',
@@ -511,7 +573,7 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
         + 'the nearest stream — the input for HAND-FIM style mapping.',
     },
     {
-      key: 'dem_res_m', label: 'Cell size (m)', widget: 'number',
+      key: 'dem_res_m', label: 'Resampling cell size (m)', widget: 'number',   // FE68
       min: 10, max: 1000, step: 1, help: TOOL_CELL_HELP,
     },
     { key: 'out_format', label: 'File format', widget: 'select', options: RASTER_FORMAT_OPTIONS },
