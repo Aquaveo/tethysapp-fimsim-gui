@@ -13,6 +13,7 @@ const SECTIONS = [
   ['aoi', 'Drawing a good study area'],
   ['steps', 'The wizard, step by step'],
   ['triton', 'TRITON (deck generation)'],
+  ['a2f', 'ARC-Curve2Flood (A2F)'],
   ['input-data', 'Preparing Input Data'],
   ['previews', 'Reading the step previews'],
   ['data', 'Data sources'],
@@ -276,6 +277,57 @@ export default function Docs() {
           </p>
         </section>
 
+        <section id="a2f">
+          <h2>ARC-Curve2Flood (A2F)</h2>
+          <p>
+            A2F maps a flood from <strong>rating curves</strong> instead of
+            simulating the water: ARC builds a depth–discharge curve along every
+            stream from the terrain, and Curve2Flood spreads the chosen flow
+            across the floodplain. Both run on the portal through
+            NenCarta, the authors&apos; driver — the same path as the desktop
+            FIMsim. It is fast (minutes, not hours) and accepts{' '}
+            <strong>any area shape</strong>, such as a watershed outline.
+          </p>
+          <h3>Steps</h3>
+          <ol>
+            <li>
+              <strong>DEM</strong> — USGS 3DEP 1/3 arc-second (10 m) by default, or
+              your own GeoTIFF, or a DEM from the DEM tool. A2F regrids it to
+              latitude/longitude, which NenCarta needs.
+            </li>
+            <li>
+              <strong>Flowline</strong> — the streams to map along: NHDPlus (for
+              NWM flows), GEOGLOWS (for GEOGLOWS flows), or the network from the
+              Flowline tool. A Flowline-tool network must be saved with{' '}
+              <em>All flowlines</em> (Shapefile or GeoPackage) — the main river
+              alone has no stream IDs — and works with NWM flows.
+            </li>
+            <li>
+              <strong>Streamflow</strong> — NWM or GEOGLOWS, at one date and hour
+              (UTC). NWM&apos;s record is chosen by date unless you pick one:
+              retrospective (1979 – Feb 2023), analysis &amp; assimilation, or
+              forecast. NWM needs the portal&apos;s CIROH NWM API key (an
+              administrator sets it once); GEOGLOWS needs none.
+            </li>
+            <li>
+              <strong>Run</strong> — <em>Recommended</em> uses the NenCarta
+              author&apos;s settings, with channel bathymetry. If that run cannot
+              finish (for example &ldquo;No stream geometries remain after
+              conflation&rdquo;), A2F reruns it with the{' '}
+              <em>FIMsim classic</em> settings and Results says
+              &ldquo;mapped with the FIMsim classic settings&rdquo;.
+            </li>
+          </ol>
+          <p>
+            Results shows the depth map over the area and offers the depth and
+            flood-extent GeoTIFFs (<code>depth_*.tif</code>,{' '}
+            <code>FIM_*.tif</code>), reprojected to the area&apos;s UTM zone at
+            10 m. Test case: Big Sioux River, Iowa (Parvaneh&apos;s
+            <code> T2_04</code>), NWM, 2019-09-19 17:00 UTC — about 6.2 m deep
+            at most and about 32 km² flooded.
+          </p>
+        </section>
+
         <section id="input-data">
           <h2>Preparing Input Data</h2>
           <p>
@@ -521,9 +573,8 @@ export default function Docs() {
             <a href="https://github.com/pnikrou/FIMsim" target="_blank" rel="noreferrer">
               desktop FIMsim
             </a>, whose full user manual (with step-by-step screenshots) ships
-            in the repository. The desktop app additionally covers TRITON,
-            OWP HAND-FIM (built on Supath Dhital&apos;s fimserve), and
-            ARC-Curve2Flood, plus four standalone data-download tools. Part of
+            in the repository. The desktop app additionally covers OWP
+            HAND-FIM (built on Supath Dhital&apos;s fimserve). Part of
             the{' '}
             <a href="https://sdml.ua.edu/" target="_blank" rel="noreferrer">
               FIM ecosystem

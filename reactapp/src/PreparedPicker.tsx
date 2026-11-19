@@ -20,6 +20,12 @@ interface Props {
 
 const TOOL_FOR: Record<PreparedKind, string> = {
   dem: 'DEM', manning: 'LULC & Manning', lulc: 'LULC & Manning', flow: 'Streamflow Data',
+  flowline: 'Flowline',
+};
+
+/** What the tool run must have saved for its output to be listed here. */
+const EMPTY_EXTRA: Partial<Record<PreparedKind, string>> = {
+  flowline: ' Tick "All flowlines" (Shapefile or GeoPackage) — the main river alone has no stream IDs.',
 };
 
 const finishedLabel = (iso: string | null) =>
@@ -91,7 +97,7 @@ export default function PreparedPicker({ aoiId, kind, picked, onPick, onClear }:
       {rows?.length === 0 && !error && (
         <p className="pp-empty">
           No {TOOL_FOR[kind]} tool runs yet. Run the tool in a Preparing Input Data
-          project on an area that contains this one, then come back.
+          project on an area that contains this one, then come back.{EMPTY_EXTRA[kind] ?? ''}
         </p>
       )}
       {rows && rows.length > 0 && (

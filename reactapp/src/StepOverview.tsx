@@ -53,6 +53,22 @@ export function summarizeStep(step: string, cfg: Record<string, unknown>): strin
       return s('solver_timeout_s')
         ? `time limit ${Number(s('solver_timeout_s')) / 3600} h`
         : 'time limit 6 h (portal default)';
+    // ── A2F (ARC-Curve2Flood)
+    case 'adem': {
+      const src = s('dem_input') === 'prepared' ? 'DEM-tool file'
+        : s('dem_input') === 'upload' ? 'uploaded DEM' : '3DEP';
+      return `${src} @ ${s('dem_res_m') || '10'} m`;
+    }
+    case 'aflow':
+      return s('source') === 'geoglows' ? 'GEOGLOWS streams'
+        : s('source') === 'prepared' ? 'network from the Flowline tool' : 'NHDPlus streams';
+    case 'astream': {
+      const src = s('source') === 'geoglows' ? 'GEOGLOWS' : 'NWM';
+      const hour = s('hour_utc') === '' ? '12' : s('hour_utc').padStart(2, '0');
+      return `${src} · ${s('date') || '?'} ${hour}:00 UTC`;
+    }
+    case 'arun':
+      return s('preset') === 'classic' ? 'classic settings' : 'recommended settings';
     default:
       return '';
   }

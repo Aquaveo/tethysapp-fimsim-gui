@@ -386,10 +386,12 @@ def api_aoi_prepared(request, session, aoi_id):
     """Prepared tool outputs for a modeling step (round 2 of Preparing Input
     Data, docs/design-input-prep-round2.md).
 
-    GET ?kind=dem|manning|lulc|flow (FIMSIM-BE20) → one row per output file
+    GET ?kind=dem|manning|lulc|flow|flowline (FIMSIM-BE20, A2F-2) → one row per output file
     of that kind from the user's succeeded, current tool runs (any project),
-    newest first, each flagged `covers` (the raster contains this AOI) and
-    `usable` (GeoTIFF / CSV, readable; HAND is never a terrain).
+    newest first, each flagged `covers` (the raster — for a flowline, the
+    Flowline tool's area — contains this AOI) and `usable` (GeoTIFF / CSV /
+    Shapefile or GeoPackage of all flowlines, readable; HAND is never a
+    terrain).
 
     POST {steprun_id, file, kind} (FIMSIM-BE21) → re-checks the pick, copies
     the file to this AOI's user_<kind>/ prefix and returns the upload shape
@@ -424,7 +426,8 @@ def _list_prepared(session, request, aoi):
             .limit(PREPARED_LIST_LIMIT).all())
     storage = get_storage()
     rows = prepared_rows(runs, kind, to_shape(aoi.geometry),
-                         lambda key: raster_bounds_4326(storage, key))
+                         lambda key: raster_bounds_4326(storage, key),
+                         lambda run: to_shape(run.aoi.geometry))
     return JsonResponse({'prepared': rows})
 
 
@@ -450,7 +453,8 @@ def _pick_prepared(session, request, aoi):
         src_key = check_pick(run, request.user.username, file, kind)
         dest_key = build_key(request.user.username, aoi.project_id, aoi.id,
                              f'user_{kind}', file)
-        out = copy_prepared(get_storage(), src_key, dest_key, kind, to_shape(aoi.geometry))
+        out = copy_prepared(get_storage(), src_key, dest_key, kind, to_shape(aoi.geometry),
+                            tool_area=to_shape(run.aoi.geometry))
     except PickError as exc:
         return JsonResponse({'error': exc.message}, status=exc.status)
     out['source'] = {'steprun_id': run.id, 'project': run.aoi.project.name,
@@ -513,6 +517,14 @@ def api_steps(request):
         key: {'defaults': jt.defaults(), 'requires': list(jt.requires)}
         for key, jt in REGISTRY.items()
     })
+
+
+@controller(url='api/a2f/config', name='api_a2f_config')
+def api_a2f_config(request):
+    """A2F portal capabilities for the wizard — never the key itself:
+    {"nwm_api_key": true} when NWM streamflow is available."""
+    from tethysapp.fimsim_gui.jobs import nwm_api_key
+    return JsonResponse({'nwm_api_key': bool(nwm_api_key())})
 
 
 @controller(url='api/projects/{project_id}/steps/{step_key}/submit',
@@ -630,10 +642,17 @@ def api_step_submit(request, session, project_id, step_key):
                             'reason': 'a supplied input file does not belong to this area'})
             continue
         guard_reason = None
-        if step_key in ('dem', 'tdem', 'dem_tool', 'lulc_tool', 'flowline_tool'):
+        if step_key in ('dem', 'tdem', 'adem', 'dem_tool', 'lulc_tool', 'flowline_tool'):
             guard_reason = guards.check_dem_submit(
                 aoi, jt.merged(merged_config),
                 _setting('max_dem_cells', guards.DEFAULT_MAX_DEM_CELLS))
+        elif step_key == 'astream':
+            from tethysapp.fimsim_gui.jobs import nwm_api_key
+            guard_reason = guards.check_a2f_streamflow_submit(
+                aoi, jt.merged(merged_config), bool(nwm_api_key()))
+        elif step_key == 'arun':
+            from tethysapp.fimsim_gui.jobs import nwm_api_key
+            guard_reason = guards.check_a2f_run_submit(aoi, bool(nwm_api_key()))
         elif step_key == 'run':
             timeout = float(jt.merged(merged_config).get('solver_timeout_s') or 3600)
             guard_reason = guards.check_run_submit(aoi, merged_config, timeout)

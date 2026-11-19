@@ -88,6 +88,11 @@ def write_dem_preview(ctx, outputs, log_fn=lambda *_: None):
         bounds = _wgs84_bounds(src)
         corners = _wgs84_corners(src)
         res = float(abs(src.res[0]))
+        if src.crs is not None and src.crs.is_geographic:
+            # A2F DEMs are EPSG:4326: report the cell size in metres, not degrees
+            import math
+            mid_lat = (bounds["south"] + bounds["north"]) / 2
+            res *= 111320.0 * math.cos(math.radians(mid_lat))
         size = (src.width, src.height)
         crs = str(src.crs)
 
@@ -335,3 +340,49 @@ def write_flowline_preview(main_river_gdf, flowlines_gdf, gages, out_path,
     }))
     log_fn(f"preview: flowline map ({len(features)} feature(s))")
     return out
+
+
+def write_depth_overlay(depth, transform, crs, bounds, outputs, extra=None) -> dict:
+    """Results overlay for a depth grid (LISFLOOD-FP max depth, A2F depth map):
+    max_depth_overlay.png (blue ramp, dry transparent) + overlay_bounds.json
+    (WGS84 bounds, the 4-corner quad, max depth, wet area). *depth* is a
+    float array in metres with dry/nodata cells already 0; *transform* must be
+    in a metric CRS for the wet area. *extra* keys are merged into the JSON.
+    Returns the stats written."""
+    import numpy as np
+    import rasterio
+    from pyproj import Transformer
+    from rasterio.warp import transform_bounds
+
+    outputs = Path(outputs)
+    # Web overlay: blue ramp PNG + WGS84 bounds for MapLibre's image source
+    wet = depth > 0.01
+    top = np.percentile(depth[wet], 98) if wet.any() else 1.0
+    norm = np.clip(depth / max(top, 0.01), 0, 1)
+    rgba = np.zeros((4, *depth.shape), dtype="uint8")
+    rgba[0] = (30 + 20 * (1 - norm)).astype("uint8")          # R
+    rgba[1] = (100 + 60 * (1 - norm)).astype("uint8")         # G
+    rgba[2] = (140 + 115 * norm).astype("uint8")              # B
+    rgba[3] = np.where(wet, (120 + 135 * norm), 0).astype("uint8")  # A
+    png_profile = dict(driver="PNG", width=depth.shape[1],
+                       height=depth.shape[0], count=4, dtype="uint8")
+    with rasterio.open(outputs / "max_depth_overlay.png", "w", **png_profile) as dst:
+        dst.write(rgba)
+
+    w, s, e, n = transform_bounds(crs, "EPSG:4326", *bounds)
+    # true 4-corner quad (TL,TR,BR,BL) so the overlay matches a rotated AOI
+    # instead of the flattened W/S/E/N envelope (FIMSIM-FE33)
+    _tf = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+    _left, _bottom, _right, _top = bounds
+    corners = [list(_tf.transform(x, y)) for x, y in
+               ((_left, _top), (_right, _top), (_right, _bottom), (_left, _bottom))]
+    stats = {
+        "bounds": {"west": w, "south": s, "east": e, "north": n},
+        "corners": corners,
+        "max_depth_m": float(depth.max()),
+        "wet_fraction": float(wet.mean()),
+        "wet_area_km2": float(wet.sum() * abs(transform.a * transform.e) / 1e6),
+    }
+    stats.update(extra or {})
+    (outputs / "overlay_bounds.json").write_text(json.dumps(stats, indent=2))
+    return stats
