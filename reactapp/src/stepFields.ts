@@ -18,6 +18,8 @@ export interface FieldSpec {
   required?: boolean;
   /** for a 'date' field: submit as end-of-day (23:59) rather than 00:00 */
   endOfDay?: boolean;
+  /** for a 'date' field: submit the bare YYYY-MM-DD (the hour is its own field) */
+  keepDate?: boolean;
   /** number widget: HTML min/max/step + a submit-time range check */
   min?: number;
   max?: number;
@@ -80,13 +82,14 @@ export function rangeProblems(
  * "YYYY-MM-DD" only — an already-timed value or a non-date field is left as-is.
  */
 export function expandEventDates(
-  config: Record<string, unknown>, fields: Pick<FieldSpec, 'key' | 'widget' | 'endOfDay'>[],
+  config: Record<string, unknown>,
+  fields: Pick<FieldSpec, 'key' | 'widget' | 'endOfDay' | 'keepDate'>[],
 ): Record<string, unknown> {
   const byKey = new Map(fields.map((f) => [f.key, f]));
   const out: Record<string, unknown> = { ...config };
   for (const k of Object.keys(out)) {
     const f = byKey.get(k);
-    if (f?.widget === 'date' && typeof out[k] === 'string'
+    if (f?.widget === 'date' && !f.keepDate && typeof out[k] === 'string'
         && /^\d{4}-\d{2}-\d{2}$/.test(out[k] as string)) {
       out[k] = `${out[k]}${f.endOfDay ? 'T23:59' : 'T00:00'}`;
     }
@@ -173,11 +176,19 @@ export const FLOWLINE_FORMAT_OPTIONS = [
  */
 export type PreviewKind = 'dem' | 'lulc' | 'boundary' | 'hydrograph';
 const PREVIEW_STEPS: Record<PreviewKind, readonly string[]> = {
-  dem: ['dem', 'tdem', 'dem_tool'],
+  dem: ['dem', 'tdem', 'adem', 'dem_tool'],
   lulc: ['manning', 'tfric', 'lulc_tool'],
-  boundary: ['bci', 'tbc', 'flowline_tool'],
+  boundary: ['bci', 'tbc', 'aflow', 'flowline_tool'],
   hydrograph: ['bdy', 'thyg', 'flow_tool'],
 };
+/** Which map the 'boundary' preview draws: LISFLOOD/TRITON boundary markers,
+ *  the Flowline tool's river + gages, or A2F's stream network. */
+export function boundaryVariant(stepKey: string): 'boundaries' | 'flowlines' | 'network' {
+  if (stepKey === 'flowline_tool') return 'flowlines';
+  if (stepKey === 'aflow') return 'network';
+  return 'boundaries';
+}
+
 export function previewKind(stepKey: string): PreviewKind | null {
   for (const kind of Object.keys(PREVIEW_STEPS) as PreviewKind[]) {
     if (PREVIEW_STEPS[kind].includes(stepKey)) return kind;
@@ -614,13 +625,93 @@ export const STEP_FIELDS: Record<string, FieldSpec[]> = {
       options: [...RASTER_FORMAT_OPTIONS, { value: 'shp', label: 'Shapefile (.shp, polygonized)' }],
     },
   ],
+  // ── A2F (ARC-Curve2Flood) — keys are the backend A2F step config
+  adem: [
+    {
+      key: 'dem_input', label: 'Elevation input', widget: 'select',
+      options: [
+        { value: 'download', label: 'Download (USGS 3DEP 1/3″)' },
+        { value: 'upload', label: 'Upload my DEM GeoTIFF(s)' },
+        { value: 'prepared', label: 'Use a DEM from the DEM tool' },
+      ],
+      help: DEM_INPUT_HELP + ' A2F regrids it to latitude/longitude, which NenCarta needs.',
+    },
+    {
+      key: 'dem_res_m', label: 'Cell size', widget: 'select',
+      options: [
+        { value: 10, label: '10 m — native 3DEP (default)' },
+        { value: 30, label: '30 m (faster, coarser)' },
+      ],
+      help: 'Given in metres and converted to the equivalent arc-seconds.',
+    },
+  ],
+  aflow: [
+    {
+      key: 'source', label: 'Stream network', widget: 'select',
+      options: [
+        { value: 'nhd', label: 'NHDPlus (NWM stream IDs) — default' },
+        { value: 'geoglows', label: 'GEOGLOWS v2 streams' },
+        { value: 'prepared', label: 'Use the network from the Flowline tool' },
+      ],
+      help: 'Match it to the Streamflow source: NHDPlus for NWM flows, GEOGLOWS for '
+        + 'GEOGLOWS flows (A2F rebuilds a mismatched network from the other source). '
+        + 'A Flowline-tool network is NHD, so it works with NWM flows; the tool must '
+        + 'have saved "All flowlines".',
+    },
+  ],
+  astream: [
+    {
+      key: 'source', label: 'Streamflow source', widget: 'select',
+      options: [
+        { value: 'nwm', label: 'National Water Model (NWM)' },
+        { value: 'geoglows', label: 'GEOGLOWS' },
+      ],
+      help: 'NWM uses the portal\'s CIROH key for the flows and the return periods; '
+        + 'GEOGLOWS needs no key.',
+    },
+    {
+      key: 'nwm_record', label: 'NWM record', widget: 'select',
+      showIf: { key: 'source', value: 'nwm' },
+      options: [
+        { value: 'auto', label: 'Automatic — by date (default)' },
+        { value: 'retrospective', label: 'Retrospective (1979 – Feb 2023)' },
+        { value: 'analysis_assim', label: 'Analysis & assimilation (recent)' },
+        { value: 'forecast', label: 'Forecast' },
+      ],
+    },
+    {
+      key: 'date', label: 'Date to map', widget: 'date', required: true, keepDate: true,
+      help: 'The day of the flood you want mapped (Test Case 3: 2019-09-19).',
+    },
+    {
+      key: 'hour_utc', label: 'Hour (UTC)', widget: 'select',
+      options: Array.from({ length: 24 }, (_, h) => (
+        { value: h, label: `${String(h).padStart(2, '0')}:00 UTC` })),
+      help: 'A2F maps one moment: the flow at this hour.',
+    },
+  ],
+  arun: [
+    {
+      key: 'preset', label: 'Run settings', widget: 'select',
+      options: [
+        { value: 'recommended', label: 'Recommended — falls back to Classic if it fails' },
+        { value: 'classic', label: 'FIMsim classic only' },
+      ],
+      help: 'Recommended uses the NenCarta author\'s settings (bathymetry on). If that '
+        + 'run fails, A2F reruns it with the classic settings and Results says so.',
+    },
+  ],
   flowline_tool: [
     { key: 'save_main_river', label: 'Main river (NHD highest stream order)', widget: 'checkbox' },
     {
       key: 'main_format', label: 'Main river format', widget: 'select',
       showIf: { key: 'save_main_river', value: true }, options: FLOWLINE_FORMAT_OPTIONS,
     },
-    { key: 'save_all_flowlines', label: 'All flowlines (full NHD reach set)', widget: 'checkbox' },
+    {
+      key: 'save_all_flowlines', label: 'All flowlines (full NHD reach set)', widget: 'checkbox',
+      help: 'Needed to use this network in ARC-Curve2Flood (it carries the stream IDs) — '
+        + 'save it as a Shapefile or GeoPackage.',
+    },
     {
       key: 'all_format', label: 'Flowlines format', widget: 'select',
       showIf: { key: 'save_all_flowlines', value: true }, options: FLOWLINE_FORMAT_OPTIONS,

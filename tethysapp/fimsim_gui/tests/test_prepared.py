@@ -28,7 +28,8 @@ def _covering(_key):
 
 def test_each_kind_reads_the_matching_tool():
     assert KIND_STEP == {"dem": "dem_tool", "manning": "lulc_tool",
-                         "lulc": "lulc_tool", "flow": "flow_tool"}
+                         "lulc": "lulc_tool", "flow": "flow_tool",
+                         "flowline": "flowline_tool"}
 
 
 def test_classify_picks_the_files_of_a_kind_and_skips_the_rest():
@@ -128,7 +129,7 @@ def test_gdal_path_never_lets_gdal_probe_a_get_only_url_with_head():
 
 def test_unknown_kind_is_rejected():
     with pytest.raises(ValueError):
-        prepared_rows([], "flowline", AOI, _covering)
+        prepared_rows([], "bathymetry", AOI, _covering)
 
 
 # ── FIMSIM-BE21: picking a prepared file ─────────────────────────────────────
@@ -167,7 +168,7 @@ def test_check_pick_refusals():
     status, msg = _err(check_pick, run, "admin", "ManningN_A.asc", "manning")
     assert status == 400 and "GeoTIFF" in msg
     with pytest.raises(ValueError):
-        check_pick(run, "admin", "LULC_A.tif", "flowline")
+        check_pick(run, "admin", "LULC_A.tif", "bathymetry")
 
 
 def test_check_pick_refuses_a_failed_or_replaced_run():

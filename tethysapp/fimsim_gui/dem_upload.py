@@ -10,7 +10,7 @@ from pathlib import Path
 
 # the supplied-input kinds a step config can name as user_<kind>_keys
 # (BE17 uploaded DEMs; FIMSIM-BE21 picked prepared files)
-INPUT_KINDS = ("dem", "manning", "lulc", "flow")
+INPUT_KINDS = ("dem", "manning", "lulc", "flow", "flowline")
 
 
 def rejected_input_keys(config: dict, aoi_prefix: str) -> list:

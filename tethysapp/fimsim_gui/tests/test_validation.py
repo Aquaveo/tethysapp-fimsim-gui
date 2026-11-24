@@ -18,6 +18,8 @@ REQUIRED_INPUT = {
     # the Streamflow tool has no sensible default ID list / window either
     "flow_tool": {"ids": "02134170", "start_dt": "2016-10-01T00:00",
                   "end_dt": "2016-10-19T23:59"},
+    # A2F Streamflow: the day to map (Test Case 3)
+    "astream": {"date": "2019-09-19"},
 }
 
 

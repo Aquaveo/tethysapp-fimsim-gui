@@ -1,6 +1,7 @@
 from tethys_sdk.base import TethysAppBase
 from tethys_sdk.app_settings import (
     CustomSetting, PersistentStoreDatabaseSetting, SchedulerSetting,
+    SecretCustomSetting,
 )
 
 
@@ -104,6 +105,18 @@ class App(TethysAppBase):
                 description=(
                     'Dev toggle: store files in this local directory instead of '
                     'MinIO/S3. Leave blank in production.'
+                ),
+                required=False,
+            ),
+            # A2F: NWM river flows + return periods come from CIROH's NWM API.
+            # Stored encrypted; handed to the A2F jobs as an environment
+            # variable on the worker, never saved in a step config or output.
+            SecretCustomSetting(
+                name='nwm_api_key',
+                description=(
+                    'CIROH NWM API key (nwm-api.ciroh.org) for A2F '
+                    '(ARC-Curve2Flood) NWM streamflow. Blank = A2F offers '
+                    'GEOGLOWS streamflow only.'
                 ),
                 required=False,
             ),

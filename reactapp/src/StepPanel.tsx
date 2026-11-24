@@ -7,7 +7,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  ApiError, cancelStepRun, downloadSelectedZip, getStepRun, getStepRunOutputs, submitStep,
+  ApiError, cancelStepRun, downloadSelectedZip, getA2fConfig, getStepRun, getStepRunOutputs,
+  submitStep,
   uploadDem, type OutputEntry, type PickedInput, type ServerAoi, type ServerStepRun,
   type StepSchema,
 } from './api';
@@ -21,11 +22,13 @@ import ManningTable, { type ManningMapping } from './ManningTable';
 import StepOverview from './StepOverview';
 import TextPreview, { textPreviewDefaultOpen } from './TextPreview';
 import {
-  STEP_FIELDS, applyLinkedDefaults, coerceConfigNumbers, expandEventDates, fieldVisible,
+  STEP_FIELDS, applyLinkedDefaults, boundaryVariant, coerceConfigNumbers, expandEventDates,
+  fieldVisible,
   manningTableSource, previewKind, rangeProblems, type FieldSpec,
 } from './stepFields';
 import { prefillIds, shouldReseed, type FlowSource } from './flowTool';
 import { formatElapsed, phaseLabel } from './runProgress';
+import { isRunStep } from './steps';
 import './StepPanel.css';
 
 const POLL_MS = 2500;
@@ -142,10 +145,18 @@ export default function StepPanel({
   // the AOI by BE21), keyed "<kind>:<aoiId>" so switching the input choice
   // never sends a pick of the wrong kind
   const [picks, setPicks] = useState<Record<string, PickedInput | null>>({});
+  // A2F Streamflow: whether the portal has the CIROH NWM key (never the key)
+  const [nwmKey, setNwmKey] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (stepKey !== 'astream') return;
+    let live = true;
+    getA2fConfig().then((c) => { if (live) setNwmKey(c.nwm_api_key); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [stepKey]);
 
   const value = (key: string) => (key in config ? config[key] : defaults[key]) ?? '';
   const visible = (f: FieldSpec) => fieldVisible(f.showIf, value, f.hideIf);
-  const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem')
+  const isDemUpload = (stepKey === 'dem' || stepKey === 'tdem' || stepKey === 'adem')
     && value('dem_input') === 'upload';
   const pickKind = preparedKindFor(stepKey, value);
   const pickOf = (aoiId: number) => (pickKind ? picks[`${pickKind}:${aoiId}`] ?? null : null);
@@ -292,13 +303,13 @@ export default function StepPanel({
   // `form` attribute keeps it a real submit button for THIS form even though
   // the portal moves it out of the form's DOM subtree.
   const formId = `sp-form-${stepKey}`;
-  const inFooter = stepKey === 'run' && !!submitSlot;
+  const inFooter = isRunStep(stepKey) && !!submitSlot;
   const submitButton = (
     <button type="submit" form={formId} className="button-primary"
             disabled={busy || anyActive || aois.length === 0}>
       {busy ? 'Submitting…'
         : anyActive ? 'Running…'
-        : stepKey === 'run' ? `▶ Run simulation for ${aois.length} area(s)`
+        : isRunStep(stepKey) ? `▶ Run simulation for ${aois.length} area(s)`
         : `Run this step for ${aois.length} area(s)`}
     </button>
   );
@@ -440,6 +451,20 @@ export default function StepPanel({
                   exceeds its budget (6 hours by default).
                 </p>
               )}
+              {stepKey === 'astream' && nwmKey === false && value('source') === 'nwm' && (
+                <div className="sp-note" role="status">
+                  This portal doesn&apos;t have a CIROH NWM API key yet, so NWM
+                  streamflow can&apos;t run. Choose GEOGLOWS, or ask the
+                  administrator to add the key.
+                </div>
+              )}
+              {stepKey === 'arun' && (
+                <p className="sp-field-help">
+                  NenCarta builds ARC rating curves along every stream, then maps
+                  the flood with Curve2Flood — typically minutes for a 100–300 km²
+                  area. You can leave this page; the run continues.
+                </p>
+              )}
               {(stepKey === 'bci' || stepKey === 'tbc') && (
                 <p className="sp-field-help">
                   Check the map on the Area of Interest step: the detected main
@@ -457,7 +482,7 @@ export default function StepPanel({
                   {run.status === 'succeeded' && preview === 'boundary' && (
                     <BoundaryPreview
                       aoi={a} run={run} defaultOpen={aois.length === 1}
-                      variant={stepKey === 'flowline_tool' ? 'flowlines' : 'boundaries'}
+                      variant={boundaryVariant(stepKey)}
                     />
                   )}
                   {run.status === 'succeeded' && preview === 'dem' && (

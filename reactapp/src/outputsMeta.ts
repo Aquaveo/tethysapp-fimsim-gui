@@ -1,6 +1,8 @@
 // reactapp/src/outputsMeta.ts
 // Human descriptions for output files (Results table). Pattern-matched by
 // filename; unknown files get a generic row rather than being hidden.
+import { isRunStep } from './steps';
+
 export interface OutputMeta {
   label: string;
   description: string;
@@ -72,7 +74,26 @@ const RULES: [RegExp, OutputMeta][] = [
   }],
   [/^DEM_.*\.tif$/i, {
     label: 'Elevation model (GeoTIFF)',
-    description: 'The downloaded terrain, reprojected to the working CRS at your chosen resolution.',
+    description: 'The terrain at your chosen resolution, on the model\'s grid (UTM; '
+      + 'latitude/longitude for ARC-Curve2Flood).',
+  }],
+  // ── A2F (ARC-Curve2Flood)
+  [/^depth_.*\.tif$/i, {
+    label: 'Flood depth map (GeoTIFF)',
+    description: 'ARC-Curve2Flood water depth in metres, on the area\'s UTM grid — '
+      + 'the map shown on Results.',
+  }],
+  [/^FIM_.*\.tif$/i, {
+    label: 'Flood extent map (GeoTIFF)',
+    description: 'ARC-Curve2Flood flood inundation map: wet / dry cells on the area\'s UTM grid.',
+  }],
+  [/^flowline\.(shp|shx|dbf|prj|cpg)$/i, {
+    label: 'Stream network (Shapefile part)',
+    description: 'The streams ARC-Curve2Flood mapped along, with their stream IDs.',
+  }],
+  [/^flow_\d{8}_\d{4}\.csv$/i, {
+    label: 'Streamflow at the mapped hour (CSV)',
+    description: 'The flow per stream ID that ARC-Curve2Flood mapped (m³/s).',
   }],
   [/^dem\.ascii$/i, {
     label: 'Elevation grid (model input)',
@@ -165,7 +186,7 @@ export function splitResultFiles<T extends { step: string }>(
 ): { inputs: T[]; results: T[] } {
   const inputs: T[] = [];
   const results: T[] = [];
-  for (const f of files) (f.step === 'run' ? results : inputs).push(f);
+  for (const f of files) (isRunStep(f.step) ? results : inputs).push(f);
   return { inputs, results };
 }
 

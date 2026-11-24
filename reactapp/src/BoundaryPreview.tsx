@@ -17,7 +17,9 @@ export default function BoundaryPreview({ aoi, run, defaultOpen, variant = 'boun
   run: ServerStepRun;
   defaultOpen: boolean;
   /** FE63: the Flowline tool reuses the map with its own legend and copy */
-  variant?: 'boundaries' | 'flowlines';
+  /** boundaries = LISFLOOD/TRITON markers; flowlines = the Flowline tool;
+   *  network = A2F's stream network (no main river, no gages) */
+  variant?: 'boundaries' | 'flowlines' | 'network';
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [fc, setFc] = useState<FeatureCollection | null>(null);
@@ -37,7 +39,7 @@ export default function BoundaryPreview({ aoi, run, defaultOpen, variant = 'boun
   if (!available) {
     return (
       <p className="bp-hint">
-        No {variant === 'flowlines' ? 'flowline' : 'boundary'} preview stored for this run — re-run the step to generate one.
+        No {variant === 'boundaries' ? 'boundary' : 'flowline'} preview stored for this run — re-run the step to generate one.
       </p>
     );
   }
@@ -45,10 +47,20 @@ export default function BoundaryPreview({ aoi, run, defaultOpen, variant = 'boun
   return (
     <details className="bp" open={open}
              onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
-      <summary>{variant === 'flowlines' ? 'Flowline map' : 'Boundary check map'}</summary>
+      <summary>
+        {variant === 'flowlines' ? 'Flowline map'
+          : variant === 'network' ? 'Stream network map' : 'Boundary check map'}
+      </summary>
       {open && (
         <div className="bp-body">
-          {variant === 'flowlines' ? (
+          {variant === 'network' ? (
+            <p className="bp-guidance">
+              These are the <strong>streams A2F maps along</strong> (the saved
+              <code> flowline.shp</code>). Check they follow the rivers you
+              expect to flood — a river missing here gets no flood map. The
+              faint network underneath is the Area step&apos;s own lookup.
+            </p>
+          ) : variant === 'flowlines' ? (
             <p className="bp-guidance">
               The thick line is the saved <strong>main river</strong> (highest
               NHD stream order); thin lines are the saved reach network;
@@ -75,7 +87,9 @@ export default function BoundaryPreview({ aoi, run, defaultOpen, variant = 'boun
             vectorOverlays={fc ? [{ id: `bnd-${run.id}`, data: fc }] : []}
           />
           <div className="bp-legend" aria-label="Legend">
-            {variant === 'flowlines' ? (
+            {variant === 'network' ? (
+              <span><i className="bp-line bp-thin" /> Stream network</span>
+            ) : variant === 'flowlines' ? (
               <>
                 <span><i className="bp-line" /> Main river</span>
                 <span><i className="bp-line bp-thin" /> Saved flowlines</span>
